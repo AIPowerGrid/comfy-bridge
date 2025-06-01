@@ -574,7 +574,8 @@ class ComfyUIBridge:
             "id": job_id,
             "generation": image_base64,
             "state": "ok",
-            "seed": seed
+            "seed": seed,
+            "r2": False  # Request the API to store the image in R2 and return a URL instead of base64 data
         }
         
         logger.info(f"Submitting to API URL: {url}")
@@ -611,7 +612,8 @@ class ComfyUIBridge:
             "state": "faulted",
             "seed": seed,
             "generation": dummy_image,  # Add empty generation
-            "error": error
+            "error": error,
+            "r2": False  # Request the API to store the image in R2 and return a URL instead of base64 data
         }
         
         try:
@@ -683,8 +685,25 @@ class ComfyUIBridge:
         
         try:
             # Store job information in active_jobs dictionary
+            # Generate a random seed if none is provided
+            seed = 0
+            if job.payload.seed:
+                try:
+                    seed = int(job.payload.seed)
+                except (ValueError, TypeError):
+                    # If seed conversion fails, use a random seed
+                    import random
+                    seed = random.randint(1, 2**32-1)
+                    logger.info(f"Invalid seed provided, generated random seed: {seed}")
+                logger.info(f"Using provided seed: {seed}")
+            else:
+                # Generate a random seed
+                import random
+                seed = random.randint(1, 2**32-1)
+                logger.info(f"No seed provided, generated random seed: {seed}")
+            
             self.active_jobs[job_id] = {
-                'seed': int(job.payload.seed) if job.payload.seed else 0,
+                'seed': seed,
                 'model': job.model,
                 'kudos': job.kudos or 0
             }
@@ -763,6 +782,26 @@ class ComfyUIBridge:
                 ksampler_node = node
                 ksampler_node_id = node_id
                 logger.info(f"Found KSampler node: {node_id}")
+                
+                # Update seed in KSampler node if job has seed
+                if job.payload.seed:
+                    try:
+                        seed = int(job.payload.seed)
+                        node["inputs"]["seed"] = seed
+                        logger.info(f"Updated seed in KSampler node to {seed}")
+                    except (ValueError, TypeError):
+                        # If conversion fails, generate a random seed
+                        import random
+                        seed = random.randint(1, 2**32-1)
+                        node["inputs"]["seed"] = seed
+                        logger.info(f"Generated random seed for KSampler node: {seed}")
+                else:
+                    # Generate a random seed if none provided
+                    import random
+                    seed = random.randint(1, 2**32-1)
+                    node["inputs"]["seed"] = seed
+                    logger.info(f"No seed in job, generated random seed for KSampler node: {seed}")
+                
                 break
                 
         # Find the node IDs for positive and negative prompts from KSampler connections
@@ -954,9 +993,19 @@ class ComfyUIBridge:
             
         # Ensure seed is an integer
         try:
-            seed = int(job.payload.seed) if job.payload.seed else 0
+            # If seed is provided, use it; otherwise generate a random seed between 1 and 2^32-1
+            if job.payload.seed:
+                seed = int(job.payload.seed)
+            else:
+                # Generate a random seed (not 0)
+                import random
+                seed = random.randint(1, 2**32-1)
+                logger.info(f"No seed provided, generated random seed: {seed}")
         except (ValueError, TypeError):
-            seed = 0
+            # If seed conversion fails, use a random seed
+            import random
+            seed = random.randint(1, 2**32-1)
+            logger.info(f"Invalid seed provided, generated random seed: {seed}")
             
         # Use the _map_sampler method for consistency
         sampler_name = self._map_sampler(job.payload.sampler)
