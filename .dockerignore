@@ -1,0 +1,11 @@
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.git/
+*.log
+bridge_log.txt
+.DS_Store
+Thumbs.db 

@@ -15,12 +15,15 @@ The ComfyUI Bridge acts as a worker for the AI Power Grid network, receiving ima
 ## Installation
 
 1. Clone this repository or download the files
-2. Create a Python virtual environment (recommended):
+   ```
+   git clone --recurse-submodules https://github.com/gonner22/comfy-bride
+   ```
+3. Create a Python virtual environment (recommended):
    ```
    python -m venv venv
    source venv/bin/activate  # On Windows: venv\Scripts\activate
    ```
-3. Install required packages:
+4. Install required packages:
    ```
    pip install -r requirements.txt
    ```
@@ -93,7 +96,135 @@ The bridge will connect to the AI Power Grid, register as a worker, and start pr
    - Returns the generated image to the AI Power Grid
 4. The process repeats for new jobs
 
-## Troubleshooting
+## Docker: SwarmUI+ComfyUI
+
+SwarmUI is a web interface for AI image and video generation, included in this repository under the `SwarmUI/` folder. It provides an intuitive user interface for generating images and managing workflows.
+
+ComfyUI serves as the integrated backend for SwarmUI, providing a powerful and modular node-based workflow editor. It allows users to create complex image generation pipelines by connecting different nodes that represent operations like loading models, setting prompts, applying image processing, and more. ComfyUI runs as a local web server and provides both a visual interface and API endpoints that both SwarmUI and the bridge use to submit generation jobs.
+
+While SwarmUI is designed to work independently from the bridge, both SwarmUI and the bridge can coexist and complement each other in the same environment by sharing the underlying ComfyUI backend instance.
+
+### Prerequisites for Docker Setup
+
+Before proceeding with the Docker installation, ensure your Linux system meets these requirements:
+
+1. **Docker Engine**
+   - Install Docker Engine (not Desktop) following the official guide: https://docs.docker.com/engine/install/
+   - Follow the post-installation steps to run Docker as non-root: https://docs.docker.com/engine/install/linux-postinstall/
+   - Note: Docker rootless mode is not recommended currently due to unresolved issues
+
+2. **NVIDIA Container Toolkit** 
+   - Required for GPU support
+   - Install following: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
+
+3. **Git**
+   - Required for cloning repositories
+   - Install using your distribution's package manager (e.g., `apt install git`)
+
+### 0. Clone this repository or download the files
+   ```
+   git clone --recurse-submodules https://github.com/gonner22/comfy-bride
+   ```
+### 1. Running SwarmUI+ComfyUI with Docker (Standard Version Only)
+
+1. Enter the SwarmUI folder:
+   ```bash
+   cd SwarmUI
+   ./launchtools/launch-standard-docker.sh
+   ```
+2. Open your browser at [http://0.0.0.0:7801](http://0.0.0.0:7801) (or [http://localhost:7801](http://localhost:7801) if local).
+3. Follow the on-screen steps:
+   1. **Accept the license agreement.**
+   2. Select **Custom Install**.
+   3. Choose your preferred theme.
+   4. Select **"Just Yourself with LAN access"**.
+   5. **IMPORTANT:** **Install ComfyUI as the backend** (this is required for SwarmUI to function).
+   6. Download at least the **Stable Diffusion XL 1.0** model, and any others you wish from the list. You can add more models later.
+   7. On the final screen, review your selected options and click **"Yes, I'm sure (Install Now)"**.
+
+> **Model storage and symbolic links:**
+>
+> - Downloaded models are stored in `SwarmUI/Models/Stable-Diffusion/OfficialStableDiffusion` (files ending in `.safetensors`).
+> - For **comfy-bridge** to easily detect and use these models, it is recommended to create symbolic links in `SwarmUI/Models/Stable-Diffusion` pointing to the models you want to expose.
+> - Example: You must be in the `SwarmUI/Models/Stable-Diffusion` directory to run:
+>   ```bash
+>   ln -s OfficialStableDiffusion/DreamShaperXL_Turbo_v2_1.safetensors DreamShaperXL_Turbo_v2_1.safetensors
+>   ```
+> - This makes the model visible to both SwarmUI and comfy-bridge. You can repeat this for any other models you wish to use.
+
+### Workflows
+
+The recommended way to load workflows is through the Workflow menu within the application. From there, you can easily:
+
+1. Load your workflow files
+2. Set them as the active workflow for image generation
+3. Configure any workflow-specific settings
+
+This provides a straightforward interface for managing your workflows without having to manually handle files or configurations.
+
+### Docker Volumes
+
+SwarmUI uses several Docker volumes to persist data and share files between container restarts:
+
+- **swarmdata**: Located at `/SwarmUI/Data`
+  - Stores SwarmUI application data, settings, and configurations
+  - Persists user preferences and application state
+
+- **swarmbackend**: Located at `/SwarmUI/dlbackend` 
+  - Contains the ComfyUI backend installation and dependencies
+  - Preserves the ComfyUI environment between container restarts
+
+- **swarmdlnodes**: Located at `/SwarmUI/src/BuiltinExtensions/ComfyUIBackend/DLNodes`
+  - Stores custom ComfyUI nodes and extensions
+  - Allows adding and managing additional ComfyUI functionality
+
+These volumes ensure your data and configurations persist even when containers are removed and recreated. They are automatically created when first running the Docker container if they don't already exist.
+
+### 2. Docker: Running comfy-bridge
+
+- The setup consists of **two Docker containers**:
+  1. ``swarmui``: Contains the SwarmUI interface with ComfyUI backend (already running from previous step)
+  2. ``comfy-bridge``: Handles the bridge functionality (instructions detailed below)
+- Both containers should be attached to a specific Docker network called `comfy-net`.
+- This network allows them to communicate effectively and securely.
+- Before running the comfy-bridge container, you must create a `.env` file from the provided template `.env.example`:
+  ```bash
+  cp .env.example .env
+  ```
+- Edit the `.env` file and configure the required settings. The container will not start without this file properly configured.
+- Make sure the `COMFYUI_URL` in your `.env` points to the SwarmUI/ComfyUI backend (e.g., `http://swarmui:7821` if using Docker service names).
+- Other important settings in `.env` include your API key (`GRID_API_KEY`) and worker configuration. See the Configuration section above for details on all available options.
+
+- Example of running both containers on the same network:
+  ```bash
+  docker network create comfy-net
+  # Run SwarmUI (from SwarmUI folder)
+  ./launchtools/launch-standard-docker.sh --network comfy-net
+  # Run comfy-bridge (from comfy-bridge folder)
+  docker run --rm -it \
+    --name comfy-bridge \
+    --network comfy-net \
+    --env-file /path/to/your/.env \
+    -v /path/to/your/.env:/app/.env:ro \
+    comfy-bridge
+  ```
+
+> **Container management tips:**
+>
+> - To access a running container's shell, use:
+>   ```bash
+>   docker exec -it swarmui bash -l
+>   # or for the bridge container:
+>   docker exec -it comfy-bridge bash -l
+>   ```
+> - To see the status of all containers, use:
+>   ```bash
+>   docker ps -a
+>   ```
+
+---
+
+# Troubleshooting
 
 - **ComfyUI Connection Issues**: Ensure your ComfyUI instance is running and accessible at the URL specified in your `.env` file.
 - **API Key Issues**: Verify your GRID_API_KEY is correct and has sufficient permissions.
@@ -101,11 +232,14 @@ The bridge will connect to the AI Power Grid, register as a worker, and start pr
   - If you see "Unknown grid model" warnings, verify that you have the corresponding checkpoint file in your ComfyUI models directory.
   - The bridge attempts to find a matching checkpoint even if names don't match exactly.
 
-## License
+# License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
-## Acknowledgements
+# Acknowledgements
 
 - [AI Power Grid](https://aipowergrid.io/) for the API
-- [ComfyUI](https://github.com/comfyanonymous/ComfyUI) for the local image generation backend 
+- [ComfyUI](https://github.com/comfyanonymous/ComfyUI) for the local image generation backend
+- [SwarmUI](https://github.com/mcmonkeyprojects/SwarmUI) for the modular web UI
+
+---
