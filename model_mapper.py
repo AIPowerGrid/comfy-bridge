@@ -65,7 +65,15 @@ class ModelMapper:
         "juggernaut_xl": "juggernaut_xl.safetensors",
         "playground_v2": "playground_v2.safetensors",
         "dreamshaper_8": "dreamshaper_8.safetensors",
-        "stable_diffusion": "v1-5-pruned-emaonly.safetensors"
+        "stable_diffusion": "v1-5-pruned-emaonly.safetensors",
+        # Video models
+        "wan_2.1": "Wan2.1_T2V_14B_FusionX-Q8_0.gguf",
+        "wan2.1": "Wan2.1_T2V_14B_FusionX-Q8_0.gguf",
+        "wan_2.1_i2v": "Wan2.1_I2V_14B_FusionX-Q8_0.gguf",
+        "wan2.1_i2v": "Wan2.1_I2V_14B_FusionX-Q8_0.gguf",
+        "stable_video_diffusion": "svd_xt_1_1.safetensors",
+        "svd": "svd_xt_1_1.safetensors",
+        "animatediff": "mm_sd_v15_v2.ckpt"
     }
     
     def __init__(self):
@@ -132,6 +140,14 @@ class ModelMapper:
                 "openjourney": "openjourney",
                 "dreamlike": "dreamlike_diffusion",
                 "protogen": "protogen",
+                # Video models
+                "wan2.1": "wan_2.1",
+                "wan_2.1": "wan_2.1",
+                "wan2.1_i2v": "wan_2.1_i2v",
+                "wan_2.1_i2v": "wan_2.1_i2v",
+                "svd": "stable_video_diffusion",
+                "stable_video": "stable_video_diffusion",
+                "animatediff": "animatediff",
             }
             
             for key, value in model_name_map.items():
@@ -150,6 +166,10 @@ class ModelMapper:
         # If we have a direct mapping, use it
         if horde_model_name in self.model_map:
             return self.model_map[horde_model_name]
+        
+        # Check the default model map for direct matches
+        if horde_model_name in self.DEFAULT_MODEL_MAP:
+            return self.DEFAULT_MODEL_MAP[horde_model_name]
         
         # Try to find a partial match
         for horde_name, local_name in self.model_map.items():

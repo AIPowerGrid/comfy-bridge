@@ -16,6 +16,7 @@ import os
 import time
 import httpx
 import sys
+import random
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -60,6 +61,13 @@ class DummyJobPopResponse:
                 self.seed = payload_data.get("seed", 0)
                 self.sampler = payload_data.get("sampler_name", "euler_ancestral")
                 self.use_nsfw_censor = payload_data.get("use_nsfw_censor", False)
+                # Video-specific parameters
+                self.video_frames = payload_data.get("video_frames", 81)
+                self.frame_rate = payload_data.get("frame_rate", 16)
+                self.video_length = payload_data.get("video_length", 5.0)  # seconds
+                # I2V-specific parameters
+                self.input_image = payload_data.get("input_image", None)  # Base64 encoded image
+                self.input_image_filename = payload_data.get("input_image_filename", "input_image.png")
         
         self.payload = Payload(kwargs.get("payload", {}))
 
@@ -708,6 +716,10 @@ class ComfyUIBridge:
                 'kudos': job.kudos or 0
             }
             
+            # Handle input image for I2V workflows
+            if hasattr(job.payload, 'input_image') and job.payload.input_image:
+                await self._save_input_image(job.payload.input_image, job.payload.input_image_filename)
+            
             # Convert AI Power Grid job to ComfyUI workflow
             workflow = self._convert_job_to_workflow(job)
             
@@ -718,10 +730,10 @@ class ComfyUIBridge:
             result = await self._wait_for_generation(prompt_id)
             
             # Get the generated image
-            image_data = await self._get_generated_image(result)
+            output_data = await self._get_generated_output(result)
             
             # Submit the result back to the AI Power Grid
-            await self._submit_result(job_id, image_data)
+            await self._submit_result(job_id, output_data)
             
             # Track stats
             self.jobs_completed += 1
@@ -810,12 +822,34 @@ class ComfyUIBridge:
         
         if ksampler_node and "inputs" in ksampler_node:
             if "positive" in ksampler_node["inputs"] and isinstance(ksampler_node["inputs"]["positive"], list):
-                positive_node_id = ksampler_node["inputs"]["positive"][0]
-                logger.info(f"KSampler positive prompt connects to node: {positive_node_id}")
+                intermediate_node_id = ksampler_node["inputs"]["positive"][0]
+                logger.info(f"KSampler positive prompt connects to node: {intermediate_node_id}")
+                
+                # Check if this is a direct CLIPTextEncode node or an intermediate node
+                intermediate_node = updated_workflow.get(intermediate_node_id, {})
+                if intermediate_node.get("class_type") == "CLIPTextEncode":
+                    positive_node_id = intermediate_node_id
+                elif intermediate_node.get("class_type") == "WanImageToVideo":
+                    # For I2V workflows, check the WanImageToVideo node's positive input
+                    if "inputs" in intermediate_node and "positive" in intermediate_node["inputs"]:
+                        if isinstance(intermediate_node["inputs"]["positive"], list):
+                            positive_node_id = intermediate_node["inputs"]["positive"][0]
+                            logger.info(f"WanImageToVideo positive prompt connects to node: {positive_node_id}")
                 
             if "negative" in ksampler_node["inputs"] and isinstance(ksampler_node["inputs"]["negative"], list):
-                negative_node_id = ksampler_node["inputs"]["negative"][0]
-                logger.info(f"KSampler negative prompt connects to node: {negative_node_id}")
+                intermediate_node_id = ksampler_node["inputs"]["negative"][0]
+                logger.info(f"KSampler negative prompt connects to node: {intermediate_node_id}")
+                
+                # Check if this is a direct CLIPTextEncode node or an intermediate node
+                intermediate_node = updated_workflow.get(intermediate_node_id, {})
+                if intermediate_node.get("class_type") == "CLIPTextEncode":
+                    negative_node_id = intermediate_node_id
+                elif intermediate_node.get("class_type") == "WanImageToVideo":
+                    # For I2V workflows, check the WanImageToVideo node's negative input
+                    if "inputs" in intermediate_node and "negative" in intermediate_node["inputs"]:
+                        if isinstance(intermediate_node["inputs"]["negative"], list):
+                            negative_node_id = intermediate_node["inputs"]["negative"][0]
+                            logger.info(f"WanImageToVideo negative prompt connects to node: {negative_node_id}")
         
         # Parse the prompt from the job - split at ### if present
         prompt = job.payload.prompt or ""
@@ -887,7 +921,91 @@ class ComfyUIBridge:
                             node["inputs"]["text"] = negative_prompt
                             logger.info(f"Set negative prompt by placeholder in widgets_values for node {node_id}")
             
-            # Only update SaveImage node to set filename with job ID
+            # Handle video-specific nodes
+            elif node.get("class_type") == "EmptyHunyuanLatentVideo":
+                # Update video dimensions and frame count for T2V
+                node["inputs"]["width"] = job.payload.width
+                node["inputs"]["height"] = job.payload.height
+                node["inputs"]["length"] = job.payload.video_frames
+                logger.info(f"Set T2V video dimensions: {job.payload.width}x{job.payload.height}, frames: {job.payload.video_frames}")
+                
+            elif node.get("class_type") == "WanImageToVideo":
+                # Update video dimensions and frame count for I2V
+                node["inputs"]["width"] = job.payload.width
+                node["inputs"]["height"] = job.payload.height
+                node["inputs"]["length"] = job.payload.video_frames
+                logger.info(f"Set I2V video dimensions: {job.payload.width}x{job.payload.height}, frames: {job.payload.video_frames}")
+                
+            elif node.get("class_type") == "LoadImage":
+                # Handle input image for I2V workflows
+                if hasattr(job.payload, 'input_image') and job.payload.input_image:
+                    # For now, use the filename - in a real implementation, you'd save the base64 image
+                    node["inputs"]["image"] = job.payload.input_image_filename
+                    logger.info(f"Set input image: {job.payload.input_image_filename}")
+                elif node["inputs"].get("image") == "INPUT_IMAGE_PLACEHOLDER":
+                    # Set a default image if no input provided
+                    node["inputs"]["image"] = "input_image.png"
+                    logger.info("Set default input image: input_image.png")
+                
+            elif node.get("class_type") == "VHS_VideoCombine":
+                # Update video output settings
+                node["inputs"]["frame_rate"] = job.payload.frame_rate
+                node["inputs"]["filename_prefix"] = f"video_{job.id}"
+                logger.info(f"Set video frame rate: {job.payload.frame_rate}, filename: video_{job.id}")
+                
+            elif node.get("class_type") == "UnetLoaderGGUF":
+                # Update model name for video models
+                model_filename = map_model_name(job.model)
+                node["inputs"]["unet_name"] = model_filename
+                logger.info(f"Set UNet model: {model_filename}")
+                
+            # Handle placeholder replacements for video workflows
+            elif node.get("class_type") == "KSampler":
+                # Replace placeholders in KSampler for video workflows
+                if "inputs" in node:
+                    if node["inputs"].get("seed") == "SEED_PLACEHOLDER":
+                        seed = job.payload.seed if job.payload.seed else random.randint(1, 2**32-1)
+                        node["inputs"]["seed"] = int(seed)
+                        logger.info(f"Replaced seed placeholder with: {seed}")
+                    
+                    if node["inputs"].get("steps") == "STEPS_PLACEHOLDER":
+                        node["inputs"]["steps"] = job.payload.steps
+                        logger.info(f"Replaced steps placeholder with: {job.payload.steps}")
+                    
+                    if node["inputs"].get("cfg") == "CFG_PLACEHOLDER":
+                        node["inputs"]["cfg"] = job.payload.cfg_scale
+                        logger.info(f"Replaced CFG placeholder with: {job.payload.cfg_scale}")
+                    
+                    if node["inputs"].get("sampler_name") == "SAMPLER_PLACEHOLDER":
+                        sampler = self._map_sampler(job.payload.sampler)
+                        node["inputs"]["sampler_name"] = sampler
+                        logger.info(f"Replaced sampler placeholder with: {sampler}")
+            
+            # Handle other placeholder replacements
+            elif "inputs" in node:
+                for input_key, input_value in node["inputs"].items():
+                    if input_value == "WIDTH_PLACEHOLDER":
+                        node["inputs"][input_key] = job.payload.width
+                        logger.info(f"Replaced width placeholder in {node.get('class_type', 'unknown')}")
+                    elif input_value == "HEIGHT_PLACEHOLDER":
+                        node["inputs"][input_key] = job.payload.height
+                        logger.info(f"Replaced height placeholder in {node.get('class_type', 'unknown')}")
+                    elif input_value == "VIDEO_FRAMES_PLACEHOLDER":
+                        node["inputs"][input_key] = job.payload.video_frames
+                        logger.info(f"Replaced video_frames placeholder in {node.get('class_type', 'unknown')}")
+                    elif input_value == "FRAME_RATE_PLACEHOLDER":
+                        node["inputs"][input_key] = job.payload.frame_rate
+                        logger.info(f"Replaced frame_rate placeholder in {node.get('class_type', 'unknown')}")
+                    elif input_value == "MODEL_PLACEHOLDER":
+                        model_filename = map_model_name(job.model)
+                        node["inputs"][input_key] = model_filename
+                        logger.info(f"Replaced model placeholder with: {model_filename}")
+                    elif input_value == "INPUT_IMAGE_PLACEHOLDER":
+                        image_filename = getattr(job.payload, 'input_image_filename', 'input_image.png')
+                        node["inputs"][input_key] = image_filename
+                        logger.info(f"Replaced input image placeholder with: {image_filename}")
+            
+            # Only update SaveImage node to set filename with job ID (for image workflows)
             elif node.get("class_type") == "SaveImage":
                 node["inputs"]["filename_prefix"] = f"horde_{job.id}"
                 logger.info(f"Set SaveImage filename prefix to horde_{job.id}")
@@ -1211,35 +1329,92 @@ class ComfyUIBridge:
                 logger.error(f"Request error while waiting for generation: {e}")
                 await asyncio.sleep(2.0)
     
-    async def _get_generated_image(self, result: Dict[str, Any]) -> bytes:
-        """Extract the generated image from the ComfyUI result."""
-        # Find the node ID of the SaveImage node (or equivalent output node)
-        save_node_id = None
-        logger.info(f"Looking for image in result outputs: {list(result.get('outputs', {}).keys())}")
+    async def _get_generated_output(self, result: Dict[str, Any]) -> bytes:
+        """Extract the generated output (image or video) from the ComfyUI result."""
+        # Find the node ID of the output node (SaveImage, VHS_VideoCombine, etc.)
+        output_node_id = None
+        output_type = None
+        
+        logger.info(f"Looking for output in result outputs: {list(result.get('outputs', {}).keys())}")
         
         for node_id, node_output in result.get("outputs", {}).items():
             if "images" in node_output:
-                save_node_id = node_id
+                output_node_id = node_id
+                output_type = "image"
                 logger.info(f"Found image output in node {node_id}")
                 break
+            elif "gifs" in node_output:
+                output_node_id = node_id
+                output_type = "video"
+                logger.info(f"Found video/GIF output in node {node_id}")
+                break
+            elif "videos" in node_output:
+                output_node_id = node_id
+                output_type = "video"
+                logger.info(f"Found video output in node {node_id}")
+                break
         
-        if not save_node_id:
-            logger.error("No image output found in ComfyUI result")
-            raise ValueError("No image output found in ComfyUI result")
+        if not output_node_id:
+            logger.error("No output found in ComfyUI result")
+            raise ValueError("No output found in ComfyUI result")
         
-        # Get the first image
-        image_filename = result["outputs"][save_node_id]["images"][0]["filename"]
-        logger.info(f"Generated image: {image_filename}")
+        # Get the output file
+        if output_type == "image":
+            filename = result["outputs"][output_node_id]["images"][0]["filename"]
+            download_url = f"/view?filename={filename}"
+        elif output_type == "video":
+            # Check for different video output formats
+            if "gifs" in result["outputs"][output_node_id]:
+                filename = result["outputs"][output_node_id]["gifs"][0]["filename"]
+            elif "videos" in result["outputs"][output_node_id]:
+                filename = result["outputs"][output_node_id]["videos"][0]["filename"]
+            else:
+                # Fallback - try to find any file in the output
+                for key, files in result["outputs"][output_node_id].items():
+                    if isinstance(files, list) and len(files) > 0 and "filename" in files[0]:
+                        filename = files[0]["filename"]
+                        break
+                else:
+                    raise ValueError("No video file found in output")
+            
+            download_url = f"/view?filename={filename}"
         
-        # Download the image
-        image_url = f"/view?filename={image_filename}"
-        logger.info(f"Downloading image from {self.comfy_url}{image_url}")
+        logger.info(f"Generated {output_type}: {filename}")
         
-        response = await self.comfy_client.get(image_url)
+        # Download the file
+        logger.info(f"Downloading {output_type} from {self.comfy_url}{download_url}")
+        
+        response = await self.comfy_client.get(download_url)
         response.raise_for_status()
         
-        logger.info(f"Downloaded image size: {len(response.content)} bytes")
+        logger.info(f"Downloaded {output_type} size: {len(response.content)} bytes")
         return response.content
+
+    async def _save_input_image(self, base64_image: str, filename: str):
+        """Save a base64 encoded input image to ComfyUI's input directory."""
+        try:
+            import base64
+            from pathlib import Path
+            
+            # Decode base64 image
+            image_data = base64.b64decode(base64_image)
+            
+            # Save to ComfyUI input directory (typically ComfyUI/input/)
+            # You may need to adjust this path based on your ComfyUI installation
+            input_dir = Path("input")  # Relative to ComfyUI directory
+            if not input_dir.exists():
+                input_dir.mkdir(parents=True, exist_ok=True)
+            
+            input_path = input_dir / filename
+            with open(input_path, 'wb') as f:
+                f.write(image_data)
+            
+            logger.info(f"Saved input image to {input_path}")
+            
+        except Exception as e:
+            logger.error(f"Error saving input image: {e}")
+            # For now, continue without the image - could be improved
+            pass
 
 async def main():
     """Main entry point for the bridge."""
