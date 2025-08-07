@@ -11,6 +11,7 @@ from .model_mapper import initialize_model_mapper, get_horde_models, map_model_n
 
 logger = logging.getLogger(__name__)
 
+
 class ComfyUIBridge:
     def __init__(self):
         self.api = APIClient()
@@ -22,7 +23,9 @@ class ComfyUIBridge:
         job_id = job.get("id")
         if not job_id:
             return
-        logger.info(f"Picked up job {job_id} with metadata: {job}")(self.supported_models)
+        logger.info(f"Picked up job {job_id} with metadata: {job}")(
+            self.supported_models
+        )
         job_id = job.get("id")
         if not job_id:
             return
@@ -56,15 +59,16 @@ class ComfyUIBridge:
             "id": job_id,
             "generation": b64,
             "state": "ok",
-            "seed": int(job.get("payload", {}).get("seed", 0))
+            "seed": int(job.get("payload", {}).get("seed", 0)),
         }
         await self.api.submit_result(payload)
-        logger.info(f"Job {job_id} completed successfully with seed={payload.get('seed')}")
+        logger.info(
+            f"Job {job_id} completed successfully with seed={payload.get('seed')}"
+        )
 
     async def run(self):
         logger.info("Bridge starting...")
         await initialize_model_mapper(Settings.COMFYUI_URL)
-
 
         if Settings.GRID_MODELS:
             self.supported_models = Settings.GRID_MODELS

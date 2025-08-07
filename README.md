@@ -45,8 +45,8 @@ source venv/bin/activate
 # Windows
 venv\Scripts\activate
 
-# 3. Install dependencies (including test extras)
-pip install -e .[test]
+# 3. Install dependencies
+pip install -e .
 ````
 
 ---
@@ -94,6 +94,54 @@ The bridge will:
 2. Poll for jobs every few seconds.
 3. Render in ComfyUI.
 4. Submit results back to the network.
+
+---
+
+## 🐳 Docker
+
+### Build & Run the Container
+
+1. **Build** the Docker image:
+
+   ```bash
+   docker build -t comfy-bridge .
+   ```
+
+2. **Run** the container:
+
+   - **Linux** (host networking):
+     ```bash
+     docker run --rm --network host --env-file .env comfy-bridge
+     ```
+
+   - **macOS/Windows** (using `host.docker.internal`):
+     ```bash
+     docker run --rm \
+       -v "$(pwd)/workflows:/app/workflows" \
+       --env-file .env \
+       -e COMFYUI_URL=http://host.docker.internal:8000 \
+       comfy-bridge
+     ```
+
+---
+
+## 🐳 Docker Compose
+
+### If you prefer using Docker Compose to run your Container
+
+**Linux**
+
+Build & run:
+   ```bash
+   docker-compose -f docker-compose.linux.yml up --build
+   ```
+
+**macOS/Windows**
+
+Build & run:
+   ```bash
+   docker-compose -f docker-compose.win-macos.yml up --build
+   ```
 
 ---
 
