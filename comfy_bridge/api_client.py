@@ -1,9 +1,10 @@
 import logging
 import httpx
-from typing import List, Any, Dict
+from typing import List, Any, Dict, Optional
 from .config import Settings
 
 logger = logging.getLogger(__name__)
+
 
 class APIClient:
     def __init__(self):
@@ -11,10 +12,10 @@ class APIClient:
         self.client = httpx.AsyncClient(base_url=Settings.GRID_API_URL, timeout=60)
         self.headers = {
             "apikey": Settings.GRID_API_KEY,
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
         }
 
-    async def pop_job(self, models: List[str]) -> Dict[str, Any]:
+    async def pop_job(self, models: Optional[List[str]] = None) -> Dict[str, Any]:
         payload: Dict[str, Any] = {
             "name": Settings.GRID_WORKER_NAME,
             "worker_type": "image",
@@ -26,7 +27,7 @@ class APIClient:
             "painting": True,
             "post_processing": True,
             "bridge_agent": "comfy-bridge/0.1",
-            "models": models
+            "models": models or Settings.GRID_MODELS,
         }
         if models:
             payload["models"] = models
@@ -43,7 +44,9 @@ class APIClient:
             return response.json()
         except httpx.HTTPStatusError as e:
             logger.error(f"pop_job payload: {payload}")
-            logger.error(f"pop_job response [{e.response.status_code}]: {e.response.text}")
+            logger.error(
+                f"pop_job response [{e.response.status_code}]: {e.response.text}"
+            )
             raise
 
     async def submit_result(self, payload: Dict[str, Any]) -> None:

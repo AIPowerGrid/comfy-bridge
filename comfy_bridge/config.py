@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
 class Settings:
     GRID_API_KEY = os.getenv("GRID_API_KEY", "")
     _GRID_MODELS_RAW = os.getenv("GRID_MODEL", "")
