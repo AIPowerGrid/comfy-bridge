@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Union
 import base64
 import random
 
@@ -11,5 +11,13 @@ def generate_seed(provided: Any) -> int:
         return random.randint(1, 2**32 - 1)
 
 
-def encode_image(data: bytes) -> str:
-    return base64.b64encode(data).decode()
+def encode_image(data: Union[str, bytes]) -> str:
+    if isinstance(data, (bytes, bytearray)):
+        raw = data
+    else:
+        try:
+            with open(data, "rb") as f:
+                raw = f.read()
+        except Exception as e:
+            raise ValueError(f"Unable to read image file '{data}': {e}")
+    return base64.b64encode(raw).decode()

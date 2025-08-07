@@ -13,6 +13,7 @@ import shutil
 import glob
 import stat
 
+
 def clean_test_files():
     """Remove test and debug files."""
     files_to_remove = [
@@ -26,19 +27,17 @@ def clean_test_files():
         "fix_workflow.py",
         "horde_bridge.log",
         "run_horde_worker.py",
-        
         # Cache files
         "__pycache__",
         "*.pyc",
         "*.pyo",
         ".DS_Store",
-        
         # Development files
         ".env.test",
         ".env.example",
         "test_output/",
     ]
-    
+
     for pattern in files_to_remove:
         for path in glob.glob(pattern):
             if os.path.isdir(path):
@@ -48,6 +47,7 @@ def clean_test_files():
                 print(f"Removing file: {path}")
                 os.remove(path)
 
+
 def set_permissions():
     """Set correct permissions for executable scripts."""
     executable_files = [
@@ -56,11 +56,15 @@ def set_permissions():
         "setup.py",
         "check_connections.py",
     ]
-    
+
     for filename in executable_files:
         if os.path.exists(filename):
             print(f"Setting executable permissions for: {filename}")
-            os.chmod(filename, os.stat(filename).st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+            os.chmod(
+                filename,
+                os.stat(filename).st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH,
+            )
+
 
 def create_directories():
     """Create necessary directories if they don't exist."""
@@ -68,11 +72,12 @@ def create_directories():
         "workflows",
         "logs",
     ]
-    
+
     for directory in directories:
         if not os.path.exists(directory):
             print(f"Creating directory: {directory}")
             os.makedirs(directory)
+
 
 def create_example_env():
     """Create an example .env file."""
@@ -80,7 +85,7 @@ def create_example_env():
         print("Creating .env.example from .env")
         with open(".env", "r") as env_file:
             content = env_file.readlines()
-        
+
         # Remove any API keys
         with open(".env.example", "w") as example_file:
             for line in content:
@@ -90,23 +95,25 @@ def create_example_env():
                 else:
                     example_file.write(line)
 
+
 def main():
     """Main function."""
     print("Preparing ComfyUI Bridge for release...")
-    
+
     # Create example .env before cleaning
     create_example_env()
-    
+
     # Clean files
     clean_test_files()
-    
+
     # Set permissions
     set_permissions()
-    
+
     # Create directories
     create_directories()
-    
+
     print("Release preparation complete!")
 
+
 if __name__ == "__main__":
-    main() 
+    main()
