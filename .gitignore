@@ -25,6 +25,13 @@ wheels/
 # Environment variables
 .env
 
+# External repositories/dependencies
+grid-sdk/
+image-worker/
+
+# Setup notes (contains sensitive config)
+SETUP_NOTES.md
+
 # Logs
 *.log
 bridge_log.txt
