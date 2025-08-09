@@ -33,15 +33,18 @@ async def fetch_comfyui_models(comfy_url: str) -> List[str]:
 
 class ModelMapper:
     DEFAULT_MODEL_MAP = {
-        "stable_diffusion": "v1-5-pruned-emaonly.safetensors",
+        "stable_diffusion_1.5": "v1-5-pruned-emaonly.safetensors",
         "stable_diffusion_2.1": "v2-1_768-ema-pruned.safetensors",
         "sdxl": "sdxl_base_1.0.safetensors",
+        "sdxl turbo": "sd_xl_turbo_1.0_fp16.safetensors",
+        "SDXL 1.0": "sd_xl_base_1.0.safetensors",
         "sdxl-turbo": "sd_xl_turbo_1.0_fp16.safetensors",
+        "sd_xl_turbo": "sd_xl_turbo_1.0_fp16.safetensors",
         "juggernaut_xl": "juggernaut_xl.safetensors",
         "playground_v2": "playground_v2.safetensors",
         "dreamshaper_8": "dreamshaper_8.safetensors",
+        "stable_diffusion": "v1-5-pruned-emaonly.safetensors",
         "Flux.1-Krea-dev Uncensored (fp8+CLIP+VAE)": "flux1KreaDev_fp8ClipWithVAE.safetensors",
-        "Flux.1-Schnell fp8 (Compact)": "flux1CompactCLIPAnd_Flux1SchnellFp8.safetensors",
     }
 
     def __init__(self):
