@@ -26,14 +26,14 @@ class APIClient:
             "img2img": False,
             "painting": False,
             "post_processing": True,
-            "bridge_agent": "comfy-bridge/0.1",
+            "bridge_agent": "AI Horde Worker reGen:10.0.7:https://github.com/Haidra-Org/horde-worker-reGen",
             "models": models or Settings.GRID_MODELS,
         }
 
         if models:
             payload["models"] = models
 
-        #logger.debug(f"pop_job sending payload: {payload}")
+        logger.debug(f"pop_job sending payload: {payload}")
         try:
             response = await self.client.post(
                 "/v2/generate/pop", headers=self.headers, json=payload
