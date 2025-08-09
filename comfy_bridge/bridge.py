@@ -7,7 +7,7 @@ from .api_client import APIClient
 from .workflow import build_workflow
 from .utils import encode_image
 from .config import Settings
-from .model_mapper import initialize_model_mapper, get_horde_models, map_model_name
+from .model_mapper import initialize_model_mapper, get_horde_models
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ class ComfyUIBridge:
             return
         logger.info(f"Picked up job {job_id} with metadata: {job}")
 
-        wf = build_workflow(job)
+        wf = await build_workflow(job)
         logger.info(f"Sending workflow to ComfyUI: {wf}")
         resp = await self.comfy.post("/prompt", json={"prompt": wf})
         if resp.status_code != 200:

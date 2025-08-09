@@ -44,25 +44,25 @@ async def fetch_comfyui_models(comfy_url: str) -> List[str]:
 
 
 class ModelMapper:
-    DEFAULT_MODEL_MAP = {
-        "stable_diffusion_1.5": "v1-5-pruned-emaonly.safetensors",
-        "stable_diffusion_2.1": "v2-1_768-ema-pruned.safetensors",
-        "sdxl": "sdxl_base_1.0.safetensors",
-        "sdxl turbo": "sd_xl_turbo_1.0_fp16.safetensors",
-        "SDXL 1.0": "sd_xl_base_1.0.safetensors",
-        "sdxl-turbo": "sd_xl_turbo_1.0_fp16.safetensors",
-        "sd_xl_turbo": "sd_xl_turbo_1.0_fp16.safetensors",
-        "juggernaut_xl": "juggernaut_xl.safetensors",
-        "playground_v2": "playground_v2.safetensors",
-        "dreamshaper_8": "dreamshaper_8.safetensors",
-        "stable_diffusion": "v1-5-pruned-emaonly.safetensors",
-        "Flux.1-Krea-dev Uncensored (fp8+CLIP+VAE)": "flux1-krea-dev_fp8_scaled.safetensors",
+    # Map Grid model names to ComfyUI workflow files
+    DEFAULT_WORKFLOW_MAP = {
+        "stable_diffusion_1.5": "Dreamshaper.json",
+        "stable_diffusion_2.1": "Dreamshaper.json", 
+        "sdxl": "turbovision.json",
+        "sdxl turbo": "turbovision.json",
+        "SDXL 1.0": "turbovision.json",
+        "sdxl-turbo": "turbovision.json",
+        "sd_xl_turbo": "turbovision.json",
+        "juggernaut_xl": "turbovision.json",
+        "playground_v2": "turbovision.json",
+        "dreamshaper_8": "Dreamshaper.json",
+        "stable_diffusion": "Dreamshaper.json",
+        "Flux.1-Krea-dev Uncensored (fp8+CLIP+VAE)": "flux1_krea_dev.json",
     }
 
     def __init__(self):
         self.available_models: List[str] = []
-        self.model_map: Dict[str, str] = {}
-        self.default_model: str = ""
+        self.workflow_map: Dict[str, str] = {}
 
     async def initialize(self, comfy_url: str):
         self.available_models = await fetch_comfyui_models(comfy_url)
@@ -71,40 +71,33 @@ class ModelMapper:
             print("Warning: No models detected in ComfyUI")
             return
 
-        self.default_model = self.available_models[0]
-        self._build_model_map()
+        self._build_workflow_map()
 
         print(
-            f"Initialized with {len(self.available_models)} models. Default: {self.default_model}"
+            f"Initialized workflow mapper with {len(self.workflow_map)} Grid models mapped to workflows"
         )
 
-    def _build_model_map(self):
-        lower_model_filenames = {name.lower(): name for name in self.available_models}
+    def _build_workflow_map(self):
+        """Build mapping from Grid models to ComfyUI workflows"""
+        self.workflow_map = self.DEFAULT_WORKFLOW_MAP.copy()
 
-        for key, default_filename in self.DEFAULT_MODEL_MAP.items():
-            for filename in lower_model_filenames:
-                if key.replace("_", "").replace("-", "") in filename.replace(
-                    "_", ""
-                ).replace("-", ""):
-                    self.model_map[key] = lower_model_filenames[filename]
-                    break
-
-    def get_model_filename(self, horde_model_name: str) -> str:
+    def get_workflow_file(self, horde_model_name: str) -> str:
+        """Get the workflow file for a Grid model"""
         return (
-            self.model_map.get(horde_model_name)
+            self.workflow_map.get(horde_model_name)
             or next(
                 (
                     v
-                    for k, v in self.model_map.items()
+                    for k, v in self.workflow_map.items()
                     if horde_model_name.lower() in k.lower()
                 ),
                 None,
             )
-            or self.default_model
+            or "Dreamshaper.json"  # Default workflow
         )
 
     def get_available_horde_models(self) -> List[str]:
-        return list(self.model_map.keys())
+        return list(self.workflow_map.keys())
 
 
 model_mapper = ModelMapper()
@@ -118,5 +111,5 @@ def get_horde_models() -> List[str]:
     return model_mapper.get_available_horde_models()
 
 
-def map_model_name(horde_model_name: str) -> str:
-    return model_mapper.get_model_filename(horde_model_name)
+def get_workflow_file(horde_model_name: str) -> str:
+    return model_mapper.get_workflow_file(horde_model_name)
