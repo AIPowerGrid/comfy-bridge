@@ -34,9 +34,7 @@ class APIClient:
             payload["models"] = models
 
         #logger.debug(f"pop_job sending payload: {payload}")
-        logger.debug(payload)
         try:
-            print(payload)
             response = await self.client.post(
                 "/v2/generate/pop", headers=self.headers, json=payload
             )
