@@ -47,7 +47,8 @@ async def process_workflow(workflow: Dict[str, Any], job: Dict[str, Any]) -> Dic
     
     # Handle source image for img2img workflows
     source_image_filename = None
-    if job.get("r2_upload") and job.get("source_processing") == "img2img":
+    if job.get("r2_upload") and job.get("source_processing") == "img2img" and job.get("source_image") is not None:
+        # Only download if there's actually a source image (not just an R2 URL for output)
         # Generate unique filename
         image_ext = "png"  # Default, could be improved to detect from URL
         source_image_filename = f"horde_input_{job.get('id', 'unknown')}_{uuid.uuid4().hex[:8]}.{image_ext}"
@@ -58,6 +59,8 @@ async def process_workflow(workflow: Dict[str, Any], job: Dict[str, Any]) -> Dic
         except Exception as e:
             print(f"Failed to download source image: {e}")
             source_image_filename = None
+    else:
+        print(f"Skipping image download - this is a text-to-image job")
     
     # Process each node in the workflow
     for node_id, node_data in processed_workflow.items():
@@ -75,31 +78,31 @@ async def process_workflow(workflow: Dict[str, Any], job: Dict[str, Any]) -> Dic
                 # If no source image, use a default or skip this workflow
                 inputs["image"] = "example.png"  # Default placeholder
         
-        # Handle KSampler nodes
+        # Handle KSampler nodes - only update seed for uniqueness
         elif class_type in ["KSampler", "KSamplerAdvanced"]:
-            if "seed" in inputs or "noise_seed" in inputs:
-                if "seed" in inputs:
-                    inputs["seed"] = seed
-                if "noise_seed" in inputs:
-                    inputs["noise_seed"] = seed
-            if "steps" in inputs:
-                inputs["steps"] = payload.get("ddim_steps", payload.get("steps", inputs.get("steps", 6)))
-            if "cfg" in inputs:
-                inputs["cfg"] = payload.get("cfg_scale", inputs.get("cfg", 1.0))
-            if "sampler_name" in inputs:
-                sampler = payload.get("sampler_name", "euler").replace("k_", "")
-                inputs["sampler_name"] = sampler
+            if "seed" in inputs:
+                inputs["seed"] = seed
+            if "noise_seed" in inputs:
+                inputs["noise_seed"] = seed
         
         # Handle text encoding nodes
         elif class_type == "CLIPTextEncode":
             if "text" in inputs:
                 current_text = inputs["text"]
-                # Replace with positive prompt if it's empty or a placeholder
-                if current_text == "" or "POSITIVE_PROMPT_PLACEHOLDER" in current_text:
-                    inputs["text"] = payload.get("prompt", "")
-                # Replace negative prompt placeholder
+                # Always replace with job prompt if we have one
+                if payload.get("prompt"):
+                    inputs["text"] = payload.get("prompt")
+                # Replace negative prompt placeholder  
                 elif "NEGATIVE_PROMPT_PLACEHOLDER" in current_text:
                     inputs["text"] = payload.get("negative_prompt", current_text)
+                # Keep current text if no job prompt
+        
+        # Handle latent image nodes for dimensions
+        elif class_type in ["EmptyLatentImage", "EmptySD3LatentImage"]:
+            if "width" in inputs:
+                inputs["width"] = payload.get("width", inputs.get("width", 1024))
+            if "height" in inputs:
+                inputs["height"] = payload.get("height", inputs.get("height", 1024))
         
         # Handle WanImageToVideo nodes for dimensions
         elif class_type == "WanImageToVideo":
@@ -135,16 +138,8 @@ async def build_workflow(job: Dict[str, Any]) -> Dict[str, Any]:
     model_name = job.get("model", "")
     source_processing = job.get("source_processing", "txt2img")
     
-    # Choose workflow based on job type and model
-    if source_processing == "img2img" and job.get("r2_upload"):
-        # Use image-to-video workflow for img2img jobs
-        if "flux" in model_name.lower() or "krea" in model_name.lower():
-            workflow_filename = "fast_image_to_video_wan22_14B.json"
-        else:
-            workflow_filename = "Dreamshaper.json"
-    else:
-        # Use the mapped workflow for text-to-image/text-to-video jobs
-        workflow_filename = get_workflow_file(model_name)
+    # Use the mapped workflow for all jobs (the mapper handles the logic)
+    workflow_filename = get_workflow_file(model_name)
     
     print(f"Loading workflow: {workflow_filename} for model: {model_name} (type: {source_processing})")
     
