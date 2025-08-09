@@ -1,0 +1,651 @@
+{
+  "73": {
+    "inputs": {
+      "noise_seed": 800416003687433
+    },
+    "class_type": "RandomNoise",
+    "_meta": {
+      "title": "Noise"
+    }
+  },
+  "82": {
+    "inputs": {
+      "Xi": 4,
+      "Xf": 4,
+      "isfloatX": 0
+    },
+    "class_type": "mxSlider",
+    "_meta": {
+      "title": "Steps"
+    }
+  },
+  "83": {
+    "inputs": {
+      "Xi": 512,
+      "Xf": 512,
+      "Yi": 768,
+      "Yf": 768,
+      "isfloatX": 0,
+      "isfloatY": 0
+    },
+    "class_type": "mxSlider2D",
+    "_meta": {
+      "title": "Size"
+    }
+  },
+  "85": {
+    "inputs": {
+      "Xi": 1,
+      "Xf": 1,
+      "isfloatX": 1
+    },
+    "class_type": "mxSlider",
+    "_meta": {
+      "title": "CFG"
+    }
+  },
+  "157": {
+    "inputs": {
+      "Xi": 7,
+      "Xf": 7,
+      "isfloatX": 1
+    },
+    "class_type": "mxSlider",
+    "_meta": {
+      "title": "Speed"
+    }
+  },
+  "384": {
+    "inputs": {
+      "model_name": "RealESRGAN_x4plus.pth"
+    },
+    "class_type": "UpscaleModelLoader",
+    "_meta": {
+      "title": "Upscale Model"
+    }
+  },
+  "398": {
+    "inputs": {
+      "frame_rate": [
+        "513",
+        0
+      ],
+      "loop_count": 0,
+      "filename_prefix": "WAN/2025-08-09/011658_OG",
+      "format": "video/h264-mp4",
+      "pix_fmt": "yuv420p",
+      "crf": 19,
+      "save_metadata": true,
+      "trim_to_audio": false,
+      "pingpong": false,
+      "save_output": true,
+      "images": [
+        "469",
+        0
+      ]
+    },
+    "class_type": "VHS_VideoCombine",
+    "_meta": {
+      "title": "Output"
+    }
+  },
+  "408": {
+    "inputs": {
+      "value": "A close-up of a young woman smiling gently in the rain, raindrops glistening on her face and eyelashes. The video captures the delicate details of her expression and the water droplets, with soft light reflecting off her skin in the rainy atmosphere."
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "Positive"
+    }
+  },
+  "409": {
+    "inputs": {
+      "value": "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走, fast movements, blurry, mouth moving, talking, teeth visible, strong blush"
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "Negative"
+    }
+  },
+  "416": {
+    "inputs": {
+      "PowerLoraLoaderHeaderWidget": {
+        "type": "PowerLoraLoaderHeaderWidget"
+      },
+      "lora_1": {
+        "on": true,
+        "lora": "WAN\\Wan21_T2V_14B_lightx2v_cfg_step_distill_lora_rank64.safetensors",
+        "strength": 1
+      },
+      "➕ Add Lora": "",
+      "model": [
+        "511",
+        0
+      ],
+      "clip": [
+        "460",
+        0
+      ]
+    },
+    "class_type": "Power Lora Loader (rgthree)",
+    "_meta": {
+      "title": "LoRA - High noise"
+    }
+  },
+  "421": {
+    "inputs": {
+      "Xi": 2,
+      "Xf": 2,
+      "isfloatX": 1
+    },
+    "class_type": "mxSlider",
+    "_meta": {
+      "title": "Upscale ratio"
+    }
+  },
+  "425": {
+    "inputs": {
+      "a": [
+        "426",
+        0
+      ],
+      "b": 24.000000000000004,
+      "operation": "multiply"
+    },
+    "class_type": "easy mathFloat",
+    "_meta": {
+      "title": "calculFrames"
+    }
+  },
+  "426": {
+    "inputs": {
+      "Xi": 3,
+      "Xf": 3,
+      "isfloatX": 1
+    },
+    "class_type": "mxSlider",
+    "_meta": {
+      "title": "Duration"
+    }
+  },
+  "428": {
+    "inputs": {
+      "output_type": "int",
+      "*": [
+        "425",
+        0
+      ]
+    },
+    "class_type": "easy convertAnything",
+    "_meta": {
+      "title": "toInt"
+    }
+  },
+  "446": {
+    "inputs": {
+      "a": [
+        "428",
+        0
+      ],
+      "b": 1,
+      "operation": "add"
+    },
+    "class_type": "easy mathInt",
+    "_meta": {
+      "title": "addFirst frame"
+    }
+  },
+  "460": {
+    "inputs": {
+      "clip_name": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+      "type": "wan",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "CLIP"
+    }
+  },
+  "461": {
+    "inputs": {
+      "vae_name": "wan_2.1_vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "VAE"
+    }
+  },
+  "462": {
+    "inputs": {
+      "text": [
+        "408",
+        0
+      ],
+      "clip": [
+        "460",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "Positive Encode"
+    }
+  },
+  "463": {
+    "inputs": {
+      "text": [
+        "409",
+        0
+      ],
+      "clip": [
+        "460",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "Negative Encode"
+    }
+  },
+  "465": {
+    "inputs": {
+      "add_noise": "disable",
+      "noise_seed": [
+        "470",
+        0
+      ],
+      "steps": [
+        "82",
+        0
+      ],
+      "cfg": [
+        "85",
+        0
+      ],
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "start_at_step": [
+        "507",
+        0
+      ],
+      "end_at_step": 10000,
+      "return_with_leftover_noise": "disable",
+      "model": [
+        "501",
+        0
+      ],
+      "positive": [
+        "462",
+        0
+      ],
+      "negative": [
+        "463",
+        0
+      ],
+      "latent_image": [
+        "466",
+        0
+      ]
+    },
+    "class_type": "KSamplerAdvanced",
+    "_meta": {
+      "title": "Sampler low"
+    }
+  },
+  "466": {
+    "inputs": {
+      "add_noise": "enable",
+      "noise_seed": [
+        "470",
+        0
+      ],
+      "steps": [
+        "82",
+        0
+      ],
+      "cfg": [
+        "85",
+        0
+      ],
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "start_at_step": 0,
+      "end_at_step": [
+        "507",
+        0
+      ],
+      "return_with_leftover_noise": "enable",
+      "model": [
+        "500",
+        0
+      ],
+      "positive": [
+        "462",
+        0
+      ],
+      "negative": [
+        "463",
+        0
+      ],
+      "latent_image": [
+        "504",
+        0
+      ]
+    },
+    "class_type": "KSamplerAdvanced",
+    "_meta": {
+      "title": "Sampler high"
+    }
+  },
+  "467": {
+    "inputs": {
+      "shift": [
+        "157",
+        0
+      ],
+      "model": [
+        "483",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingSD3",
+    "_meta": {
+      "title": "SamplingHigh"
+    }
+  },
+  "468": {
+    "inputs": {
+      "shift": [
+        "157",
+        0
+      ],
+      "model": [
+        "484",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingSD3",
+    "_meta": {
+      "title": "SamplinfLow"
+    }
+  },
+  "469": {
+    "inputs": {
+      "samples": [
+        "465",
+        0
+      ],
+      "vae": [
+        "461",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "470": {
+    "inputs": {
+      "output_type": "int",
+      "*": [
+        "497",
+        0
+      ]
+    },
+    "class_type": "easy convertAnything",
+    "_meta": {
+      "title": "Convert Any"
+    }
+  },
+  "471": {
+    "inputs": {
+      "PowerLoraLoaderHeaderWidget": {
+        "type": "PowerLoraLoaderHeaderWidget"
+      },
+      "lora_1": {
+        "on": true,
+        "lora": "WAN\\Wan21_T2V_14B_lightx2v_cfg_step_distill_lora_rank64.safetensors",
+        "strength": 1
+      },
+      "➕ Add Lora": "",
+      "model": [
+        "512",
+        0
+      ],
+      "clip": [
+        "460",
+        0
+      ]
+    },
+    "class_type": "Power Lora Loader (rgthree)",
+    "_meta": {
+      "title": "LoRA - Low noise"
+    }
+  },
+  "483": {
+    "inputs": {
+      "use_zero_init": false,
+      "zero_init_steps": 2,
+      "model": [
+        "416",
+        0
+      ]
+    },
+    "class_type": "CFGZeroStarAndInit",
+    "_meta": {
+      "title": "CFG Zero High"
+    }
+  },
+  "484": {
+    "inputs": {
+      "use_zero_init": false,
+      "zero_init_steps": 2,
+      "model": [
+        "471",
+        0
+      ]
+    },
+    "class_type": "CFGZeroStarAndInit",
+    "_meta": {
+      "title": "CFG Zero Low"
+    }
+  },
+  "485": {
+    "inputs": {
+      "nag_scale": 11,
+      "nag_alpha": 0.25,
+      "nag_tau": 2.3730000000000007,
+      "model": [
+        "467",
+        0
+      ],
+      "conditioning": [
+        "463",
+        0
+      ]
+    },
+    "class_type": "WanVideoNAG",
+    "_meta": {
+      "title": "NAG High"
+    }
+  },
+  "486": {
+    "inputs": {
+      "nag_scale": 11,
+      "nag_alpha": 0.25,
+      "nag_tau": 2.3730000000000007,
+      "model": [
+        "468",
+        0
+      ],
+      "conditioning": [
+        "463",
+        0
+      ]
+    },
+    "class_type": "WanVideoNAG",
+    "_meta": {
+      "title": "NAG Low"
+    }
+  },
+  "497": {
+    "inputs": {
+      "id": 0,
+      "widget_name": "noise_seed",
+      "return_all": false,
+      "node_title": "",
+      "allowed_float_decimals": 2,
+      "any_input": [
+        "73",
+        0
+      ]
+    },
+    "class_type": "WidgetToString",
+    "_meta": {
+      "title": "Widget To String"
+    }
+  },
+  "500": {
+    "inputs": {
+      "blocks_to_swap": [
+        "503",
+        0
+      ],
+      "offload_img_emb": false,
+      "offload_txt_emb": false,
+      "use_non_blocking": false,
+      "model": [
+        "485",
+        0
+      ]
+    },
+    "class_type": "wanBlockSwap",
+    "_meta": {
+      "title": "BlockSwap High"
+    }
+  },
+  "501": {
+    "inputs": {
+      "blocks_to_swap": [
+        "503",
+        0
+      ],
+      "offload_img_emb": false,
+      "offload_txt_emb": false,
+      "use_non_blocking": false,
+      "model": [
+        "486",
+        0
+      ]
+    },
+    "class_type": "wanBlockSwap",
+    "_meta": {
+      "title": "BlockSwap Low"
+    }
+  },
+  "502": {
+    "inputs": {
+      "Xi": 50,
+      "Xf": 50,
+      "isfloatX": 0
+    },
+    "class_type": "mxSlider",
+    "_meta": {
+      "title": "Reduce VRAM usage (BlockSwap)"
+    }
+  },
+  "503": {
+    "inputs": {
+      "expression": "a/100*40",
+      "a": [
+        "502",
+        0
+      ]
+    },
+    "class_type": "MathExpression|pysssss",
+    "_meta": {
+      "title": "blockcalcul"
+    }
+  },
+  "504": {
+    "inputs": {
+      "width": [
+        "83",
+        0
+      ],
+      "height": [
+        "83",
+        1
+      ],
+      "length": [
+        "446",
+        0
+      ],
+      "batch_size": 1
+    },
+    "class_type": "EmptyHunyuanLatentVideo",
+    "_meta": {
+      "title": "EmptyLatentVideo"
+    }
+  },
+  "507": {
+    "inputs": {
+      "a": [
+        "82",
+        0
+      ],
+      "b": 2,
+      "operation": "divide"
+    },
+    "class_type": "easy mathInt",
+    "_meta": {
+      "title": "calculSteps"
+    }
+  },
+  "511": {
+    "inputs": {
+      "unet_name": "wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "Model - High noise"
+    }
+  },
+  "512": {
+    "inputs": {
+      "unet_name": "wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "Model - Low noise"
+    }
+  },
+  "513": {
+    "inputs": {
+      "Xi": 16,
+      "Xf": 16,
+      "isfloatX": 1
+    },
+    "class_type": "mxSlider",
+    "_meta": {
+      "title": "Frame rate"
+    }
+  },
+  "514": {
+    "inputs": {
+      "a": [
+        "513",
+        0
+      ],
+      "b": 2.0000000000000004,
+      "operation": "multiply"
+    },
+    "class_type": "easy mathFloat",
+    "_meta": {
+      "title": "calculFramesIn"
+    }
+  }
+}
