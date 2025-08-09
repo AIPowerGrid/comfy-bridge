@@ -41,6 +41,7 @@ class ModelMapper:
         "playground_v2": "playground_v2.safetensors",
         "dreamshaper_8": "dreamshaper_8.safetensors",
         "Flux.1-Krea-dev Uncensored (fp8+CLIP+VAE)": "flux1KreaDev_fp8ClipWithVAE.safetensors",
+        "Flux.1-Schnell fp8 (Compact)": "flux1CompactCLIPAnd_Flux1SchnellFp8.safetensors",
     }
 
     def __init__(self):
