@@ -12,13 +12,25 @@ async def fetch_comfyui_models(comfy_url: str) -> List[str]:
                 response.raise_for_status()
                 data = response.json()
 
+                models = []
                 if endpoint == "/object_info":
-                    models = (
+                    # Get checkpoint models
+                    checkpoint_models = (
                         data.get("CheckpointLoaderSimple", {})
                         .get("input", {})
                         .get("required", {})
                         .get("ckpt_name", [[]])[0]
                     )
+                    models.extend(checkpoint_models)
+                    
+                    # Get Flux models
+                    flux_models = (
+                        data.get("FluxLoader", {})
+                        .get("input", {})
+                        .get("required", {})
+                        .get("model_name", [[]])[0]
+                    )
+                    models.extend(flux_models)
                 elif endpoint == "/model_list":
                     models = data.get("checkpoints", []) + data.get("models", [])
 
@@ -44,7 +56,7 @@ class ModelMapper:
         "playground_v2": "playground_v2.safetensors",
         "dreamshaper_8": "dreamshaper_8.safetensors",
         "stable_diffusion": "v1-5-pruned-emaonly.safetensors",
-        "Flux.1-Krea-dev Uncensored (fp8+CLIP+VAE)": "flux1KreaDev_fp8ClipWithVAE.safetensors",
+        "Flux.1-Krea-dev Uncensored (fp8+CLIP+VAE)": "flux1-krea-dev_fp8_scaled.safetensors",
     }
 
     def __init__(self):

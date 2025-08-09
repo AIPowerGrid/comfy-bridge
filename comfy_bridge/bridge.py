@@ -25,12 +25,13 @@ class ComfyUIBridge:
         if not job_id:
             print("No job ID found, skipping")
             return
-        logger.info(f"Picked up job {job_id} with metadata: {job}")(
-            self.supported_models
-        )
+        logger.info(f"Picked up job {job_id} with metadata: {job}")
 
         wf = build_workflow(job)
+        logger.info(f"Sending workflow to ComfyUI: {wf}")
         resp = await self.comfy.post("/prompt", json={"prompt": wf})
+        if resp.status_code != 200:
+            logger.error(f"ComfyUI error response: {resp.text}")
         resp.raise_for_status()
         prompt_id = resp.json().get("prompt_id")
         if not prompt_id:
