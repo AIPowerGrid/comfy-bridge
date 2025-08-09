@@ -20,7 +20,7 @@ class ComfyUIBridge:
 
     async def process_once(self):
         job = await self.api.pop_job(self.supported_models)
-        logger.info(job["skipped"])
+        logger.info("skipped:" + job["skipped"])
         job_id = job.get("id")
         if not job_id:
             print("No job ID found, skipping")
