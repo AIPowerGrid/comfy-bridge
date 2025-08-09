@@ -20,15 +20,14 @@ class ComfyUIBridge:
 
     async def process_once(self):
         job = await self.api.pop_job(self.supported_models)
+        logger.info(job["skipped"])
         job_id = job.get("id")
         if not job_id:
+            print("No job ID found, skipping")
             return
         logger.info(f"Picked up job {job_id} with metadata: {job}")(
             self.supported_models
         )
-        job_id = job.get("id")
-        if not job_id:
-            return
 
         wf = build_workflow(job)
         resp = await self.comfy.post("/prompt", json={"prompt": wf})

@@ -23,18 +23,17 @@ class APIClient:
             "nsfw": Settings.NSFW,
             "threads": Settings.THREADS,
             "require_upfront_kudos": False,
-            "img2img": True,
-            "painting": True,
+            "img2img": False,
+            "painting": False,
             "post_processing": True,
             "bridge_agent": "comfy-bridge/0.1",
             "models": models or Settings.GRID_MODELS,
         }
+
         if models:
             payload["models"] = models
 
-        logger.debug(f"pop_job sending payload: {payload}")
-        if models:
-            payload["models"] = models
+        #logger.debug(f"pop_job sending payload: {payload}")
 
         try:
             response = await self.client.post(
