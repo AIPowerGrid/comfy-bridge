@@ -18,16 +18,23 @@ class APIClient:
     async def pop_job(self, models: Optional[List[str]] = None) -> Dict[str, Any]:
         payload: Dict[str, Any] = {
             "name": Settings.GRID_WORKER_NAME,
-            "worker_type": "image",
             "max_pixels": Settings.MAX_PIXELS,
             "nsfw": Settings.NSFW,
             "threads": Settings.THREADS,
             "require_upfront_kudos": False,
-            "img2img": False,
-            "painting": False,
-            "post_processing": True,
+            "allow_img2img": False,
+            "allow_painting": False,
+            "allow_post_processing": True,
+            "allow_controlnet": False,
+            "allow_sdxl_controlnet": False,
+            "allow_lora": False,
+            "allow_unsafe_ipaddr": False,
+            "extra_slow_worker": False,
+            "limit_max_steps": False,
             "bridge_agent": "AI Horde Worker reGen:10.0.7:https://github.com/Haidra-Org/horde-worker-reGen",
             "models": models or Settings.GRID_MODELS,
+            "blacklist": [],
+            "amount": 1,
         }
 
         if models:
