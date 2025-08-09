@@ -20,7 +20,7 @@ async def fetch_comfyui_models(comfy_url: str) -> List[str]:
                         .get("ckpt_name", [[]])[0]
                     )
                 elif endpoint == "/model_list":
-                    models = data.get("checkpoints", [])
+                    models = data.get("checkpoints", []) + data.get("models", [])
 
                 if models:
                     return models
