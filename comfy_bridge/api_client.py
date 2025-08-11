@@ -22,7 +22,7 @@ class APIClient:
             "nsfw": Settings.NSFW,
             "threads": Settings.THREADS,
             "require_upfront_kudos": False,
-            "allow_img2img": False,
+            "allow_img2img": True,
             "allow_painting": False,
             "allow_post_processing": True,
             "allow_controlnet": False,

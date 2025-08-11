@@ -70,10 +70,21 @@ class ComfyUIBridge:
         logger.info("Bridge starting...")
         await initialize_model_mapper(Settings.COMFYUI_URL)
 
-        if Settings.GRID_MODELS:
-            self.supported_models = Settings.GRID_MODELS
+        # Prefer models derived from env workflows; if WORKFLOW_FILE is set, do not fall back to GRID_MODEL
+        derived_models = get_horde_models()
+        if Settings.WORKFLOW_FILE:
+            self.supported_models = derived_models
+            if not self.supported_models:
+                logger.warning(
+                    "No checkpoint models resolved from WORKFLOW_FILE; advertising none."
+                )
         else:
-            self.supported_models = get_horde_models()
+            if derived_models:
+                self.supported_models = derived_models
+            elif Settings.GRID_MODELS:
+                self.supported_models = Settings.GRID_MODELS
+            else:
+                self.supported_models = []
         logger.info(f"Advertising models: {self.supported_models}")
 
         while True:
