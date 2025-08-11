@@ -26,7 +26,7 @@ async def fetch_comfyui_models(comfy_url: str) -> List[str]:
                         .get("ckpt_name", [[]])[0]
                     )
                     models.extend(checkpoint_models)
-                    
+
                     # Get Flux models
                     flux_models = (
                         data.get("FluxLoader", {})
@@ -51,7 +51,7 @@ class ModelMapper:
     # Map Grid model names to ComfyUI workflow files
     DEFAULT_WORKFLOW_MAP = {
         "stable_diffusion_1.5": "Dreamshaper.json",
-        "stable_diffusion_2.1": "Dreamshaper.json", 
+        "stable_diffusion_2.1": "Dreamshaper.json",
         "sdxl": "turbovision.json",
         "sdxl turbo": "turbovision.json",
         "SDXL 1.0": "turbovision.json",
@@ -129,7 +129,9 @@ class ModelMapper:
         - Files are resolved relative to Settings.WORKFLOW_DIR
         """
         configured = Settings.WORKFLOW_FILE or ""
-        workflow_filenames = [w.strip() for w in configured.split(",") if w and w.strip()]
+        workflow_filenames = [
+            w.strip() for w in configured.split(",") if w and w.strip()
+        ]
         resolved_paths: List[str] = []
         for filename in workflow_filenames:
             abs_path = os.path.join(Settings.WORKFLOW_DIR, filename)
@@ -186,7 +188,9 @@ class ModelMapper:
             filename = os.path.basename(abs_path)
             model_files = self._extract_model_files_from_workflow(abs_path)
             for model_file in model_files:
-                grid_model_name: Optional[str] = self._resolve_file_to_grid_model(model_file)
+                grid_model_name: Optional[str] = self._resolve_file_to_grid_model(
+                    model_file
+                )
                 if grid_model_name:
                     self.workflow_map[grid_model_name] = filename
                 else:
