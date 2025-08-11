@@ -200,18 +200,28 @@ class ModelMapper:
 
     def get_workflow_file(self, horde_model_name: str) -> str:
         """Get the workflow file for a Grid model"""
-        return (
-            self.workflow_map.get(horde_model_name)
-            or next(
-                (
-                    v
-                    for k, v in self.workflow_map.items()
-                    if horde_model_name.lower() in k.lower()
-                ),
-                None,
-            )
-            or "Dreamshaper.json"  # Default workflow
+        # Try exact match first
+        workflow = self.workflow_map.get(horde_model_name)
+        if workflow:
+            return workflow
+            
+        # Try fuzzy matching as fallback
+        workflow = next(
+            (
+                v
+                for k, v in self.workflow_map.items()
+                if horde_model_name.lower() in k.lower()
+            ),
+            None,
         )
+        if workflow:
+            print(f"Warning: Using fuzzy match for '{horde_model_name}' -> '{workflow}'")
+            return workflow
+            
+        # No mapping found - return None to trigger proper error handling
+        print(f"ERROR: No workflow mapping found for model '{horde_model_name}'")
+        print(f"Available mappings: {list(self.workflow_map.keys())}")
+        return None
 
     def get_available_horde_models(self) -> List[str]:
         return list(self.workflow_map.keys())
