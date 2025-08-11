@@ -13,46 +13,54 @@ async def download_image(url: str, filename: str) -> str:
     # ComfyUI input directory is typically ComfyUI/input/
     input_dir = "/tmp/comfyui_inputs"  # Adjust this path as needed
     os.makedirs(input_dir, exist_ok=True)
-    
+
     filepath = os.path.join(input_dir, filename)
-    
+
     async with httpx.AsyncClient() as client:
         response = await client.get(url)
         response.raise_for_status()
-        
-        with open(filepath, 'wb') as f:
+
+        with open(filepath, "wb") as f:
             f.write(response.content)
-    
+
     return filename
 
 
 def load_workflow_file(workflow_filename: str) -> Dict[str, Any]:
     """Load a workflow JSON file from the workflows directory"""
     workflow_path = os.path.join(Settings.WORKFLOW_DIR, workflow_filename)
-    
+
     if not os.path.exists(workflow_path):
         raise FileNotFoundError(f"Workflow file not found: {workflow_path}")
-    
-    with open(workflow_path, 'r') as f:
+
+    with open(workflow_path, "r") as f:
         return json.load(f)
 
 
-async def process_workflow(workflow: Dict[str, Any], job: Dict[str, Any]) -> Dict[str, Any]:
+async def process_workflow(
+    workflow: Dict[str, Any], job: Dict[str, Any]
+) -> Dict[str, Any]:
     """Process a workflow by replacing placeholders with job parameters"""
     payload = job.get("payload", {})
     seed = generate_seed(payload.get("seed"))
-    
+
     # Make a deep copy to avoid modifying the original
     processed_workflow = json.loads(json.dumps(workflow))
-    
+
     # Handle source image for img2img workflows
     source_image_filename = None
-    if job.get("r2_upload") and job.get("source_processing") == "img2img" and job.get("source_image") is not None:
+    if (
+        job.get("r2_upload")
+        and job.get("source_processing") == "img2img"
+        and job.get("source_image") is not None
+    ):
         # Only download if there's actually a source image (not just an R2 URL for output)
         # Generate unique filename
         image_ext = "png"  # Default, could be improved to detect from URL
-        source_image_filename = f"horde_input_{job.get('id', 'unknown')}_{uuid.uuid4().hex[:8]}.{image_ext}"
-        
+        source_image_filename = (
+            f"horde_input_{job.get('id', 'unknown')}_{uuid.uuid4().hex[:8]}.{image_ext}"
+        )
+
         try:
             await download_image(job["r2_upload"], source_image_filename)
             print(f"Downloaded source image: {source_image_filename}")
@@ -61,15 +69,15 @@ async def process_workflow(workflow: Dict[str, Any], job: Dict[str, Any]) -> Dic
             source_image_filename = None
     else:
         print(f"Skipping image download - this is a text-to-image job")
-    
+
     # Process each node in the workflow
     for node_id, node_data in processed_workflow.items():
         if not isinstance(node_data, dict):
             continue
-            
+
         inputs = node_data.get("inputs", {})
         class_type = node_data.get("class_type", "")
-        
+
         # Handle LoadImage nodes for source images
         if class_type == "LoadImage":
             if source_image_filename:
@@ -77,7 +85,7 @@ async def process_workflow(workflow: Dict[str, Any], job: Dict[str, Any]) -> Dic
             else:
                 # If no source image, use a default or skip this workflow
                 inputs["image"] = "example.png"  # Default placeholder
-        
+
         # Handle KSampler nodes - only update seed for uniqueness, preserve all other Krea settings
         elif class_type in ["KSampler", "KSamplerAdvanced"]:
             if "seed" in inputs:
@@ -85,7 +93,7 @@ async def process_workflow(workflow: Dict[str, Any], job: Dict[str, Any]) -> Dic
             if "noise_seed" in inputs:
                 inputs["noise_seed"] = seed
             # Keep all other KSampler settings from Krea workflow (steps, cfg, sampler_name, scheduler, etc.)
-        
+
         # Handle text encoding nodes
         elif class_type == "CLIPTextEncode":
             if "text" in inputs:
@@ -93,49 +101,49 @@ async def process_workflow(workflow: Dict[str, Any], job: Dict[str, Any]) -> Dic
                 # Always replace with job prompt if we have one
                 if payload.get("prompt"):
                     inputs["text"] = payload.get("prompt")
-                # Replace negative prompt placeholder  
+                # Replace negative prompt placeholder
                 elif "NEGATIVE_PROMPT_PLACEHOLDER" in current_text:
                     inputs["text"] = payload.get("negative_prompt", current_text)
                 # Keep current text if no job prompt
-        
+
         # Handle latent image nodes for dimensions
         elif class_type in ["EmptyLatentImage", "EmptySD3LatentImage"]:
             if "width" in inputs:
                 inputs["width"] = payload.get("width", inputs.get("width", 1024))
             if "height" in inputs:
                 inputs["height"] = payload.get("height", inputs.get("height", 1024))
-        
+
         # Handle WanImageToVideo nodes for dimensions
         elif class_type == "WanImageToVideo":
             if "width" in inputs:
                 inputs["width"] = payload.get("width", inputs.get("width", 832))
             if "height" in inputs:
                 inputs["height"] = payload.get("height", inputs.get("height", 832))
-        
+
         # Handle ImageResize+ nodes
         elif class_type == "ImageResize+":
             if "width" in inputs:
                 inputs["width"] = payload.get("width", inputs.get("width", 832))
             if "height" in inputs:
                 inputs["height"] = payload.get("height", inputs.get("height", 832))
-        
+
         # Handle Flux Kontext nodes
         elif class_type == "FluxKontextImageScale":
             # This node resizes images for Flux Kontext - keep original dimensions
             pass
-        
+
         # Handle video output nodes
         elif class_type in ["VHS_VideoCombine", "CreateVideo"]:
             if "filename_prefix" in inputs:
                 job_id = job.get("id", "unknown")
                 inputs["filename_prefix"] = f"horde_{job_id}"
-        
+
         # Handle save image nodes
         elif class_type == "SaveImage":
             if "filename_prefix" in inputs:
                 job_id = job.get("id", "unknown")
                 inputs["filename_prefix"] = f"horde_{job_id}"
-    
+
     return processed_workflow
 
 
@@ -143,7 +151,7 @@ async def build_workflow(job: Dict[str, Any]) -> Dict[str, Any]:
     """Build a workflow by loading the appropriate external workflow file"""
     model_name = job.get("model", "")
     source_processing = job.get("source_processing", "txt2img")
-    
+
     # Use the mapped workflow for all jobs (the mapper handles the logic)
     workflow_filename = get_workflow_file(model_name)
     # If env specified explicit workflow(s) and nothing matched, use the first one to ensure progress
@@ -151,9 +159,11 @@ async def build_workflow(job: Dict[str, Any]) -> Dict[str, Any]:
         first_env_wf = Settings.WORKFLOW_FILE.split(",")[0].strip()
         if first_env_wf:
             workflow_filename = first_env_wf
-    
-    print(f"Loading workflow: {workflow_filename} for model: {model_name} (type: {source_processing})")
-    
+
+    print(
+        f"Loading workflow: {workflow_filename} for model: {model_name} (type: {source_processing})"
+    )
+
     try:
         workflow = load_workflow_file(workflow_filename)
         return await process_workflow(workflow, job)

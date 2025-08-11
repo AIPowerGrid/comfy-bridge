@@ -9,7 +9,7 @@ class Settings:
     _GRID_MODELS_RAW = os.getenv("GRID_MODEL", "")
     GRID_MODELS = [m.strip() for m in _GRID_MODELS_RAW.split(",") if m.strip()]
     GRID_WORKER_NAME = os.getenv("GRID_WORKER_NAME", "ComfyUI-Bridge-Worker")
-    COMFYUI_URL = os.getenv("COMFYUI_URL", "http://172.30.30.120:8188")
+    COMFYUI_URL = os.getenv("COMFYUI_URL", "http://127.0.0.1:8000")
     GRID_API_URL = os.getenv("GRID_API_URL", "https://api.aipowergrid.io/api")
     NSFW = os.getenv("GRID_NSFW", "false").lower() == "true"
     THREADS = int(os.getenv("GRID_THREADS", "1"))
