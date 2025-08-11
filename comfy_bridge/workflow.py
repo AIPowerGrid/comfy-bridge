@@ -78,12 +78,13 @@ async def process_workflow(workflow: Dict[str, Any], job: Dict[str, Any]) -> Dic
                 # If no source image, use a default or skip this workflow
                 inputs["image"] = "example.png"  # Default placeholder
         
-        # Handle KSampler nodes - only update seed for uniqueness
+        # Handle KSampler nodes - only update seed for uniqueness, preserve all other Krea settings
         elif class_type in ["KSampler", "KSamplerAdvanced"]:
             if "seed" in inputs:
                 inputs["seed"] = seed
             if "noise_seed" in inputs:
                 inputs["noise_seed"] = seed
+            # Keep all other KSampler settings from Krea workflow (steps, cfg, sampler_name, scheduler, etc.)
         
         # Handle text encoding nodes
         elif class_type == "CLIPTextEncode":
@@ -118,6 +119,11 @@ async def process_workflow(workflow: Dict[str, Any], job: Dict[str, Any]) -> Dic
             if "height" in inputs:
                 inputs["height"] = payload.get("height", inputs.get("height", 832))
         
+        # Handle Flux Kontext nodes
+        elif class_type == "FluxKontextImageScale":
+            # This node resizes images for Flux Kontext - keep original dimensions
+            pass
+        
         # Handle video output nodes
         elif class_type in ["VHS_VideoCombine", "CreateVideo"]:
             if "filename_prefix" in inputs:
@@ -140,6 +146,11 @@ async def build_workflow(job: Dict[str, Any]) -> Dict[str, Any]:
     
     # Use the mapped workflow for all jobs (the mapper handles the logic)
     workflow_filename = get_workflow_file(model_name)
+    # If env specified explicit workflow(s) and nothing matched, use the first one to ensure progress
+    if not workflow_filename and Settings.WORKFLOW_FILE:
+        first_env_wf = Settings.WORKFLOW_FILE.split(",")[0].strip()
+        if first_env_wf:
+            workflow_filename = first_env_wf
     
     print(f"Loading workflow: {workflow_filename} for model: {model_name} (type: {source_processing})")
     
