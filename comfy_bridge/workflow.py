@@ -154,25 +154,20 @@ async def build_workflow(job: Dict[str, Any]) -> Dict[str, Any]:
 
     # Use the mapped workflow for all jobs (the mapper handles the logic)
     workflow_filename = get_workflow_file(model_name)
-    # If env specified explicit workflow(s) and nothing matched, use the first one to ensure progress
-    if not workflow_filename and Settings.WORKFLOW_FILE:
-        first_env_wf = Settings.WORKFLOW_FILE.split(",")[0].strip()
-        if first_env_wf:
-            workflow_filename = first_env_wf
-
-    print(
-        f"Loading workflow: {workflow_filename} for model: {model_name} (type: {source_processing})"
-    )
-
+    
+    # Validate that we have a proper workflow mapping
+    if not workflow_filename:
+        error_msg = f"No workflow mapping found for model: {model_name}"
+        if Settings.WORKFLOW_FILE:
+            error_msg += f" (Available workflows: {Settings.WORKFLOW_FILE})"
+        print(f"ERROR: {error_msg}")
+        raise RuntimeError(error_msg)
+    
+    print(f"Loading workflow: {workflow_filename} for model: {model_name} (type: {source_processing})")
+    
     try:
         workflow = load_workflow_file(workflow_filename)
         return await process_workflow(workflow, job)
     except Exception as e:
         print(f"Error loading workflow {workflow_filename}: {e}")
-        # Fallback to default workflow
-        try:
-            fallback_workflow = load_workflow_file("Dreamshaper.json")
-            return await process_workflow(fallback_workflow, job)
-        except Exception as fallback_error:
-            print(f"Error loading fallback workflow: {fallback_error}")
-            raise RuntimeError(f"Failed to load any workflow: {e}")
+        raise RuntimeError(f"Failed to load workflow {workflow_filename} for model {model_name}: {e}")

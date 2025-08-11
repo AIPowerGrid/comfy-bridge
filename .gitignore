@@ -28,6 +28,7 @@ wheels/
 # External repositories/dependencies
 grid-sdk/
 image-worker/
+grid-image-model-reference/
 
 # Setup notes (contains sensitive config)
 SETUP_NOTES.md
