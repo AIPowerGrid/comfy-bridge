@@ -16,6 +16,7 @@ class Settings:
     MAX_PIXELS = int(os.getenv("GRID_MAX_PIXELS", "20971520"))
     WORKFLOW_DIR = os.getenv("WORKFLOW_DIR", os.path.join(os.getcwd(), "workflows"))
     WORKFLOW_FILE = os.getenv("WORKFLOW_FILE", None)
+    GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH = os.getenv("GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH")
 
     @classmethod
     def validate(cls):
