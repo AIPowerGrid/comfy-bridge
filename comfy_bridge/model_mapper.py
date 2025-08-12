@@ -100,9 +100,8 @@ class ModelMapper:
         """
         reference_map: Dict[str, str] = {}
         try:
-            project_root = os.getcwd()
             reference_path = os.path.join(
-                project_root, "grid-image-model-reference", "stable_diffusion.json"
+                Settings.GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH, "stable_diffusion.json"
             )
             with open(reference_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
@@ -200,28 +199,18 @@ class ModelMapper:
 
     def get_workflow_file(self, horde_model_name: str) -> str:
         """Get the workflow file for a Grid model"""
-        # Try exact match first
-        workflow = self.workflow_map.get(horde_model_name)
-        if workflow:
-            return workflow
-            
-        # Try fuzzy matching as fallback
-        workflow = next(
-            (
-                v
-                for k, v in self.workflow_map.items()
-                if horde_model_name.lower() in k.lower()
-            ),
-            None,
+        return (
+            self.workflow_map.get(horde_model_name)
+            or next(
+                (
+                    v
+                    for k, v in self.workflow_map.items()
+                    if horde_model_name.lower() in k.lower()
+                ),
+                None,
+            )
+            or "Dreamshaper.json"  # Default workflow
         )
-        if workflow:
-            print(f"Warning: Using fuzzy match for '{horde_model_name}' -> '{workflow}'")
-            return workflow
-            
-        # No mapping found - return None to trigger proper error handling
-        print(f"ERROR: No workflow mapping found for model '{horde_model_name}'")
-        print(f"Available mappings: {list(self.workflow_map.keys())}")
-        return None
 
     def get_available_horde_models(self) -> List[str]:
         return list(self.workflow_map.keys())

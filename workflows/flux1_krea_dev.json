@@ -71,7 +71,7 @@
   },
   "38": {
     "inputs": {
-      "unet_name": "flux1-krea-dev_fp8_scaled.safetensors",
+      "unet_name": "flux1KreaDev_fp8ClipWithVAE.safetensors",
       "weight_dtype": "default"
     },
     "class_type": "UNETLoader",
