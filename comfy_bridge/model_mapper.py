@@ -94,31 +94,58 @@ class ModelMapper:
         self.workflow_map = self.DEFAULT_WORKFLOW_MAP.copy()
 
     def _load_local_reference(self) -> Dict[str, str]:
-        """Load local Grid model reference and return mapping path → Grid model name.
+        """Load Grid model reference and return mapping path → Grid model name.
 
-        Expects repository cloned at project_root/grid-image-model-reference/stable_diffusion.json
+        Supports both local directories/files and HTTP(S) URLs.
+        If the env var points to a directory, appends 'stable_diffusion.json'.
+        If it points directly to a JSON file, uses it as-is.
         """
         reference_map: Dict[str, str] = {}
         try:
-            reference_path = os.path.join(
-                Settings.GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH, "stable_diffusion.json"
-            )
-            with open(reference_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            # Structure: { "GridModelName": { ..., "files": [ {"path": "..."}, ... ] }, ... }
+            root = Settings.GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH or ""
+
+            # Decide final location (file path or URL)
+            is_url = root.startswith("http://") or root.startswith("https://")
+            if is_url:
+                if root.rstrip("/").lower().endswith(".json"):
+                    location = root
+                else:
+                    location = root.rstrip("/") + "/stable_diffusion.json"
+            else:
+                if root.lower().endswith(".json"):
+                    location = root
+                else:
+                    location = os.path.join(root or "grid-image-model-reference", "stable_diffusion.json")
+
+            # Load JSON from the decided location
+            if is_url:
+                with httpx.Client() as client:
+                    resp = client.get(location)
+                    resp.raise_for_status()
+                    data = resp.json()
+            else:
+                with open(location, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+
+            # Build mapping: file path → grid model name
+            loaded_models = 0
             for grid_model_name, info in data.items():
                 if not isinstance(info, dict):
                     continue
-                # Some entries store files directly under the model, others under config.files
                 files_list = info.get("files")
                 if files_list is None:
                     files_list = (info.get("config", {}) or {}).get("files", [])
                 for file_info in files_list or []:
-                    path_value = file_info.get("path")
+                    path_value = (file_info or {}).get("path")
                     if path_value:
                         reference_map[path_value] = grid_model_name
+                        loaded_models += 1
+
+            print(
+                f"Loaded model reference from {'URL' if is_url else 'file'}: {location} (entries: {loaded_models})"
+            )
         except Exception as e:
-            print(f"Warning: failed to load local model reference: {e}")
+            print(f"Warning: failed to load model reference: {e}")
         return reference_map
 
     def _iter_env_workflow_files(self) -> List[str]:
@@ -143,6 +170,7 @@ class ModelMapper:
     def _extract_model_files_from_workflow(self, workflow_path: str) -> List[str]:
         """Extract model file names from a workflow JSON file.
 
+        Supports both simple format (direct node objects) and ComfyUI format (nodes array).
         - CheckpointLoaderSimple.ckpt_name (SD/SDXL ckpt)
         - UNETLoader.unet_name (e.g., Flux-style UNET weights)
         """
@@ -154,7 +182,34 @@ class ModelMapper:
             return []
 
         model_files: List[str] = []
-        if isinstance(wf, dict):
+        # Handle ComfyUI format (nodes array)
+        if isinstance(wf, dict) and "nodes" in wf:
+            nodes = wf.get("nodes", [])
+            for node in nodes:
+                if not isinstance(node, dict):
+                    continue
+                class_type = node.get("type")  # ComfyUI uses "type" instead of "class_type"
+                if class_type == "CheckpointLoaderSimple":
+                    inputs = node.get("inputs", {}) or {}
+                    ckpt_name = inputs.get("ckpt_name")
+                    if isinstance(ckpt_name, str) and ckpt_name:
+                        model_files.append(ckpt_name)
+                elif class_type == "UNETLoader":
+                    # Try inputs first
+                    inputs = node.get("inputs", {}) or {}
+                    unet_name = inputs.get("unet_name")
+                    if isinstance(unet_name, str) and unet_name:
+                        model_files.append(unet_name)
+                    else:
+                        # Try properties.models for ComfyUI format
+                        properties = node.get("properties", {}) or {}
+                        models = properties.get("models", [])
+                        if models and isinstance(models[0], dict):
+                            model_name = models[0].get("name")
+                            if isinstance(model_name, str) and model_name:
+                                model_files.append(model_name)
+        # Handle simple format (direct node objects)
+        elif isinstance(wf, dict):
             for _, node in wf.items():
                 if not isinstance(node, dict):
                     continue

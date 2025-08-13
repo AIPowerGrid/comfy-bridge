@@ -42,8 +42,8 @@
   "31": {
     "inputs": {
       "seed": 277251746703202,
-      "steps": 30,
-      "cfg": 4,
+      "steps": 20,
+      "cfg": 1,
       "sampler_name": "euler",
       "scheduler": "simple",
       "denoise": 1,
@@ -71,7 +71,7 @@
   },
   "38": {
     "inputs": {
-      "unet_name": "flux1KreaDev_fp8ClipWithVAE.safetensors",
+      "unet_name": "flux1-krea-dev_fp8_scaled.safetensors",
       "weight_dtype": "default"
     },
     "class_type": "UNETLoader",
