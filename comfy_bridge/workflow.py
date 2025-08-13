@@ -9,20 +9,28 @@ from .config import Settings
 
 
 async def download_image(url: str, filename: str) -> str:
-    """Download image from URL and save it to ComfyUI input directory"""
-    # ComfyUI input directory is typically ComfyUI/input/
-    input_dir = "/tmp/comfyui_inputs"  # Adjust this path as needed
-    os.makedirs(input_dir, exist_ok=True)
-
-    filepath = os.path.join(input_dir, filename)
+    """Download image from URL and upload it to ComfyUI via API"""
+    # Download the image to a temporary file
+    temp_dir = "/tmp/comfyui_inputs"
+    os.makedirs(temp_dir, exist_ok=True)
+    temp_filepath = os.path.join(temp_dir, filename)
 
     async with httpx.AsyncClient() as client:
+        # Download the image
         response = await client.get(url)
         response.raise_for_status()
 
-        with open(filepath, "wb") as f:
+        with open(temp_filepath, "wb") as f:
             f.write(response.content)
 
+        # Upload to ComfyUI via API
+        upload_url = f"{Settings.COMFYUI_URL}/upload/image"
+        with open(temp_filepath, "rb") as f:
+            files = {"image": (filename, f, "image/png")}
+            upload_response = await client.post(upload_url, files=files)
+            upload_response.raise_for_status()
+
+    print(f"Downloaded and uploaded image: {filename}")
     return filename
 
 
@@ -43,6 +51,11 @@ async def process_workflow(
     """Process a workflow by replacing only prompt, seed, and resolution"""
     payload = job.get("payload", {})
     seed = generate_seed(payload.get("seed"))
+    
+    # Debug logging
+    print(f"Job payload: {payload}")
+    print(f"Job prompt: {payload.get('prompt')}")
+    print(f"Job negative_prompt: {payload.get('negative_prompt')}")
 
     # Make a deep copy to avoid modifying the original
     processed_workflow = json.loads(json.dumps(workflow))
@@ -80,73 +93,87 @@ async def process_workflow(
             if not isinstance(node, dict):
                 continue
 
-            inputs = node.get("inputs", {})
+            # In ComfyUI native format, inputs is typically a list, and most editable
+            # parameters live in widgets_values. Avoid dict-style indexing on lists.
+            inputs = node.get("inputs", [])
+            widgets = node.get("widgets_values", [])
             class_type = node.get("type")  # ComfyUI uses "type" instead of "class_type"
 
-            # Handle LoadImage nodes for source images
+            # Handle LoadImage nodes for source images (set via widgets_values)
             if class_type == "LoadImage":
                 if source_image_filename:
-                    inputs["image"] = source_image_filename
+                    if isinstance(widgets, list) and len(widgets) >= 1:
+                        widgets[0] = source_image_filename
+                        node["widgets_values"] = widgets
+                    else:
+                        node["widgets_values"] = [source_image_filename]
                 else:
-                    # If no source image, use a default or skip this workflow
-                    inputs["image"] = "example.png"  # Default placeholder
+                    # Default placeholder
+                    if isinstance(widgets, list) and len(widgets) >= 1:
+                        widgets[0] = "example.png"
+                        node["widgets_values"] = widgets
+                    else:
+                        node["widgets_values"] = ["example.png"]
 
-            # Handle KSampler nodes - only update seed, preserve all other settings
+            # Handle KSampler nodes - only update seed in widgets_values index 0
             elif class_type in ["KSampler", "KSamplerAdvanced"]:
-                if "seed" in inputs:
-                    inputs["seed"] = seed
-                if "noise_seed" in inputs:
-                    inputs["noise_seed"] = seed
-                # Keep all other KSampler settings exactly as they are
+                if isinstance(widgets, list) and len(widgets) >= 1:
+                    widgets[0] = seed
+                    node["widgets_values"] = widgets
 
             # Handle text encoding nodes - properly handle positive vs negative prompts
             elif class_type == "CLIPTextEncode":
-                if "text" in inputs:
-                    # Find which input this CLIPTextEncode connects to in the KSampler
-                    is_positive_prompt = False
-                    is_negative_prompt = False
-                    
-                    # Check all KSampler nodes to see which input this CLIPTextEncode connects to
-                    for ksampler_node in nodes:
-                        if ksampler_node.get("type") in ["KSampler", "KSamplerAdvanced"]:
-                            ksampler_inputs = ksampler_node.get("inputs", {})
-                            # Check if this CLIPTextEncode connects to positive input (robust to str/int ids)
-                            pos_ref = ksampler_inputs.get("positive")
-                            neg_ref = ksampler_inputs.get("negative")
-                            try:
-                                if isinstance(pos_ref, list) and pos_ref:
-                                    if str(pos_ref[0]) == str(node.get("id")):
-                                        is_positive_prompt = True
-                                if isinstance(neg_ref, list) and neg_ref:
-                                    if str(neg_ref[0]) == str(node.get("id")):
-                                        is_negative_prompt = True
-                            except Exception:
-                                pass
-                    
-                    # Only replace positive prompts with job prompt
-                    if is_positive_prompt and payload.get("prompt"):
-                        inputs["text"] = payload.get("prompt")
-                    # Replace negative prompt only if provided in payload; otherwise keep workflow default
-                    elif is_negative_prompt:
+                # In native format, prompt text is in widgets_values[0]. Use node title to infer pos/neg.
+                title = node.get("title", "") or ""
+                if isinstance(widgets, list) and len(widgets) >= 1:
+                    if "negative" in title.lower():
                         neg = payload.get("negative_prompt")
                         if isinstance(neg, str) and neg:
-                            inputs["text"] = neg
-                    # For any other CLIPTextEncode nodes, keep original text
+                            widgets[0] = neg
+                            print(f"Updated negative prompt: {neg}")
+                    elif "positive" in title.lower():
+                        # This is a positive prompt node
+                        pos = payload.get("prompt")
+                        if isinstance(pos, str) and pos:
+                            widgets[0] = pos
+                            print(f"Updated positive prompt: {pos}")
                     else:
-                        pass
+                        # If title doesn't specify, check if we have a prompt and this looks like a positive node
+                        # (most CLIPTextEncode nodes are positive unless explicitly marked negative)
+                        pos = payload.get("prompt")
+                        if isinstance(pos, str) and pos and not payload.get("negative_prompt"):
+                            widgets[0] = pos
+                            print(f"Updated unspecified prompt node with positive: {pos}")
+                    node["widgets_values"] = widgets
 
-            # Handle latent image nodes - only update dimensions if specified
+            # Handle latent image nodes - update dimensions via widgets_values [width, height]
             elif class_type in ["EmptyLatentImage", "EmptySD3LatentImage"]:
-                if "width" in inputs and payload.get("width"):
-                    inputs["width"] = payload.get("width")
-                if "height" in inputs and payload.get("height"):
-                    inputs["height"] = payload.get("height")
+                w = payload.get("width")
+                h = payload.get("height")
+                if isinstance(widgets, list):
+                    if w and len(widgets) >= 1:
+                        widgets[0] = w
+                    if h and len(widgets) >= 2:
+                        widgets[1] = h
+                    node["widgets_values"] = widgets
 
             # Handle save image nodes - update filename prefix for job tracking
             elif class_type == "SaveImage":
-                if "filename_prefix" in inputs:
-                    job_id = job.get("id", "unknown")
-                    inputs["filename_prefix"] = f"horde_{job_id}"
+                job_id = job.get("id", "unknown")
+                if isinstance(widgets, list) and len(widgets) >= 1:
+                    widgets[0] = f"horde_{job_id}"
+                    node["widgets_values"] = widgets
+
+            # Handle LoadImageOutput nodes for source images
+            elif class_type == "LoadImageOutput":
+                if source_image_filename:
+                    if isinstance(widgets, list) and len(widgets) >= 1:
+                        widgets[0] = source_image_filename
+                        node["widgets_values"] = widgets
+                        print(f"Updated LoadImageOutput node {node.get('id')} to use: {source_image_filename}")
+                    else:
+                        node["widgets_values"] = [source_image_filename]
+                        print(f"Created widgets_values for LoadImageOutput node {node.get('id')}: {source_image_filename}")
 
     # Handle simple format (direct node objects)
     else:
@@ -176,38 +203,27 @@ async def process_workflow(
             # Handle text encoding nodes - properly handle positive vs negative prompts
             elif class_type == "CLIPTextEncode":
                 if "text" in inputs:
-                    # Find which input this CLIPTextEncode connects to in the KSampler
-                    is_positive_prompt = False
-                    is_negative_prompt = False
+                    # Use the _meta title to determine if this is positive or negative
+                    meta = node_data.get("_meta", {})
+                    title = meta.get("title", "").lower()
                     
-                    # Check all KSampler nodes to see which input this CLIPTextEncode connects to
-                    for ksampler_id, ksampler_data in processed_workflow.items():
-                        if ksampler_data.get("class_type") in ["KSampler", "KSamplerAdvanced"]:
-                            ksampler_inputs = ksampler_data.get("inputs", {})
-                            # Check if this CLIPTextEncode connects to positive input (robust to str/int ids)
-                            pos_ref = ksampler_inputs.get("positive")
-                            neg_ref = ksampler_inputs.get("negative")
-                            try:
-                                if isinstance(pos_ref, list) and pos_ref:
-                                    if str(pos_ref[0]) == str(node_id):
-                                        is_positive_prompt = True
-                                if isinstance(neg_ref, list) and neg_ref:
-                                    if str(neg_ref[0]) == str(node_id):
-                                        is_negative_prompt = True
-                            except Exception:
-                                pass
-                    
-                    # Only replace positive prompts with job prompt
-                    if is_positive_prompt and payload.get("prompt"):
-                        inputs["text"] = payload.get("prompt")
-                    # Replace negative prompt only if provided in payload; otherwise keep workflow default
-                    elif is_negative_prompt:
+                    if "negative" in title:
                         neg = payload.get("negative_prompt")
                         if isinstance(neg, str) and neg:
                             inputs["text"] = neg
-                    # For any other CLIPTextEncode nodes, keep original text
+                            print(f"Updated negative prompt in API format: {neg}")
+                    elif "positive" in title or "CLIP Text Encode" in title:
+                        # Default to positive for CLIPTextEncode nodes
+                        pos = payload.get("prompt")
+                        if isinstance(pos, str) and pos:
+                            inputs["text"] = pos
+                            print(f"Updated positive prompt in API format: {pos}")
                     else:
-                        pass
+                        # For any other CLIPTextEncode nodes, assume positive
+                        pos = payload.get("prompt")
+                        if isinstance(pos, str) and pos:
+                            inputs["text"] = pos
+                            print(f"Updated unspecified prompt in API format: {pos}")
 
             # Handle latent image nodes - only update dimensions if specified
             elif class_type in ["EmptyLatentImage", "EmptySD3LatentImage"]:
@@ -221,6 +237,12 @@ async def process_workflow(
                 if "filename_prefix" in inputs:
                     job_id = job.get("id", "unknown")
                     inputs["filename_prefix"] = f"horde_{job_id}"
+
+            # Handle LoadImageOutput nodes for source images
+            elif class_type == "LoadImageOutput":
+                if source_image_filename and "image" in inputs:
+                    inputs["image"] = source_image_filename
+                    print(f"Updated LoadImageOutput node {node_id} to use: {source_image_filename}")
 
     return processed_workflow
 
@@ -322,10 +344,11 @@ def update_loadimageoutput_nodes(workflow: Dict[str, Any], source_image_filename
                 continue
                 
             if node.get("type") == "LoadImageOutput":
-                # Update the image reference in the node
-                if "inputs" not in node:
-                    node["inputs"] = {}
-                node["inputs"]["image"] = source_image_filename
-                print(f"Updated LoadImageOutput node to use: {source_image_filename}")
+                # Update the image reference in the node via widgets_values
+                widgets = node.get("widgets_values", [])
+                if isinstance(widgets, list) and len(widgets) >= 1:
+                    widgets[0] = source_image_filename
+                    node["widgets_values"] = widgets
+                    print(f"Updated LoadImageOutput node to use: {source_image_filename}")
     
     return workflow
