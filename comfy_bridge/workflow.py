@@ -203,27 +203,67 @@ async def process_workflow(
             # Handle text encoding nodes - properly handle positive vs negative prompts
             elif class_type == "CLIPTextEncode":
                 if "text" in inputs:
-                    # Use the _meta title to determine if this is positive or negative
-                    meta = node_data.get("_meta", {})
-                    title = meta.get("title", "").lower()
+                    # First, find which KSampler nodes this CLIPTextEncode connects to
+                    is_negative_prompt = False
+                    is_positive_prompt = False
                     
-                    if "negative" in title:
+                    # Check all KSampler nodes to see if this CLIPTextEncode is connected to negative input
+                    for ks_id, ks_data in processed_workflow.items():
+                        if isinstance(ks_data, dict) and ks_data.get("class_type") in ["KSampler", "KSamplerAdvanced"]:
+                            ks_inputs = ks_data.get("inputs", {})
+                            if "negative" in ks_inputs:
+                                neg_ref = ks_inputs["negative"]
+                                if isinstance(neg_ref, list) and len(neg_ref) > 0 and str(neg_ref[0]) == str(node_id):
+                                    is_negative_prompt = True
+                                    print(f"Node {node_id} identified as negative prompt (connected to KSampler {ks_id} negative input)")
+                                    break
+                    
+                    # If not negative, check if it's connected to positive input
+                    if not is_negative_prompt:
+                        for ks_id, ks_data in processed_workflow.items():
+                            if isinstance(ks_data, dict) and ks_data.get("class_type") in ["KSampler", "KSamplerAdvanced"]:
+                                ks_inputs = ks_data.get("inputs", {})
+                                if "positive" in ks_inputs:
+                                    pos_ref = ks_inputs["positive"]
+                                    if isinstance(pos_ref, list) and len(pos_ref) > 0 and str(pos_ref[0]) == str(node_id):
+                                        is_positive_prompt = True
+                                        print(f"Node {node_id} identified as positive prompt (connected to KSampler {ks_id} positive input)")
+                                        break
+                    
+                    # Now handle the prompt based on connection type
+                    if is_negative_prompt:
                         neg = payload.get("negative_prompt")
                         if isinstance(neg, str) and neg:
+                            # Grid provided negative prompt - use it
                             inputs["text"] = neg
                             print(f"Updated negative prompt in API format: {neg}")
-                    elif "positive" in title or "CLIP Text Encode" in title:
-                        # Default to positive for CLIPTextEncode nodes
+                        else:
+                            # No Grid negative prompt - keep workflow default
+                            print(f"Keeping workflow default negative prompt: {inputs['text']}")
+                    elif is_positive_prompt:
+                        # This is a positive prompt node
                         pos = payload.get("prompt")
                         if isinstance(pos, str) and pos:
                             inputs["text"] = pos
                             print(f"Updated positive prompt in API format: {pos}")
                     else:
-                        # For any other CLIPTextEncode nodes, assume positive
-                        pos = payload.get("prompt")
-                        if isinstance(pos, str) and pos:
-                            inputs["text"] = pos
-                            print(f"Updated unspecified prompt in API format: {pos}")
+                        # Fallback: use _meta title if connection analysis failed
+                        meta = node_data.get("_meta", {})
+                        title = meta.get("title", "").lower()
+                        
+                        if "negative" in title:
+                            neg = payload.get("negative_prompt")
+                            if isinstance(neg, str) and neg:
+                                inputs["text"] = neg
+                                print(f"Updated negative prompt by title fallback: {neg}")
+                            else:
+                                print(f"Keeping workflow default negative prompt by title fallback: {inputs['text']}")
+                        else:
+                            # Assume positive for any other CLIPTextEncode nodes
+                            pos = payload.get("prompt")
+                            if isinstance(pos, str) and pos:
+                                inputs["text"] = pos
+                                print(f"Updated unspecified prompt in API format: {pos}")
 
             # Handle latent image nodes - only update dimensions if specified
             elif class_type in ["EmptyLatentImage", "EmptySD3LatentImage"]:
