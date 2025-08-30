@@ -1,5 +1,0 @@
-[33mb3ddfc6[m[33m ([m[1;36mHEAD -> [m[1;32madd-flux-krea-support[m[33m)[m Fix negative prompt handling: use KSampler connections instead of titles to identify positive vs negative prompts
-[33m29741e2[m Added Kontext and fixed img2img processing
-[33m0037209[m Ficed krea workflow# Please enter the commit message for your changes. Lines starting
-[33mad4f828[m fixes
-[33mcbfe20f[m fix: remove dangerous workflow fallback logic and clean up workflows
