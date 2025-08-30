@@ -147,7 +147,7 @@ def compare_dicts(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Tuple[Any, 
 
 
 def main() -> None:
-    base_dir = os.path.join(os.getcwd(), "tests", "image_compare")
+    base_dir = os.getcwd()
     horde_files = sorted(glob(os.path.join(base_dir, "horde_*.png")))
     comfy_files = sorted(glob(os.path.join(base_dir, "ComfyUI_*.png")))
     if not horde_files or not comfy_files:
@@ -176,6 +176,12 @@ def main() -> None:
     print(json.dumps(h_sum, indent=2)[:4000])
     print("\nNative summary:")
     print(json.dumps(c_sum, indent=2)[:4000])
+
+    print("\n=== ACTUAL PROMPT CONTENT ===")
+    print("Bridge prompt (first 1000 chars):")
+    print(h_prompt[:1000] if h_prompt else "No prompt")
+    print("\nNative prompt (first 1000 chars):")
+    print(c_prompt[:1000] if c_prompt else "No prompt")
 
     print("\nDifferences:")
     diffs = compare_dicts(h_sum, c_sum)
