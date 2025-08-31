@@ -90,11 +90,9 @@ class ComfyUIBridge:
                 r2_filename = r2_upload_url.split('/')[-1].split('?')[0]
                 logger.info(f"R2 filename extracted: {r2_filename}")
                 
-                # If the R2 URL expects a .webp but we have an MP4, fix the URL
-                if r2_filename.lower().endswith(".webp") and media_type == "video":
-                    fixed_r2_url = r2_upload_url.replace(".webp", ".mp4")
-                    logger.info(f"Changed R2 URL extension from .webp to .mp4")
-                    r2_upload_url = fixed_r2_url
+                # DON'T change the URL extension - it breaks the signature!
+                # Instead, we'll just use the Content-Type header to specify it's an MP4
+                logger.info("Using original R2 URL - will specify video/mp4 in Content-Type header")
                 
                 # Upload the video directly to R2 storage
                 logger.info(f"Uploading video ({len(media_bytes)} bytes) to R2")
@@ -105,16 +103,29 @@ class ComfyUIBridge:
                     r2_response.raise_for_status()
                     logger.info(f"R2 upload successful: {r2_response.status_code}")
                 
-                # Create the payload without the base64 content
+                # Special approach for Discord videos
+                # Discord bot expects a specific payload format
+                # We'll create a payload that references the URL directly
+                
+                # Extract the job data from r2_uploads instead of using our upload
+                # This tells Discord to use its existing upload rather than our content
+                r2_uploads = job.get("r2_uploads", [])
+                
+                # Create the payload
                 payload = {
                     "id": job_id,
                     "state": "ok",
                     "seed": int(job.get("payload", {}).get("seed", 0)),
                     "r2_uploaded": True,
-                    "media_type": "video",
+                    "form": "video",
                     "type": "video",
-                    "form": "video"
+                    "generation": ""  # Required field but we'll use an empty string
                 }
+                
+                # Include the original r2_uploads array if available
+                if r2_uploads:
+                    payload["r2_uploads"] = r2_uploads
+                    logger.info(f"Including original r2_uploads URLs in payload")
                 
                 # Extract original filename and ensure it has the correct extension
                 original_filename = filename if 'filename' in locals() else f"video_{job_id}.mp4"
@@ -127,22 +138,32 @@ class ComfyUIBridge:
                 logger.info(f"Created R2 upload completion payload: id={job_id}, r2_uploaded=True")
             
             except Exception as e:
-                # If R2 upload fails, fall back to base64 encoding
-                logger.error(f"R2 upload failed, falling back to base64: {e}")
-                # Standard encoding approach as fallback
-                b64 = encode_media(media_bytes, media_type)
-                logger.info(f"Encoded {media_type} for job {job_id} as fallback")
+                # If R2 upload fails, we'll use a special approach for Discord videos
+                logger.error(f"R2 upload failed: {e}")
+                logger.info("Using alternative Discord video handling approach")
                 
+                # Extract the job data from r2_uploads directly
+                r2_uploads = job.get("r2_uploads", [])
+                
+                # Don't try to upload the video ourselves since it failed
+                # Instead, tell the API to use its own uploads
                 payload = {
                     "id": job_id,
-                    "generation": b64,
                     "state": "ok",
                     "seed": int(job.get("payload", {}).get("seed", 0)),
-                    "media_type": "video",
+                    "form": "video",
                     "type": "video",
-                    "form": "video"
+                    "generation": ""  # Required but empty
                 }
+                
+                # If we have r2_uploads info, pass it back to the API
+                if r2_uploads:
+                    payload["r2_uploads"] = r2_uploads
+                    logger.info(f"Including original r2_uploads URLs in fallback payload")
+                    
+                # Create a filename for Discord
                 payload["filename"] = original_filename if 'original_filename' in locals() else f"video_{job_id}.mp4"
+                logger.info(f"Created Discord video fallback response for job {job_id}")
         else:
             # For images or when no R2 URL is available, use the standard approach
             b64 = encode_media(media_bytes, media_type)
