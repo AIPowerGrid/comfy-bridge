@@ -60,30 +60,9 @@ class APIClient:
         
         # Log detailed information about the payload for debugging
         logger.info(f"Submitting {media_type} result to API")
-        if media_type == "video":
-            # Add video-specific headers for proper content handling
-            headers = self.headers.copy()
-            
-            # Use standard content type - specialized headers might be causing issues
-            # Discord bot might be expecting the standard API format
-            headers["Content-Type"] = "application/json"
-            
-            # Additional logging for video submissions
-            logger.info(f"Using video headers: {headers}")
-            logger.info(f"Video base64 length: {len(payload.get('generation', ''))}")
-            
-            # Log important parts of payload for debugging
-            debug_payload = {k: v for k, v in payload.items() if k != 'generation'}
-            logger.info(f"Video submission payload: {debug_payload}")
-            
-            response = await self.client.post(
-                "/v2/generate/submit", headers=headers, json=payload
-            )
-        else:
-            # Standard image submission
-            response = await self.client.post(
+        response = await self.client.post(
                 "/v2/generate/submit", headers=self.headers, json=payload
-            )
+        )
             
         # Handle response
         logger.info(f"API response status: {response.status_code}")
