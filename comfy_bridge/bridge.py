@@ -55,7 +55,7 @@ class ComfyUIBridge:
                     video_resp = await self.comfy.get(f"/view?filename={filename}")
                     video_resp.raise_for_status()
                     media_bytes = video_resp.content
-                    media_type = "video"
+                    media_type = "video"  # Set media type to video
                     # Check video content length for debugging
                     logger.info(f"Video size: {len(media_bytes)} bytes")
                     break
@@ -72,6 +72,11 @@ class ComfyUIBridge:
                     
             await asyncio.sleep(1)
 
+        # Check if the file has a video extension as a fallback detection method
+        if 'filename' in locals() and filename.lower().endswith(('.mp4', '.webm', '.avi', '.mov')):
+            logger.info(f"Detected video file by extension: {filename}")
+            media_type = "video"
+            
         # Encode media using our unified function
         b64 = encode_media(media_bytes, media_type)
         logger.info(f"Encoded {media_type} for job {job_id}")
@@ -88,10 +93,18 @@ class ComfyUIBridge:
         if media_type == "video":
             # Extract original filename and create a proper filename with extension
             original_filename = filename if 'filename' in locals() else f"video_{job_id}.mp4"
+            
+            # Ensure the filename has the correct extension
+            if not original_filename.lower().endswith(('.mp4', '.webm', '.avi', '.mov')):
+                original_filename += ".mp4"
+                
             payload["filename"] = original_filename
             
-            # Make sure the API and Discord bot know this is a video
+            # These are critical parameters for Discord to recognize video content
             payload["form"] = "video"
+            payload["image_type"] = "video/mp4"  # Set MIME type
+            
+            logger.info(f"Set video parameters: filename={original_filename}, form=video")
         logger.info(f"Submitting {media_type} result for job {job_id}")
         await self.api.submit_result(payload)
         logger.info(

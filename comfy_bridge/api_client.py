@@ -70,6 +70,10 @@ class APIClient:
             logger.info(f"Using video headers: {headers}")
             logger.info(f"Video base64 length: {len(payload.get('generation', ''))}")
             
+            # Log important parts of payload for debugging
+            debug_payload = {k: v for k, v in payload.items() if k != 'generation'}
+            logger.info(f"Video submission payload: {debug_payload}")
+            
             response = await self.client.post(
                 "/v2/generate/submit", headers=headers, json=payload
             )
