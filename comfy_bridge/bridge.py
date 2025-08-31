@@ -111,15 +111,27 @@ class ComfyUIBridge:
                 # This tells Discord to use its existing upload rather than our content
                 r2_uploads = job.get("r2_uploads", [])
                 
-                # Create the payload
+                # Create the payload specifically for Discord video embedding
+                # We need to encode the video as base64 after all for Discord embedding
+                b64 = encode_media(media_bytes, media_type)
+                logger.info(f"Encoded video for Discord embedding ({len(b64)} chars)")
+                
+                # Extract original filename and ensure it has the correct extension
+                original_filename = filename if 'filename' in locals() else f"video_{job_id}.mp4"
+                if not original_filename.lower().endswith('.mp4'):
+                    original_filename += ".mp4"
+                
+                # For Discord video embedding, we need to use a specific format
                 payload = {
                     "id": job_id,
                     "state": "ok",
                     "seed": int(job.get("payload", {}).get("seed", 0)),
-                    "r2_uploaded": True,
+                    "generation": b64,  # Include the full base64 encoded video
                     "form": "video",
                     "type": "video",
-                    "generation": ""  # Required field but we'll use an empty string
+                    "discord_direct_video": True,  # Special flag for Discord direct embedding
+                    "media_type": "video/mp4",
+                    "filename": original_filename  # Explicitly specify .mp4 extension
                 }
                 
                 # Include the original r2_uploads array if available
@@ -145,15 +157,27 @@ class ComfyUIBridge:
                 # Extract the job data from r2_uploads directly
                 r2_uploads = job.get("r2_uploads", [])
                 
-                # Don't try to upload the video ourselves since it failed
-                # Instead, tell the API to use its own uploads
+                # For video embedding in Discord, we need to encode the video
+                # This is our fallback approach
+                b64 = encode_media(media_bytes, media_type)
+                logger.info(f"Encoded video as fallback for Discord embedding ({len(b64)} chars)")
+                
+                # Create a filename with proper extension
+                original_filename = filename if 'filename' in locals() else f"video_{job_id}.mp4"
+                if not original_filename.lower().endswith('.mp4'):
+                    original_filename += ".mp4"
+                
+                # Create a Discord-compatible payload
                 payload = {
                     "id": job_id,
                     "state": "ok",
                     "seed": int(job.get("payload", {}).get("seed", 0)),
+                    "generation": b64,  # Include full base64
                     "form": "video",
                     "type": "video",
-                    "generation": ""  # Required but empty
+                    "discord_direct_video": True,  # Special flag for direct embedding
+                    "media_type": "video/mp4",
+                    "filename": original_filename  # Explicitly specify .mp4 extension
                 }
                 
                 # If we have r2_uploads info, pass it back to the API
