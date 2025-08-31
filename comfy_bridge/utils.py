@@ -1,6 +1,7 @@
 from typing import Any, Union
 import base64
 import random
+import os
 
 
 def generate_seed(provided: Any) -> int:
@@ -20,4 +21,17 @@ def encode_image(data: Union[str, bytes]) -> str:
                 raw = f.read()
         except Exception as e:
             raise ValueError(f"Unable to read image file '{data}': {e}")
+    return base64.b64encode(raw).decode()
+
+
+def encode_video(data: Union[str, bytes]) -> str:
+    """Encode video file or bytes to base64 string"""
+    if isinstance(data, (bytes, bytearray)):
+        raw = data
+    else:
+        try:
+            with open(data, "rb") as f:
+                raw = f.read()
+        except Exception as e:
+            raise ValueError(f"Unable to read video file '{data}': {e}")
     return base64.b64encode(raw).decode()
