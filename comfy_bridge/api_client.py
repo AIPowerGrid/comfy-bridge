@@ -56,7 +56,31 @@ class APIClient:
 
     async def submit_result(self, payload: Dict[str, Any]) -> None:
         """Submit a completed job result back to the AI Power Grid."""
-        response = await self.client.post(
-            "/v2/generate/submit", headers=self.headers, json=payload
-        )
+        media_type = payload.get("media_type", "image")
+        
+        # Log detailed information about the payload for debugging
+        logger.info(f"Submitting {media_type} result to API")
+        if media_type == "video":
+            # Add video-specific header for proper content handling
+            headers = self.headers.copy()
+            headers["Content-Type"] = "application/json"
+            headers["X-Media-Type"] = "video"
+            
+            # Additional logging for video submissions
+            logger.info(f"Using video headers: {headers}")
+            logger.info(f"Video base64 length: {len(payload.get('generation', ''))}")
+            
+            response = await self.client.post(
+                "/v2/generate/submit", headers=headers, json=payload
+            )
+        else:
+            # Standard image submission
+            response = await self.client.post(
+                "/v2/generate/submit", headers=self.headers, json=payload
+            )
+            
+        # Handle response
+        if response.status_code != 200:
+            logger.error(f"API response status: {response.status_code}")
+            logger.error(f"API response: {response.text}")
         response.raise_for_status()
