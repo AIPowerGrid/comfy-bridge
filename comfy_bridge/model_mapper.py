@@ -64,6 +64,7 @@ class ModelMapper:
         "Flux.1-Krea-dev Uncensored (fp8+CLIP+VAE)": "flux1_krea_dev.json",
         "wan2.2_t2v": "wan2_2_t2v_14b.json",
         "wan2.2": "wan2_2_t2v_14b.json",
+        "wan2.2-t2v-a14b": "wan2_2_t2v_14b.json",
     }
 
     def __init__(self):
@@ -175,6 +176,8 @@ class ModelMapper:
         Supports both simple format (direct node objects) and ComfyUI format (nodes array).
         - CheckpointLoaderSimple.ckpt_name (SD/SDXL ckpt)
         - UNETLoader.unet_name (e.g., Flux-style UNET weights)
+        - CLIPLoader.clip_name (e.g., WAN2 clip models)
+        - VAELoader.vae_name (e.g., WAN2 VAE)
         """
         try:
             with open(workflow_path, "r", encoding="utf-8") as f:
@@ -182,6 +185,9 @@ class ModelMapper:
         except Exception as e:
             print(f"Warning: failed to read workflow '{workflow_path}': {e}")
             return []
+
+        # Extract workflow filename for better logging
+        filename = os.path.basename(workflow_path)
 
         model_files: List[str] = []
         # Handle ComfyUI format (nodes array)
@@ -210,6 +216,11 @@ class ModelMapper:
                             model_name = models[0].get("name")
                             if isinstance(model_name, str) and model_name:
                                 model_files.append(model_name)
+                elif class_type in ["CLIPLoader", "VAELoader"]:
+                    inputs = node.get("inputs", {}) or {}
+                    model_name = inputs.get("clip_name") or inputs.get("vae_name")
+                    if isinstance(model_name, str) and model_name:
+                        model_files.append(model_name)
         # Handle simple format (direct node objects)
         elif isinstance(wf, dict):
             for _, node in wf.items():
@@ -226,6 +237,16 @@ class ModelMapper:
                     unet_name = inputs.get("unet_name")
                     if isinstance(unet_name, str) and unet_name:
                         model_files.append(unet_name)
+                elif class_type == "CLIPLoader":
+                    inputs = node.get("inputs", {}) or {}
+                    clip_name = inputs.get("clip_name")
+                    if isinstance(clip_name, str) and clip_name:
+                        model_files.append(clip_name)
+                elif class_type == "VAELoader":
+                    inputs = node.get("inputs", {}) or {}
+                    vae_name = inputs.get("vae_name")
+                    if isinstance(vae_name, str) and vae_name:
+                        model_files.append(vae_name)
         return model_files
 
     def _resolve_file_to_grid_model(self, file_name: str) -> Optional[str]:

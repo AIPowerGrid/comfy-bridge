@@ -12,7 +12,16 @@ def generate_seed(provided: Any) -> int:
         return random.randint(1, 2**32 - 1)
 
 
-def encode_image(data: Union[str, bytes]) -> str:
+def encode_media(data: Union[str, bytes], media_type: str = "media") -> str:
+    """Encode image/video file or bytes to base64 string
+    
+    Args:
+        data: Either a file path or raw bytes to encode
+        media_type: Type of media for error messages (e.g., "image", "video")
+        
+    Returns:
+        Base64 encoded string representation of the data
+    """
     if isinstance(data, (bytes, bytearray)):
         raw = data
     else:
@@ -20,18 +29,16 @@ def encode_image(data: Union[str, bytes]) -> str:
             with open(data, "rb") as f:
                 raw = f.read()
         except Exception as e:
-            raise ValueError(f"Unable to read image file '{data}': {e}")
+            raise ValueError(f"Unable to read {media_type} file '{data}': {e}")
     return base64.b64encode(raw).decode()
+
+
+# Legacy functions for backward compatibility
+def encode_image(data: Union[str, bytes]) -> str:
+    """Encode image file or bytes to base64 string (uses encode_media)"""
+    return encode_media(data, "image")
 
 
 def encode_video(data: Union[str, bytes]) -> str:
-    """Encode video file or bytes to base64 string"""
-    if isinstance(data, (bytes, bytearray)):
-        raw = data
-    else:
-        try:
-            with open(data, "rb") as f:
-                raw = f.read()
-        except Exception as e:
-            raise ValueError(f"Unable to read video file '{data}': {e}")
-    return base64.b64encode(raw).decode()
+    """Encode video file or bytes to base64 string (uses encode_media)"""
+    return encode_media(data, "video")
