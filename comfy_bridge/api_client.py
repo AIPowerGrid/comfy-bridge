@@ -58,6 +58,9 @@ class APIClient:
         """Submit a completed job result back to the AI Power Grid."""
         media_type = payload.get("media_type", "image")
         
+        # For video submissions, we need a consistent approach that was working before
+        # Don't modify headers or add any special handling that might break completion reporting
+        
         # Log detailed information about the payload for debugging
         logger.info(f"Submitting {media_type} result to API")
         response = await self.client.post(
