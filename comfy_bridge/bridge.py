@@ -111,25 +111,26 @@ class ComfyUIBridge:
                 # This tells Discord to use its existing upload rather than our content
                 r2_uploads = job.get("r2_uploads", [])
                 
-                # Create a simple payload structure that satisfies the API requirements
+                # Let's try a completely different approach - encode the video directly
+                # This is what worked for images, so let's try it for videos too
+                b64 = encode_media(media_bytes, media_type)
+                logger.info(f"Encoded video directly ({len(b64)} chars)")
+                
                 # Extract original filename and ensure it has the correct extension
                 original_filename = filename if 'filename' in locals() else f"video_{job_id}.mp4"
                 if not original_filename.lower().endswith('.mp4'):
                     original_filename += ".mp4"
                 
-                # First, upload to R2 as we're doing successfully
-                # Then create a payload with the required 'generation' field
-                # The API requires a generation field even for R2 uploads
+                # Create a payload that matches the image format but with video-specific fields
                 payload = {
                     "id": job_id,
+                    "generation": b64,  # Full base64 encoded video
                     "state": "ok",
                     "seed": int(job.get("payload", {}).get("seed", 0)),
-                    "r2_uploaded": True,
                     "filename": original_filename,
                     "form": "video",
                     "type": "video",
-                    "media_type": "video",
-                    "generation": "R2_UPLOADED"  # Placeholder value to satisfy API requirement
+                    "media_type": "video"
                 }
                 
                 # Include the original r2_uploads array if available
@@ -155,16 +156,16 @@ class ComfyUIBridge:
                 # Extract the job data from r2_uploads directly
                 r2_uploads = job.get("r2_uploads", [])
                 
-                # Create a simple fallback payload
+                # Use the same direct encoding approach for fallback
                 original_filename = filename if 'filename' in locals() else f"video_{job_id}.mp4"
                 if not original_filename.lower().endswith('.mp4'):
                     original_filename += ".mp4"
                 
-                # Use the original approach that was working before
+                # Encode the video directly
                 b64 = encode_media(media_bytes, media_type)
-                logger.info(f"Encoded video for API submission ({len(b64)} chars)")
+                logger.info(f"Encoded video for fallback ({len(b64)} chars)")
                 
-                # Use the standard approach that was working for job completion
+                # Create the same payload structure as the main path
                 payload = {
                     "id": job_id,
                     "generation": b64,
