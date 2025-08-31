@@ -1,11 +1,12 @@
 import asyncio
 import logging
 import httpx
+import os
 from typing import List
 
 from .api_client import APIClient
 from .workflow import build_workflow
-from .utils import encode_image
+from .utils import encode_image, encode_video
 from .config import Settings
 from .model_mapper import initialize_model_mapper, get_horde_models
 
@@ -45,21 +46,41 @@ class ComfyUIBridge:
             outputs = data.get("outputs", {})
             if outputs:
                 node_id, node_data = next(iter(outputs.items()))
+                
+                # Handle videos
+                videos = node_data.get("videos", [])
+                if videos:
+                    filename = videos[0]["filename"]
+                    video_resp = await self.comfy.get(f"/view?filename={filename}")
+                    video_resp.raise_for_status()
+                    media_bytes = video_resp.content
+                    media_type = "video"
+                    break
+                
+                # Handle images
                 imgs = node_data.get("images", [])
                 if imgs:
                     filename = imgs[0]["filename"]
                     img_resp = await self.comfy.get(f"/view?filename={filename}")
                     img_resp.raise_for_status()
-                    image_bytes = img_resp.content
+                    media_bytes = img_resp.content
+                    media_type = "image"
                     break
+                    
             await asyncio.sleep(1)
 
-        b64 = encode_image(image_bytes)
+        # Encode media based on type
+        if media_type == "video":
+            b64 = encode_video(media_bytes)
+        else:
+            b64 = encode_image(media_bytes)
+            
         payload = {
             "id": job_id,
             "generation": b64,
             "state": "ok",
             "seed": int(job.get("payload", {}).get("seed", 0)),
+            "media_type": media_type
         }
         await self.api.submit_result(payload)
         logger.info(

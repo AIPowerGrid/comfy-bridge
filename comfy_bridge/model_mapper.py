@@ -62,6 +62,8 @@ class ModelMapper:
         "dreamshaper_8": "Dreamshaper.json",
         "stable_diffusion": "Dreamshaper.json",
         "Flux.1-Krea-dev Uncensored (fp8+CLIP+VAE)": "flux1_krea_dev.json",
+        "wan2.2_t2v": "wan2_2_t2v_14b.json",
+        "wan2.2": "wan2_2_t2v_14b.json",
     }
 
     def __init__(self):

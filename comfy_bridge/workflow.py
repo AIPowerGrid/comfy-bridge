@@ -147,7 +147,7 @@ async def process_workflow(
                     node["widgets_values"] = widgets
 
             # Handle latent image nodes - update dimensions via widgets_values [width, height]
-            elif class_type in ["EmptyLatentImage", "EmptySD3LatentImage"]:
+            elif class_type in ["EmptyLatentImage", "EmptySD3LatentImage", "EmptyHunyuanLatentVideo"]:
                 w = payload.get("width")
                 h = payload.get("height")
                 if isinstance(widgets, list):
@@ -159,6 +159,13 @@ async def process_workflow(
 
             # Handle save image nodes - update filename prefix for job tracking
             elif class_type == "SaveImage":
+                job_id = job.get("id", "unknown")
+                if isinstance(widgets, list) and len(widgets) >= 1:
+                    widgets[0] = f"horde_{job_id}"
+                    node["widgets_values"] = widgets
+                    
+            # Handle save video nodes - update filename prefix for job tracking
+            elif class_type == "SaveVideo":
                 job_id = job.get("id", "unknown")
                 if isinstance(widgets, list) and len(widgets) >= 1:
                     widgets[0] = f"horde_{job_id}"
@@ -265,8 +272,8 @@ async def process_workflow(
                                 inputs["text"] = pos
                                 print(f"Updated unspecified prompt in API format: {pos}")
 
-            # Handle latent image nodes - only update dimensions if specified
-            elif class_type in ["EmptyLatentImage", "EmptySD3LatentImage"]:
+            # Handle latent image/video nodes - only update dimensions if specified
+            elif class_type in ["EmptyLatentImage", "EmptySD3LatentImage", "EmptyHunyuanLatentVideo"]:
                 if "width" in inputs and payload.get("width"):
                     inputs["width"] = payload.get("width")
                 if "height" in inputs and payload.get("height"):
@@ -274,6 +281,12 @@ async def process_workflow(
 
             # Handle save image nodes - update filename prefix for job tracking
             elif class_type == "SaveImage":
+                if "filename_prefix" in inputs:
+                    job_id = job.get("id", "unknown")
+                    inputs["filename_prefix"] = f"horde_{job_id}"
+                    
+            # Handle save video nodes - update filename prefix for job tracking
+            elif class_type == "SaveVideo":
                 if "filename_prefix" in inputs:
                     job_id = job.get("id", "unknown")
                     inputs["filename_prefix"] = f"horde_{job_id}"
