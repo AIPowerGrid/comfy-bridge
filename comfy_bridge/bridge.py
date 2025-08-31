@@ -76,35 +76,74 @@ class ComfyUIBridge:
         if 'filename' in locals() and filename.lower().endswith(('.mp4', '.webm', '.avi', '.mov')):
             logger.info(f"Detected video file by extension: {filename}")
             media_type = "video"
-            
-        # Encode media using our unified function
-        b64 = encode_media(media_bytes, media_type)
-        logger.info(f"Encoded {media_type} for job {job_id}")
-            
-        payload = {
-            "id": job_id,
-            "generation": b64,
-            "state": "ok",
-            "seed": int(job.get("payload", {}).get("seed", 0)),
-            "media_type": media_type  # This is crucial for Discord bot to display correctly
-        }
+
+        # Check if we have an R2 upload URL
+        r2_upload_url = job.get("r2_upload")
         
-        # Add filename for videos to ensure proper handling
-        if media_type == "video":
-            # Extract original filename and create a proper filename with extension
-            original_filename = filename if 'filename' in locals() else f"video_{job_id}.mp4"
+        # Process differently based on media type and R2 upload availability
+        if media_type == "video" and r2_upload_url:
+            # For videos, upload directly to Cloudflare R2 storage
+            logger.info(f"Using R2 upload for video: {r2_upload_url}")
             
-            # Ensure the filename has the correct extension
-            if not original_filename.lower().endswith(('.mp4', '.webm', '.avi', '.mov')):
-                original_filename += ".mp4"
+            try:
+                # Upload the video directly to the R2 URL
+                async with httpx.AsyncClient() as client:
+                    headers = {"Content-Type": "video/mp4"}
+                    r2_response = await client.put(r2_upload_url, content=media_bytes, headers=headers)
+                    r2_response.raise_for_status()
+                    logger.info(f"R2 upload successful with status {r2_response.status_code}")
                 
-            payload["filename"] = original_filename
+                # Now submit a payload referencing the uploaded video
+                payload = {
+                    "id": job_id,
+                    "state": "ok",
+                    "seed": int(job.get("payload", {}).get("seed", 0)),
+                    "media_type": "video",
+                    "form": "video",
+                    "r2_uploaded": True
+                }
+            except Exception as e:
+                logger.error(f"Error uploading to R2: {e}")
+                # Fall back to base64 encoding if R2 upload fails
+                b64 = encode_media(media_bytes, media_type)
+                logger.info(f"Falling back to base64 encoded {media_type} for job {job_id}")
+                payload = {
+                    "id": job_id,
+                    "generation": b64,
+                    "state": "ok",
+                    "seed": int(job.get("payload", {}).get("seed", 0)),
+                    "media_type": media_type,
+                    "form": "video",
+                    "image_type": "video/mp4"
+                }
+        else:
+            # Standard encoding for images or when no R2 URL is available
+            b64 = encode_media(media_bytes, media_type)
+            logger.info(f"Encoded {media_type} for job {job_id}")
+                
+            payload = {
+                "id": job_id,
+                "generation": b64,
+                "state": "ok",
+                "seed": int(job.get("payload", {}).get("seed", 0)),
+                "media_type": media_type  # This is crucial for Discord bot to display correctly
+            }
             
-            # These are critical parameters for Discord to recognize video content
-            payload["form"] = "video"
-            payload["image_type"] = "video/mp4"  # Set MIME type
-            
-            logger.info(f"Set video parameters: filename={original_filename}, form=video")
+            # Add filename for videos to ensure proper handling
+            if media_type == "video":
+                # Extract original filename and create a proper filename with extension
+                original_filename = filename if 'filename' in locals() else f"video_{job_id}.mp4"
+                
+                # Ensure the filename has the correct extension
+                if not original_filename.lower().endswith(('.mp4', '.webm', '.avi', '.mov')):
+                    original_filename += ".mp4"
+                    
+                payload["filename"] = original_filename
+                payload["form"] = "video"
+                payload["image_type"] = "video/mp4"
+                
+                logger.info(f"Set video parameters: filename={original_filename}, form=video")
+                
         logger.info(f"Submitting {media_type} result for job {job_id}")
         await self.api.submit_result(payload)
         logger.info(
