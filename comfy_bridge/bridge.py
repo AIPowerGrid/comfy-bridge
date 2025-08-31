@@ -111,27 +111,24 @@ class ComfyUIBridge:
                 # This tells Discord to use its existing upload rather than our content
                 r2_uploads = job.get("r2_uploads", [])
                 
-                # Create the payload specifically for Discord video embedding
-                # We need to encode the video as base64 after all for Discord embedding
-                b64 = encode_media(media_bytes, media_type)
-                logger.info(f"Encoded video for Discord embedding ({len(b64)} chars)")
-                
+                # Create a simple payload structure that was working before
                 # Extract original filename and ensure it has the correct extension
                 original_filename = filename if 'filename' in locals() else f"video_{job_id}.mp4"
                 if not original_filename.lower().endswith('.mp4'):
                     original_filename += ".mp4"
                 
-                # For Discord video embedding, we need to use a specific format
+                # First, upload to R2 as we're doing successfully
+                # Then create a simple payload that matches what was working before
                 payload = {
                     "id": job_id,
                     "state": "ok",
                     "seed": int(job.get("payload", {}).get("seed", 0)),
-                    "generation": b64,  # Include the full base64 encoded video
+                    "r2_uploaded": True,
+                    "filename": original_filename,
                     "form": "video",
                     "type": "video",
-                    "discord_direct_video": True,  # Special flag for Discord direct embedding
-                    "media_type": "video/mp4",
-                    "filename": original_filename  # Explicitly specify .mp4 extension
+                    "media_type": "video",
+                    "video_data": True
                 }
                 
                 # Include the original r2_uploads array if available
@@ -157,27 +154,25 @@ class ComfyUIBridge:
                 # Extract the job data from r2_uploads directly
                 r2_uploads = job.get("r2_uploads", [])
                 
-                # For video embedding in Discord, we need to encode the video
-                # This is our fallback approach
-                b64 = encode_media(media_bytes, media_type)
-                logger.info(f"Encoded video as fallback for Discord embedding ({len(b64)} chars)")
-                
-                # Create a filename with proper extension
+                # Create a simple fallback payload
                 original_filename = filename if 'filename' in locals() else f"video_{job_id}.mp4"
                 if not original_filename.lower().endswith('.mp4'):
                     original_filename += ".mp4"
                 
-                # Create a Discord-compatible payload
+                # Use the original approach that was working before
+                b64 = encode_media(media_bytes, media_type)
+                logger.info(f"Encoded video for API submission ({len(b64)} chars)")
+                
+                # Use the standard approach that was working for job completion
                 payload = {
                     "id": job_id,
+                    "generation": b64,
                     "state": "ok",
                     "seed": int(job.get("payload", {}).get("seed", 0)),
-                    "generation": b64,  # Include full base64
+                    "filename": original_filename,
                     "form": "video",
                     "type": "video",
-                    "discord_direct_video": True,  # Special flag for direct embedding
-                    "media_type": "video/mp4",
-                    "filename": original_filename  # Explicitly specify .mp4 extension
+                    "media_type": "video"
                 }
                 
                 # If we have r2_uploads info, pass it back to the API
@@ -215,7 +210,8 @@ class ComfyUIBridge:
                 payload["type"] = "video" 
                 
                 logger.info(f"Added video parameters: filename={original_filename}, form=video, type=video")
-        logger.info(f"Submitting {media_type} result for job {job_id}")
+        # Make sure we're logging the right media type
+        logger.info(f"Submitting {payload.get('media_type', media_type)} result for job {job_id}")
         await self.api.submit_result(payload)
         logger.info(
             f"Job {job_id} completed successfully with seed={payload.get('seed')}"
