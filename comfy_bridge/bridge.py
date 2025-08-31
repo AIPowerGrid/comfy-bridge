@@ -79,36 +79,97 @@ class ComfyUIBridge:
         
         # Ensure we're using the correct job ID from the job metadata
         job_id = job.get("id")
+        r2_upload_url = job.get("r2_upload")
         
-        # Encode the media content - same approach for both images and videos
-        b64 = encode_media(media_bytes, media_type)
-        logger.info(f"Encoded {media_type} for job {job_id}")
-        
-        # Create the standard payload structure
-        payload = {
-            "id": job_id,
-            "generation": b64,
-            "state": "ok",
-            "seed": int(job.get("payload", {}).get("seed", 0)),
-            "media_type": media_type
-        }
-        
-        # Add video-specific parameters if needed
-        if media_type == "video":
-            # Extract original filename and ensure it has the correct extension
-            original_filename = filename if 'filename' in locals() else f"video_{job_id}.mp4"
-            if not original_filename.lower().endswith(('.mp4', '.webm', '.avi', '.mov')):
-                original_filename += ".mp4"
+        # For videos, use the R2 upload functionality if available
+        if media_type == "video" and r2_upload_url:
+            logger.info(f"Using R2 upload for video: {r2_upload_url}")
+            
+            try:
+                # Extract the actual filename from the R2 URL - it's after the last / and before the ?
+                r2_filename = r2_upload_url.split('/')[-1].split('?')[0]
+                logger.info(f"R2 filename extracted: {r2_filename}")
                 
-            # Add video-specific fields
-            payload["filename"] = original_filename
+                # If the R2 URL expects a .webp but we have an MP4, fix the URL
+                if r2_filename.lower().endswith(".webp") and media_type == "video":
+                    fixed_r2_url = r2_upload_url.replace(".webp", ".mp4")
+                    logger.info(f"Changed R2 URL extension from .webp to .mp4")
+                    r2_upload_url = fixed_r2_url
+                
+                # Upload the video directly to R2 storage
+                logger.info(f"Uploading video ({len(media_bytes)} bytes) to R2")
+                async with httpx.AsyncClient() as client:
+                    # Use video/mp4 Content-Type for the upload
+                    headers = {"Content-Type": "video/mp4"}
+                    r2_response = await client.put(r2_upload_url, content=media_bytes, headers=headers)
+                    r2_response.raise_for_status()
+                    logger.info(f"R2 upload successful: {r2_response.status_code}")
+                
+                # Create the payload without the base64 content
+                payload = {
+                    "id": job_id,
+                    "state": "ok",
+                    "seed": int(job.get("payload", {}).get("seed", 0)),
+                    "r2_uploaded": True,
+                    "media_type": "video",
+                    "type": "video",
+                    "form": "video"
+                }
+                
+                # Extract original filename and ensure it has the correct extension
+                original_filename = filename if 'filename' in locals() else f"video_{job_id}.mp4"
+                if not original_filename.lower().endswith(('.mp4', '.webm', '.avi', '.mov')):
+                    original_filename += ".mp4"
+                
+                # Add the filename to the payload
+                payload["filename"] = original_filename
+                
+                logger.info(f"Created R2 upload completion payload: id={job_id}, r2_uploaded=True")
             
-            # Ensure we're using the right keys expected by the API
-            payload["form"] = "video"
-            payload["type"] = "video"  # Add type field
-            payload["media_type"] = "video/mp4"  # Rename to match expected format
+            except Exception as e:
+                # If R2 upload fails, fall back to base64 encoding
+                logger.error(f"R2 upload failed, falling back to base64: {e}")
+                # Standard encoding approach as fallback
+                b64 = encode_media(media_bytes, media_type)
+                logger.info(f"Encoded {media_type} for job {job_id} as fallback")
+                
+                payload = {
+                    "id": job_id,
+                    "generation": b64,
+                    "state": "ok",
+                    "seed": int(job.get("payload", {}).get("seed", 0)),
+                    "media_type": "video",
+                    "type": "video",
+                    "form": "video"
+                }
+                payload["filename"] = original_filename if 'original_filename' in locals() else f"video_{job_id}.mp4"
+        else:
+            # For images or when no R2 URL is available, use the standard approach
+            b64 = encode_media(media_bytes, media_type)
+            logger.info(f"Encoded {media_type} for job {job_id}")
             
-            logger.info(f"Added video parameters: filename={original_filename}, form=video, type=video, media_type=video/mp4")
+            # Create the standard payload structure
+            payload = {
+                "id": job_id,
+                "generation": b64,
+                "state": "ok",
+                "seed": int(job.get("payload", {}).get("seed", 0)),
+                "media_type": media_type
+            }
+            
+            # Add video-specific parameters if needed
+            if media_type == "video":
+                # Extract original filename and ensure it has the correct extension
+                original_filename = filename if 'filename' in locals() else f"video_{job_id}.mp4"
+                if not original_filename.lower().endswith(('.mp4', '.webm', '.avi', '.mov')):
+                    original_filename += ".mp4"
+                    
+                # Add video-specific fields
+                payload["filename"] = original_filename
+                payload["form"] = "video"
+                payload["type"] = "video" 
+                
+                logger.info(f"Added video parameters: filename={original_filename}, form=video, type=video")
         logger.info(f"Submitting {media_type} result for job {job_id}")
         await self.api.submit_result(payload)
         logger.info(
