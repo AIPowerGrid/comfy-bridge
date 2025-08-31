@@ -84,7 +84,17 @@ class APIClient:
             )
             
         # Handle response
-        if response.status_code != 200:
-            logger.error(f"API response status: {response.status_code}")
-            logger.error(f"API response: {response.text}")
+        logger.info(f"API response status: {response.status_code}")
+        
+        if response.status_code == 200:
+            logger.info("API submission successful")
+            try:
+                resp_data = response.json()
+                logger.info(f"API response: {resp_data}")
+            except:
+                logger.info(f"API response text: {response.text}")
+        else:
+            logger.error(f"API error response status: {response.status_code}")
+            logger.error(f"API error response: {response.text}")
+            
         response.raise_for_status()
