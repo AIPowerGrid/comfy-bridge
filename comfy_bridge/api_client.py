@@ -27,7 +27,7 @@ class APIClient:
             "allow_post_processing": True,
             "allow_controlnet": False,
             "allow_sdxl_controlnet": False,
-            "allow_lora": False,
+            "allow_lora": True,
             "allow_unsafe_ipaddr": False,
             "extra_slow_worker": False,
             "limit_max_steps": False,

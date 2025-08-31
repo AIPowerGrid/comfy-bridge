@@ -6,7 +6,7 @@ from typing import List
 
 from .api_client import APIClient
 from .workflow import build_workflow
-from .utils import encode_image, encode_video
+from .utils import encode_media
 from .config import Settings
 from .model_mapper import initialize_model_mapper, get_horde_models
 
@@ -69,19 +69,18 @@ class ComfyUIBridge:
                     
             await asyncio.sleep(1)
 
-        # Encode media based on type
-        if media_type == "video":
-            b64 = encode_video(media_bytes)
-        else:
-            b64 = encode_image(media_bytes)
+        # Encode media using our unified function
+        b64 = encode_media(media_bytes, media_type)
+        logger.info(f"Encoded {media_type} for job {job_id}")
             
         payload = {
             "id": job_id,
             "generation": b64,
             "state": "ok",
             "seed": int(job.get("payload", {}).get("seed", 0)),
-            "media_type": media_type
+            "media_type": media_type  # This is crucial for Discord bot to display correctly
         }
+        logger.info(f"Submitting {media_type} result for job {job_id}")
         await self.api.submit_result(payload)
         logger.info(
             f"Job {job_id} completed successfully with seed={payload.get('seed')}"

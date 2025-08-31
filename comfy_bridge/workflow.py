@@ -147,7 +147,7 @@ async def process_workflow(
                     node["widgets_values"] = widgets
 
             # Handle latent image nodes - update dimensions via widgets_values [width, height]
-            elif class_type in ["EmptyLatentImage", "EmptySD3LatentImage", "EmptyHunyuanLatentVideo"]:
+            elif class_type in ["EmptyLatentImage", "EmptySD3LatentImage"]:
                 w = payload.get("width")
                 h = payload.get("height")
                 if isinstance(widgets, list):
@@ -156,6 +156,21 @@ async def process_workflow(
                     if h and len(widgets) >= 2:
                         widgets[1] = h
                     node["widgets_values"] = widgets
+            # Handle video latent nodes - update dimensions and length via widgets_values [width, height, length]
+            elif class_type == "EmptyHunyuanLatentVideo":
+                w = payload.get("width")
+                h = payload.get("height")
+                # Length can be specified directly or via the length parameter (from styles.json)
+                length = payload.get("video_length", payload.get("length", 81))  # Default to 81 if not specified
+                if isinstance(widgets, list):
+                    if w and len(widgets) >= 1:
+                        widgets[0] = w
+                    if h and len(widgets) >= 2:
+                        widgets[1] = h
+                    if len(widgets) >= 3:
+                        widgets[2] = length
+                    node["widgets_values"] = widgets
+                print(f"Updated video parameters: width={w}, height={h}, length={length}")
 
             # Handle save image nodes - update filename prefix for job tracking
             elif class_type == "SaveImage":
@@ -170,6 +185,14 @@ async def process_workflow(
                 if isinstance(widgets, list) and len(widgets) >= 1:
                     widgets[0] = f"horde_{job_id}"
                     node["widgets_values"] = widgets
+                    
+            # Handle CreateVideo node - update fps if specified
+            elif class_type == "CreateVideo":
+                fps = payload.get("fps")
+                if isinstance(widgets, list) and len(widgets) >= 1 and fps:
+                    widgets[0] = fps
+                    node["widgets_values"] = widgets
+                    print(f"Updated CreateVideo node fps to {fps}")
 
             # Handle LoadImageOutput nodes for source images
             elif class_type == "LoadImageOutput":
@@ -272,12 +295,25 @@ async def process_workflow(
                                 inputs["text"] = pos
                                 print(f"Updated unspecified prompt in API format: {pos}")
 
-            # Handle latent image/video nodes - only update dimensions if specified
-            elif class_type in ["EmptyLatentImage", "EmptySD3LatentImage", "EmptyHunyuanLatentVideo"]:
+            # Handle latent image nodes - only update dimensions if specified
+            elif class_type in ["EmptyLatentImage", "EmptySD3LatentImage"]:
                 if "width" in inputs and payload.get("width"):
                     inputs["width"] = payload.get("width")
                 if "height" in inputs and payload.get("height"):
                     inputs["height"] = payload.get("height")
+            # Handle video latent nodes - update dimensions and length
+            elif class_type == "EmptyHunyuanLatentVideo":
+                if "width" in inputs and payload.get("width"):
+                    inputs["width"] = payload.get("width")
+                if "height" in inputs and payload.get("height"):
+                    inputs["height"] = payload.get("height")
+                if "length" in inputs:
+                    # Length can be specified directly or via the length parameter (from styles.json)
+                    inputs["length"] = payload.get("video_length", payload.get("length", 81))  # Default to 81 frames if not specified
+                # Check for fps in the CreateVideo node
+                if "fps" in inputs and payload.get("fps"):
+                    inputs["fps"] = payload.get("fps")
+                print(f"Updated EmptyHunyuanLatentVideo node with dimensions: {inputs.get('width')}x{inputs.get('height')}, length: {inputs.get('length')}")
 
             # Handle save image nodes - update filename prefix for job tracking
             elif class_type == "SaveImage":
@@ -290,6 +326,12 @@ async def process_workflow(
                 if "filename_prefix" in inputs:
                     job_id = job.get("id", "unknown")
                     inputs["filename_prefix"] = f"horde_{job_id}"
+                    
+            # Handle CreateVideo node - update fps if specified
+            elif class_type == "CreateVideo":
+                if "fps" in inputs and payload.get("fps"):
+                    inputs["fps"] = payload.get("fps")
+                    print(f"Updated CreateVideo node fps to {inputs['fps']}")
 
             # Handle LoadImageOutput nodes for source images
             elif class_type == "LoadImageOutput":
