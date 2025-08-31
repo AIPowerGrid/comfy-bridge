@@ -51,10 +51,13 @@ class ComfyUIBridge:
                 videos = node_data.get("videos", [])
                 if videos:
                     filename = videos[0]["filename"]
+                    logger.info(f"Found video file: {filename}")
                     video_resp = await self.comfy.get(f"/view?filename={filename}")
                     video_resp.raise_for_status()
                     media_bytes = video_resp.content
                     media_type = "video"
+                    # Check video content length for debugging
+                    logger.info(f"Video size: {len(media_bytes)} bytes")
                     break
                 
                 # Handle images
@@ -80,6 +83,15 @@ class ComfyUIBridge:
             "seed": int(job.get("payload", {}).get("seed", 0)),
             "media_type": media_type  # This is crucial for Discord bot to display correctly
         }
+        
+        # Add filename for videos to ensure proper handling
+        if media_type == "video":
+            # Extract original filename and create a proper filename with extension
+            original_filename = filename if 'filename' in locals() else f"video_{job_id}.mp4"
+            payload["filename"] = original_filename
+            
+            # Make sure the API and Discord bot know this is a video
+            payload["form"] = "video"
         logger.info(f"Submitting {media_type} result for job {job_id}")
         await self.api.submit_result(payload)
         logger.info(
