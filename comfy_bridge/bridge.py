@@ -102,10 +102,13 @@ class ComfyUIBridge:
                 
             # Add video-specific fields
             payload["filename"] = original_filename
-            payload["form"] = "video"
-            payload["image_type"] = "video/mp4"
             
-            logger.info(f"Added video parameters: filename={original_filename}, form=video, image_type=video/mp4")
+            # Ensure we're using the right keys expected by the API
+            payload["form"] = "video"
+            payload["type"] = "video"  # Add type field
+            payload["media_type"] = "video/mp4"  # Rename to match expected format
+            
+            logger.info(f"Added video parameters: filename={original_filename}, form=video, type=video, media_type=video/mp4")
         logger.info(f"Submitting {media_type} result for job {job_id}")
         await self.api.submit_result(payload)
         logger.info(
