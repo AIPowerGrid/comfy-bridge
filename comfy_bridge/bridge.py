@@ -111,14 +111,15 @@ class ComfyUIBridge:
                 # This tells Discord to use its existing upload rather than our content
                 r2_uploads = job.get("r2_uploads", [])
                 
-                # Create a simple payload structure that was working before
+                # Create a simple payload structure that satisfies the API requirements
                 # Extract original filename and ensure it has the correct extension
                 original_filename = filename if 'filename' in locals() else f"video_{job_id}.mp4"
                 if not original_filename.lower().endswith('.mp4'):
                     original_filename += ".mp4"
                 
                 # First, upload to R2 as we're doing successfully
-                # Then create a simple payload that matches what was working before
+                # Then create a payload with the required 'generation' field
+                # The API requires a generation field even for R2 uploads
                 payload = {
                     "id": job_id,
                     "state": "ok",
@@ -128,7 +129,7 @@ class ComfyUIBridge:
                     "form": "video",
                     "type": "video",
                     "media_type": "video",
-                    "video_data": True
+                    "generation": "R2_UPLOADED"  # Placeholder value to satisfy API requirement
                 }
                 
                 # Include the original r2_uploads array if available
