@@ -61,10 +61,12 @@ class APIClient:
         # Log detailed information about the payload for debugging
         logger.info(f"Submitting {media_type} result to API")
         if media_type == "video":
-            # Add video-specific header for proper content handling
+            # Add video-specific headers for proper content handling
             headers = self.headers.copy()
+            
+            # Use standard content type - specialized headers might be causing issues
+            # Discord bot might be expecting the standard API format
             headers["Content-Type"] = "application/json"
-            headers["X-Media-Type"] = "video"
             
             # Additional logging for video submissions
             logger.info(f"Using video headers: {headers}")
