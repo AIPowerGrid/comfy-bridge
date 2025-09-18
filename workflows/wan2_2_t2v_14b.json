@@ -1,5 +1,5 @@
 {
-  "71": {
+  "90": {
     "inputs": {
       "clip_name": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
       "type": "wan",
@@ -10,11 +10,11 @@
       "title": "Load CLIP"
     }
   },
-  "72": {
+  "91": {
     "inputs": {
-      "text": "worst quality, low quality, blurry, static, motionless, deformed, disfigured, ugly",
+    "text": "worst quality, low quality, blurry, static, motionless, deformed, disfigured, ugly",
       "clip": [
-        "71",
+        "90",
         0
       ]
     },
@@ -23,7 +23,7 @@
       "title": "CLIP Text Encode (Negative Prompt)"
     }
   },
-  "73": {
+  "92": {
     "inputs": {
       "vae_name": "wan_2.1_vae.safetensors"
     },
@@ -32,19 +32,156 @@
       "title": "Load VAE"
     }
   },
-  "74": {
+  "93": {
     "inputs": {
-      "width": 640,
-      "height": 640,
-      "length": 81,
-      "batch_size": 1
+      "shift": 8.000000000000002,
+      "model": [
+        "101",
+        0
+      ]
     },
-    "class_type": "EmptyHunyuanLatentVideo",
+    "class_type": "ModelSamplingSD3",
     "_meta": {
-      "title": "EmptyHunyuanLatentVideo"
+      "title": "ModelSamplingSD3"
     }
   },
-  "75": {
+  "94": {
+    "inputs": {
+      "shift": 8,
+      "model": [
+        "102",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingSD3",
+    "_meta": {
+      "title": "ModelSamplingSD3"
+    }
+  },
+  "95": {
+    "inputs": {
+      "add_noise": "disable",
+      "noise_seed": 0,
+      "steps": 20,
+      "cfg": 3.5,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "start_at_step": 10,
+      "end_at_step": 10000,
+      "return_with_leftover_noise": "disable",
+      "model": [
+        "94",
+        0
+      ],
+      "positive": [
+        "99",
+        0
+      ],
+      "negative": [
+        "91",
+        0
+      ],
+      "latent_image": [
+        "96",
+        0
+      ]
+    },
+    "class_type": "KSamplerAdvanced",
+    "_meta": {
+      "title": "KSampler (Advanced)"
+    }
+  },
+  "96": {
+    "inputs": {
+      "add_noise": "enable",
+      "noise_seed": 864031777124281,
+      "steps": 20,
+      "cfg": 3.5,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "start_at_step": 0,
+      "end_at_step": 10,
+      "return_with_leftover_noise": "enable",
+      "model": [
+        "93",
+        0
+      ],
+      "positive": [
+        "99",
+        0
+      ],
+      "negative": [
+        "91",
+        0
+      ],
+      "latent_image": [
+        "104",
+        0
+      ]
+    },
+    "class_type": "KSamplerAdvanced",
+    "_meta": {
+      "title": "KSampler (Advanced)"
+    }
+  },
+  "97": {
+    "inputs": {
+      "samples": [
+        "96",
+        0
+      ],
+      "vae": [
+        "92",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "98": {
+    "inputs": {
+      "filename_prefix": "video/ComfyUI",
+      "format": "auto",
+      "codec": "auto",
+      "video": [
+        "100",
+        0
+      ]
+    },
+    "class_type": "SaveVideo",
+    "_meta": {
+      "title": "Save Video"
+    }
+  },
+  "99": {
+    "inputs": {
+      "text": "A high quality video, NSFW if requested",
+      "clip": [
+        "90",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Positive Prompt)"
+    }
+  },
+  "100": {
+    "inputs": {
+      "fps": 16,
+      "images": [
+        "97",
+        0
+      ]
+    },
+    "class_type": "CreateVideo",
+    "_meta": {
+      "title": "Create Video"
+    }
+  },
+  "101": {
     "inputs": {
       "unet_name": "wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors",
       "weight_dtype": "default"
@@ -54,7 +191,7 @@
       "title": "Load Diffusion Model"
     }
   },
-  "76": {
+  "102": {
     "inputs": {
       "unet_name": "wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors",
       "weight_dtype": "default"
@@ -64,181 +201,16 @@
       "title": "Load Diffusion Model"
     }
   },
-  "78": {
+  "104": {
     "inputs": {
-      "add_noise": "disable",
-      "noise_seed": 0,
-      "steps": 4,
-      "cfg": 1,
-      "sampler_name": "euler",
-      "scheduler": "simple",
-      "start_at_step": 2,
-      "end_at_step": 4,
-      "return_with_leftover_noise": "disable",
-      "model": [
-        "86",
-        0
-      ],
-      "positive": [
-        "89",
-        0
-      ],
-      "negative": [
-        "72",
-        0
-      ],
-      "latent_image": [
-        "81",
-        0
-      ]
+      "width": 640,
+      "height": 640,
+      "length": 81,
+      "batch_size": 1
     },
-    "class_type": "KSamplerAdvanced",
+    "class_type": "EmptyHunyuanLatentVideo",
     "_meta": {
-      "title": "KSampler (Advanced)"
-    }
-  },
-  "80": {
-    "inputs": {
-      "filename_prefix": "video/ComfyUI",
-      "format": "auto",
-      "codec": "auto",
-      "video": [
-        "88",
-        0
-      ]
-    },
-    "class_type": "SaveVideo",
-    "_meta": {
-      "title": "Save Video"
-    }
-  },
-  "81": {
-    "inputs": {
-      "add_noise": "enable",
-      "noise_seed": 392459563371087,
-      "steps": 4,
-      "cfg": 1,
-      "sampler_name": "euler",
-      "scheduler": "simple",
-      "start_at_step": 0,
-      "end_at_step": 2,
-      "return_with_leftover_noise": "enable",
-      "model": [
-        "82",
-        0
-      ],
-      "positive": [
-        "89",
-        0
-      ],
-      "negative": [
-        "72",
-        0
-      ],
-      "latent_image": [
-        "74",
-        0
-      ]
-    },
-    "class_type": "KSamplerAdvanced",
-    "_meta": {
-      "title": "KSampler (Advanced)"
-    }
-  },
-  "82": {
-    "inputs": {
-      "shift": 5.000000000000001,
-      "model": [
-        "83",
-        0
-      ]
-    },
-    "class_type": "ModelSamplingSD3",
-    "_meta": {
-      "title": "ModelSamplingSD3"
-    }
-  },
-  "83": {
-    "inputs": {
-      "lora_name": "wan2.2_t2v_lightx2v_4steps_lora_v1.1_high_noise.safetensors",
-      "strength_model": 1.0000000000000002,
-      "model": [
-        "75",
-        0
-      ]
-    },
-    "class_type": "LoraLoaderModelOnly",
-    "_meta": {
-      "title": "LoraLoaderModelOnly"
-    }
-  },
-  "85": {
-    "inputs": {
-      "lora_name": "wan2.2_t2v_lightx2v_4steps_lora_v1.1_low_noise.safetensors",
-      "strength_model": 1.0000000000000002,
-      "model": [
-        "76",
-        0
-      ]
-    },
-    "class_type": "LoraLoaderModelOnly",
-    "_meta": {
-      "title": "LoraLoaderModelOnly"
-    }
-  },
-  "86": {
-    "inputs": {
-      "shift": 5.000000000000001,
-      "model": [
-        "85",
-        0
-      ]
-    },
-    "class_type": "ModelSamplingSD3",
-    "_meta": {
-      "title": "ModelSamplingSD3"
-    }
-  },
-  "87": {
-    "inputs": {
-      "samples": [
-        "78",
-        0
-      ],
-      "vae": [
-        "73",
-        0
-      ]
-    },
-    "class_type": "VAEDecode",
-    "_meta": {
-      "title": "VAE Decode"
-    }
-  },
-  "88": {
-    "inputs": {
-      "fps": 16,
-      "images": [
-        "87",
-        0
-      ]
-    },
-    "class_type": "CreateVideo",
-    "_meta": {
-      "title": "Create Video"
-    }
-  },
-  "89": {
-    "inputs": {
-      "text": "A high quality video",
-      "clip": [
-        "71",
-        0
-      ]
-    },
-    "class_type": "CLIPTextEncode",
-    "_meta": {
-      "title": "CLIP Text Encode (Positive Prompt)"
+      "title": "EmptyHunyuanLatentVideo"
     }
   }
 }
