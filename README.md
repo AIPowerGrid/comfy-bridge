@@ -2,6 +2,8 @@
 
 Connect your local ComfyUI installation to the AI Power Grid network and run it as a distributed image generation worker.
 
+> **🚀 New to ComfyUI Bridge?** Check out the [Quick Start Guide](QUICKSTART.md) to get running in 5 minutes!
+
 ---
 
 ## 🚀 Overview
@@ -97,51 +99,60 @@ The bridge will:
 
 ---
 
-## 🐳 Docker
+## 🐳 Docker (Recommended)
 
-### Build & Run the Container
+The easiest way to deploy ComfyUI Bridge is using Docker with integrated ComfyUI.
 
-1. **Build** the Docker image:
+### Quick Start
 
-   ```bash
-   docker build -t comfy-bridge .
-   ```
+```bash
+# 1. Copy environment file and configure
+cp env.example .env
+# Edit .env and add your GRID_API_KEY
 
-2. **Run** the container:
+# 2. Start with Docker Compose (includes ComfyUI)
+docker-compose up -d
 
-   - **Linux** (host networking):
-     ```bash
-     docker run --rm --network host --env-file .env comfy-bridge
-     ```
+# 3. View logs
+docker-compose logs -f
+```
 
-   - **macOS/Windows** (using `host.docker.internal`):
-     ```bash
-     docker run --rm \
-       -v "$(pwd)/workflows:/app/workflows" \
-       --env-file .env \
-       -e COMFYUI_URL=http://host.docker.internal:8000 \
-       comfy-bridge
-     ```
+**That's it!** ComfyUI and the bridge will start automatically.
+
+### What's Included
+
+✅ **ComfyUI** - Pre-installed and auto-configured  
+✅ **GPU Support** - CUDA 12.1 with PyTorch  
+✅ **Auto-Start** - ComfyUI starts first, bridge connects automatically  
+✅ **Persistent Storage** - Models and outputs saved to Docker volumes  
+✅ **Health Checks** - Automatic monitoring and restart
+
+### Accessing ComfyUI
+
+- **Web UI**: http://localhost:8000
+- **API**: http://localhost:8188
+
+For detailed Docker documentation, see [DOCKER.md](DOCKER.md)
 
 ---
 
-## 🐳 Docker Compose
+## 🐳 Legacy Docker Setup
 
-### If you prefer using Docker Compose to run your Container
+If you're running ComfyUI separately:
 
-**Linux**
+**Linux** (host networking):
+```bash
+docker run --rm --network host --env-file .env comfy-bridge
+```
 
-Build & run:
-   ```bash
-   docker-compose -f docker-compose.linux.yml up --build
-   ```
-
-**macOS/Windows**
-
-Build & run:
-   ```bash
-   docker-compose -f docker-compose.win-macos.yml up --build
-   ```
+**macOS/Windows** (using `host.docker.internal`):
+```bash
+docker run --rm \
+  -v "$(pwd)/workflows:/app/workflows" \
+  --env-file .env \
+  -e COMFYUI_URL=http://host.docker.internal:8000 \
+  comfy-bridge
+```
 
 ---
 
