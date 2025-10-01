@@ -65,6 +65,9 @@ class ModelMapper:
         "wan2.2_t2v": "wan2_2_t2v_14b.json",
         "wan2.2": "wan2_2_t2v_14b.json",
         "wan2.2-t2v-a14b": "wan2_2_t2v_14b.json",
+        "wan2.2-t2v-a14b-hq": "wan2_2_t2v_14b_hq.json",
+        "wan2.2_ti2v_5B": "wan2_2_5B_ti2v.json",
+        "wan2.2-ti2v-5b": "wan2_2_5B_ti2v.json",
     }
 
     def __init__(self):

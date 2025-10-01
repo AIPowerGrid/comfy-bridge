@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  comfy-bridge:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: comfy-bridge
+    
+    # GPU support - requires nvidia-docker
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    
+    # Environment variables
+    environment:
+      - GRID_API_KEY=${GRID_API_KEY}
+      - GRID_WORKER_NAME=${GRID_WORKER_NAME:-ComfyBridge-Worker}
+      - COMFYUI_URL=http://localhost:8188
+      - GRID_API_URL=${GRID_API_URL:-https://api.aipowergrid.io/api}
+      - GRID_NSFW=${GRID_NSFW:-false}
+      - GRID_THREADS=${GRID_THREADS:-2}
+      - GRID_MAX_PIXELS=${GRID_MAX_PIXELS:-1048576}
+      - WORKFLOW_FILE=${WORKFLOW_FILE:-}
+      - GRID_MODEL=${GRID_MODEL:-}
+      - GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH=${GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH:-}
+      - COMFYUI_EXTRA_ARGS=${COMFYUI_EXTRA_ARGS:-}
+    
+    # Ports
+    ports:
+      - "8188:8188"  # ComfyUI API
+      - "8000:8000"  # ComfyUI Web UI (optional)
+    
+    # Volumes for persistent storage
+    volumes:
+      # ComfyUI models (mount your model directory)
+      - comfyui-models:/app/ComfyUI/models
+      # ComfyUI outputs
+      - comfyui-output:/app/ComfyUI/output
+      # ComfyUI inputs
+      - comfyui-input:/app/ComfyUI/input
+      # Workflows (optional: use local workflows)
+      - ./workflows:/app/comfy-bridge/workflows:ro
+      # Config file (optional)
+      # - ./.env:/app/comfy-bridge/.env:ro
+    
+    # Restart policy
+    restart: unless-stopped
+    
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8188/system_stats"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  comfyui-models:
+    driver: local
+  comfyui-output:
+    driver: local
+  comfyui-input:
+    driver: local
+
