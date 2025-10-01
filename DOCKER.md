@@ -1,42 +1,22 @@
 # Docker Deployment Guide
 
-This guide covers deploying ComfyUI Bridge with integrated ComfyUI using Docker.
+Complete guide for deploying ComfyUI Bridge with integrated ComfyUI using Docker.
 
-## 🚀 Quick Start
-
-### Prerequisites
-
-1. **Docker** and **Docker Compose** installed
-2. **NVIDIA Docker** (nvidia-container-toolkit) for GPU support
-3. **AI Power Grid API Key** from https://api.aipowergrid.io/register
-
-### Step 1: Configure Environment Variables
-
-Copy the example environment file:
+## Quick Start
 
 ```bash
+# 1. Configure
 cp env.example .env
-```
+# Edit .env and add your GRID_API_KEY
 
-Edit `.env` and set your API key:
-
-```env
-GRID_API_KEY=your_actual_api_key_here
-GRID_WORKER_NAME=MyComfyWorker.YourWallet
-```
-
-### Step 2: Build and Run
-
-```bash
-# Build and start the container
+# 2. Start
 docker-compose up -d
 
-# View logs
+# 3. Monitor
 docker-compose logs -f
-
-# Stop the container
-docker-compose down
 ```
+
+**Prerequisites:** Docker, Docker Compose, NVIDIA Docker (for GPU), API key from https://api.aipowergrid.io/register
 
 ## 📦 What's Included
 
