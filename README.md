@@ -2,7 +2,7 @@
 
 Connect your local ComfyUI installation to the AI Power Grid network and run it as a distributed image generation worker.
 
-> **🚀 New to ComfyUI Bridge?** Check out the [Quick Start Guide](QUICKSTART.md) to get running in 5 minutes!
+> **🚀 New to Docker?** See [DOCKER.md](DOCKER.md) for the easiest deployment method!
 
 ---
 
@@ -129,10 +129,10 @@ docker-compose logs -f
 
 ### Accessing ComfyUI
 
-- **Web UI**: http://localhost:8000
 - **API**: http://localhost:8188
+- **Web UI**: http://localhost:8000 (optional)
 
-For detailed Docker documentation, see [DOCKER.md](DOCKER.md)
+See [DOCKER.md](DOCKER.md) for configuration, troubleshooting, and advanced features
 
 ---
 
@@ -156,17 +156,6 @@ docker run --rm \
 
 ---
 
-## ✅ Testing
-
-All core modules include unit and async tests. To run them:
-
-```bash
-pytest
-```
-
-Tests use `pytest-asyncio` for async routines and `respx` for HTTP mocking.
-
----
 
 ## 🐞 Troubleshooting
 
@@ -194,7 +183,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 * **AI Power Grid** ([https://aipowergrid.io](https://aipowergrid.io)) - For the API
 * **ComfyUI** ([https://github.com/comfyanonymous/ComfyUI](https://github.com/comfyanonymous/ComfyUI)) - For the local image generation backend
-* **httpx**, **aiohttp**, **pytest**, **pytest-asyncio** ❤️
-
-```
-```
+* **httpx**, **aiohttp** for async HTTP operations ❤️
