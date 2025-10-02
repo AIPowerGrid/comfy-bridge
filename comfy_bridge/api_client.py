@@ -41,12 +41,15 @@ class APIClient:
             payload["models"] = models
 
         logger.debug(f"pop_job sending payload: {payload}")
+        print(f"[DEBUG] pop_job sending payload: {payload}")
         try:
             response = await self.client.post(
                 "/v2/generate/pop", headers=self.headers, json=payload
             )
             response.raise_for_status()
-            return response.json()
+            result = response.json()
+            print(f"[DEBUG] pop_job response: {result}")
+            return result
         except httpx.HTTPStatusError as e:
             logger.error(f"pop_job payload: {payload}")
             logger.error(
