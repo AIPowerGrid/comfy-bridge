@@ -159,17 +159,51 @@ docker run --rm \
 
 ## 🐞 Troubleshooting
 
+### Quick Diagnostics
+
+Run the configuration checker to identify common issues:
+
+```bash
+python check_config.py
+```
+
+This checks your configuration, API key, ComfyUI connection, and workflow files.
+
+### Enhanced Startup
+
+Use the enhanced startup script for better logging and error handling:
+
+```bash
+python start_bridge.py
+```
+
+### Common Issues
+
+* **Jobs stuck in waiting queue?** The bridge may not be advertising the correct models. Check startup logs for `📢 Advertising X models` and ensure video models like `wan2_2_t2v_14b` are listed.
+
 * **No jobs found?** Check `Advertising models:` log; ensure `GRID_MODEL` is set or your checkpoints match default mappings.
+
 * **400 Bad Request**: unrecognized models—verify model key names or adjust `GRID_MODEL`.
+
 * **ComfyUI unreachable**: confirm `COMFYUI_URL` and that the server is running.
+
 * **API auth errors**: verify `GRID_API_KEY` and network access.
 
-Logs are printed at INFO (bridge flow) and DEBUG (detailed payloads) levels. Adjust via:
+### Enhanced Logging
 
-```python
-import logging
-logging.basicConfig(level=logging.DEBUG)
+The bridge now provides detailed startup information:
+
 ```
+[INFO] 🚀 ComfyUI Bridge starting...
+[INFO] 📋 Built workflow map with 10 models:
+[INFO]   wan2_2_t2v_14b -> wan2.2-t2v-a14b.json
+[INFO] 📢 Advertising 10 models to AI Power Grid:
+[INFO]   1. wan2_2_t2v_14b
+[INFO] 🔄 Polling for jobs (attempt #1)...
+[INFO] ✓ Got job abc123 for model wan2_2_t2v_14b
+```
+
+For detailed troubleshooting, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
 
 ---
 

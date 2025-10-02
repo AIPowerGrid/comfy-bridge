@@ -21,12 +21,16 @@ class ComfyUIBridge:
 
     async def process_once(self):
         job = await self.api.pop_job(self.supported_models)
-        logger.info(job["skipped"])
-        job_id = job.get("id")
-        if not job_id:
-            print("No job ID found, skipping")
+        
+        # Handle the case where no job is available
+        if not job or not job.get("id"):
+            # This is normal - no jobs in queue
             return
+            
+        job_id = job.get("id")
+        logger.info(f"Processing job {job_id} for model {job.get('model', 'unknown')}")
         logger.info(f"Picked up job {job_id} with metadata: {job}")
+        print(f"[INFO] 🎯 Processing job {job_id} for model {job.get('model', 'unknown')}")
 
         wf = await build_workflow(job)
         logger.info(f"Sending workflow to ComfyUI: {wf}")
@@ -221,6 +225,11 @@ class ComfyUIBridge:
 
     async def run(self):
         logger.info("Bridge starting...")
+        print(f"[INFO] 🚀 ComfyUI Bridge starting...")
+        print(f"[INFO] Connecting to ComfyUI at: {Settings.COMFYUI_URL}")
+        print(f"[INFO] Connecting to AI Power Grid at: {Settings.GRID_API_URL}")
+        print(f"[INFO] Worker name: {Settings.GRID_WORKER_NAME}")
+        
         await initialize_model_mapper(Settings.COMFYUI_URL)
 
         # Prefer models derived from env workflows; if WORKFLOW_FILE is set, do not fall back to GRID_MODEL
@@ -231,24 +240,42 @@ class ComfyUIBridge:
                 logger.warning(
                     "No checkpoint models resolved from WORKFLOW_FILE; advertising none."
                 )
+                print("[WARNING] ⚠️ No models resolved from WORKFLOW_FILE!")
         else:
             if derived_models:
                 self.supported_models = derived_models
+                print(f"[INFO] Using models from DEFAULT_WORKFLOW_MAP: {len(derived_models)} models")
             elif Settings.GRID_MODELS:
                 self.supported_models = Settings.GRID_MODELS
+                print(f"[INFO] Using models from GRID_MODELS env var: {len(Settings.GRID_MODELS)} models")
             else:
                 self.supported_models = []
+                print("[ERROR] ❌ No models configured! Bridge won't receive any jobs!")
+                
         logger.info(f"Advertising models: {self.supported_models}")
-        print(f"[DEBUG] Advertising models: {self.supported_models}")
+        print(f"[INFO] 📢 Advertising {len(self.supported_models)} models to AI Power Grid:")
+        for i, model in enumerate(self.supported_models, 1):
+            print(f"[INFO]   {i}. {model}")
+            
+        if not self.supported_models:
+            print("[ERROR] ❌ CRITICAL: No models configured! The bridge will not receive any jobs.")
+            print("[ERROR] To fix this, either:")
+            print("[ERROR]   1. Set GRID_MODEL in your .env file, or")
+            print("[ERROR]   2. Set WORKFLOW_FILE in your .env file, or") 
+            print("[ERROR]   3. Ensure DEFAULT_WORKFLOW_MAP contains models")
 
+        job_count = 0
         while True:
+            job_count += 1
             logger.info("Waiting for jobs...")
-            print("[DEBUG] Waiting for jobs...")
+            print(f"[INFO] 🔄 Polling for jobs (attempt #{job_count})...")
             try:
                 await self.process_once()
             except Exception as e:
                 logger.error(f"Error processing job: {e}")
-                print(f"[DEBUG] Error processing job: {e}")
+                print(f"[ERROR] ❌ Error processing job: {e}")
+                import traceback
+                print(f"[DEBUG] Full traceback: {traceback.format_exc()}")
             await asyncio.sleep(2)
 
     async def cleanup(self):
