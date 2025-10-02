@@ -286,25 +286,32 @@ class ModelMapper:
 
     def _build_workflow_map_from_env(self):
         """Build workflow map based on env-specified workflows.
-
-        For each workflow file listed in env, find checkpoint files and resolve them to
-        Grid model names via the local reference; then map Grid model → workflow filename.
+        
+        Use explicit mapping for known workflow files to avoid model name resolution issues.
         """
         self.workflow_map = {}
         env_workflows = self._iter_env_workflow_files()
+        
+        # Direct mapping - workflow filenames now match model names exactly
+        # Just strip .json extension to get model name
+        print(f"[INFO] Using simplified direct filename mapping")
+        
+        print(f"[INFO] 📋 Building workflow map from WORKFLOW_FILE env var")
         for abs_path in env_workflows:
             filename = os.path.basename(abs_path)
-            model_files = self._extract_model_files_from_workflow(abs_path)
-            for model_file in model_files:
-                grid_model_name: Optional[str] = self._resolve_file_to_grid_model(
-                    model_file
-                )
-                if grid_model_name:
-                    self.workflow_map[grid_model_name] = filename
-                else:
-                    print(
-                        f"Info: model file '{model_file}' from '{filename}' not found in reference; not advertising"
-                    )
+            print(f"[INFO] Processing workflow file: {filename}")
+            
+            # Direct mapping: filename without .json extension becomes model name
+            if filename.endswith('.json'):
+                model_name = filename[:-5]  # Remove .json extension
+                self.workflow_map[model_name] = filename
+                print(f"[INFO] ✓ Mapped {model_name} -> {filename}")
+            else:
+                print(f"[WARNING] ⚠️ Skipping non-JSON file: {filename}")
+        
+        print(f"[INFO] ✓ Final workflow map from env: {len(self.workflow_map)} models")
+        for model, workflow in self.workflow_map.items():
+            print(f"[INFO]   {model} -> {workflow}")
 
     def get_workflow_file(self, horde_model_name: str) -> str:
         """Get the workflow file for a Grid model"""
