@@ -31,7 +31,7 @@
   },
   "6": {
     "inputs": {
-      "text": "Low contrast. In a retro 1970s-style subway station, a street musician plays in dim colors and rough textures. He wears an old jacket, playing guitar with focus. Commuters hurry by, and a small crowd gathers to listen. The camera slowly moves right, capturing the blend of music and city noise, with old subway signs and mottled walls in the background.",
+      "text": "A high quality video",
       "clip": [
         "38",
         0
@@ -73,29 +73,11 @@
       "width": 1280,
       "height": 704,
       "length": 121,
-      "batch_size": 1,
-      "vae": [
-        "39",
-        0
-      ],
-      "start_image": [
-        "56",
-        0
-      ]
+      "batch_size": 1
     },
-    "class_type": "Wan22ImageToVideoLatent",
+    "class_type": "EmptyHunyuanLatentVideo",
     "_meta": {
-      "title": "Wan22ImageToVideoLatent"
-    }
-  },
-  "56": {
-    "inputs": {
-      "image": "example.png",
-      "upload": "image"
-    },
-    "class_type": "LoadImage",
-    "_meta": {
-      "title": "Load Image"
+      "title": "EmptyHunyuanLatentVideo"
     }
   },
   "3": {
