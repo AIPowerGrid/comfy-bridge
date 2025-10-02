@@ -50,26 +50,7 @@ async def fetch_comfyui_models(comfy_url: str) -> List[str]:
 class ModelMapper:
     # Map Grid model names to ComfyUI workflow files
     DEFAULT_WORKFLOW_MAP = {
-        "stable_diffusion_1.5": "Dreamshaper.json",
-        "stable_diffusion_2.1": "Dreamshaper.json",
-        "sdxl": "turbovision.json",
-        "sdxl turbo": "turbovision.json",
-        "SDXL 1.0": "turbovision.json",
-        "sdxl-turbo": "turbovision.json",
-        "sd_xl_turbo": "turbovision.json",
-        "juggernaut_xl": "turbovision.json",
-        "playground_v2": "turbovision.json",
-        "dreamshaper_8": "Dreamshaper.json",
-        "stable_diffusion": "Dreamshaper.json",
-        "Flux.1-Krea-dev Uncensored (fp8+CLIP+VAE)": "flux1_krea_dev.json",
-        "wan2.2_t2v": "wan2_2_t2v_14b.json",
-        "wan2.2": "wan2_2_t2v_14b.json",
-        "wan2.2-t2v-a14b": "wan2_2_t2v_14b.json",
-        "wan2.2-t2v-a14b-hq": "wan2_2_t2v_14b_hq.json",
-        "wan2_2_t2v_14b_hq": "wan2_2_t2v_14b_hq.json",
-        "wan2.2_ti2v_5B": "wan2_2_5B_ti2v.json",
-        "wan2.2-ti2v-5b": "wan2_2_5B_ti2v.json",
-        "wan2_2_5B_ti2v": "wan2_2_5B_ti2v.json",
+        
     }
 
     def __init__(self):
@@ -282,18 +263,30 @@ class ModelMapper:
 
     def get_workflow_file(self, horde_model_name: str) -> str:
         """Get the workflow file for a Grid model"""
-        return (
-            self.workflow_map.get(horde_model_name)
-            or next(
-                (
-                    v
-                    for k, v in self.workflow_map.items()
-                    if horde_model_name.lower() in k.lower()
-                ),
-                None,
-            )
-            or "Dreamshaper.json"  # Default workflow
+        print(f"[DEBUG] Looking up workflow for model: {horde_model_name}")
+        print(f"[DEBUG] Available workflow map keys: {list(self.workflow_map.keys())}")
+        
+        # Direct lookup
+        direct_match = self.workflow_map.get(horde_model_name)
+        if direct_match:
+            print(f"[DEBUG] Direct match found: {horde_model_name} -> {direct_match}")
+            return direct_match
+        
+        # Partial match
+        partial_match = next(
+            (
+                v
+                for k, v in self.workflow_map.items()
+                if horde_model_name.lower() in k.lower()
+            ),
+            None,
         )
+        if partial_match:
+            print(f"[DEBUG] Partial match found: {horde_model_name} -> {partial_match}")
+            return partial_match
+        
+        print(f"[DEBUG] No match found for {horde_model_name}, using default: Dreamshaper.json")
+        return "Dreamshaper.json"  # Default workflow
 
     def get_available_horde_models(self) -> List[str]:
         return list(self.workflow_map.keys())
