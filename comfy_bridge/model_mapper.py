@@ -50,7 +50,24 @@ async def fetch_comfyui_models(comfy_url: str) -> List[str]:
 class ModelMapper:
     # Map Grid model names to ComfyUI workflow files
     DEFAULT_WORKFLOW_MAP = {
+        # Video Generation Models
+        "wan2_2_t2v_14b": "wan2.2-t2v-a14b.json",
+        "wan2.2-t2v-a14b": "wan2.2-t2v-a14b.json",
+        "wan2_2_t2v_14b_hq": "wan2.2-t2v-a14b-hq.json",
+        "wan2.2-t2v-a14b-hq": "wan2.2-t2v-a14b-hq.json",
+        "wan2_2_ti2v_5b": "wan2.2_ti2v_5B.json",
+        "wan2.2_ti2v_5b": "wan2.2_ti2v_5B.json",
         
+        # Image Generation Models
+        "flux1_dev": "flux1.dev.json",
+        "flux1.dev": "flux1.dev.json",
+        "flux_kontext_dev_basic": "flux_kontext_dev_basic.json",
+        "flux1_krea_dev": "flux1_krea_dev.json",
+        "krea": "krea.json",
+        "sdxl": "sdxl.json",
+        "sdxl1": "sdxl1.json",
+        "turbovision": "turbovision.json",
+        "chroma_final": "Chroma_final.json",
     }
 
     def __init__(self):
@@ -81,6 +98,34 @@ class ModelMapper:
     def _build_workflow_map(self):
         """Build mapping from Grid models to ComfyUI workflows"""
         self.workflow_map = self.DEFAULT_WORKFLOW_MAP.copy()
+        print(f"[INFO] 📋 Built workflow map with {len(self.workflow_map)} models:")
+        for model, workflow in self.workflow_map.items():
+            print(f"[INFO]   {model} -> {workflow}")
+            
+        # Verify workflow files exist
+        missing_workflows = []
+        from .config import Settings
+        import os
+        
+        for model, workflow_file in self.workflow_map.items():
+            workflow_path = os.path.join(Settings.WORKFLOW_DIR, workflow_file)
+            if not os.path.exists(workflow_path):
+                missing_workflows.append(f"{model} -> {workflow_file}")
+                
+        if missing_workflows:
+            print(f"[WARNING] ⚠️ Missing {len(missing_workflows)} workflow files:")
+            for missing in missing_workflows:
+                print(f"[WARNING]   {missing}")
+            print(f"[WARNING] These models will be removed from the advertised list.")
+            
+            # Remove models with missing workflow files
+            for model in list(self.workflow_map.keys()):
+                workflow_file = self.workflow_map[model]
+                workflow_path = os.path.join(Settings.WORKFLOW_DIR, workflow_file)
+                if not os.path.exists(workflow_path):
+                    del self.workflow_map[model]
+                    
+            print(f"[INFO] ✓ Final workflow map has {len(self.workflow_map)} valid models")
 
     def _load_local_reference(self) -> Dict[str, str]:
         """Load Grid model reference and return mapping path → Grid model name.

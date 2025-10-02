@@ -40,14 +40,26 @@ class APIClient:
         if models:
             payload["models"] = models
 
+        logger.info(f"Polling for jobs with models: {payload.get('models', 'None')}")
         logger.debug(f"pop_job sending payload: {payload}")
         print(f"[DEBUG] pop_job sending payload: {payload}")
+        print(f"[INFO] Polling for jobs with {len(payload.get('models', []))} models: {payload.get('models', [])}")
+        
         try:
             response = await self.client.post(
                 "/v2/generate/pop", headers=self.headers, json=payload
             )
             response.raise_for_status()
             result = response.json()
+            
+            # Enhanced logging for job responses
+            if result.get("id"):
+                logger.info(f"Received job {result.get('id')} for model {result.get('model', 'unknown')}")
+                print(f"[INFO] ✓ Got job {result.get('id')} for model {result.get('model', 'unknown')}")
+            else:
+                logger.info("No jobs available in queue")
+                print(f"[INFO] No jobs available (skipped: {result.get('skipped', 'unknown')})")
+            
             print(f"[DEBUG] pop_job response: {result}")
             return result
         except httpx.HTTPStatusError as e:
