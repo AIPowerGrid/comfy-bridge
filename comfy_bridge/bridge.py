@@ -239,13 +239,16 @@ class ComfyUIBridge:
             else:
                 self.supported_models = []
         logger.info(f"Advertising models: {self.supported_models}")
+        print(f"[DEBUG] Advertising models: {self.supported_models}")
 
         while True:
             logger.info("Waiting for jobs...")
+            print("[DEBUG] Waiting for jobs...")
             try:
                 await self.process_once()
             except Exception as e:
                 logger.error(f"Error processing job: {e}")
+                print(f"[DEBUG] Error processing job: {e}")
             await asyncio.sleep(2)
 
     async def cleanup(self):
