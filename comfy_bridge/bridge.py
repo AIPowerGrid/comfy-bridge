@@ -47,32 +47,59 @@ class ComfyUIBridge:
             hist = await self.comfy.get(f"/history/{prompt_id}")
             hist.raise_for_status()
             data = hist.json().get(prompt_id, {})
+            
+            # Log the status for debugging
+            status = data.get("status", {})
+            logger.debug(f"Job status: {status}")
+            
+            # Check if workflow completed (status.completed exists and is not None)
+            status_completed = status.get("completed", False)
             outputs = data.get("outputs", {})
+            
+            # Log full history response when no outputs yet
+            if not outputs:
+                logger.debug(f"No outputs yet. Full history response: {data}")
+                # Check if the workflow has completed but failed
+                if status_completed and not outputs:
+                    logger.error(f"Workflow completed but no outputs found. Status: {status}")
+                    raise Exception("Workflow completed without outputs")
+            
             if outputs:
-                node_id, node_data = next(iter(outputs.items()))
-                
-                # Handle videos
-                videos = node_data.get("videos", [])
-                if videos:
-                    filename = videos[0]["filename"]
-                    logger.info(f"Found video file: {filename}")
-                    video_resp = await self.comfy.get(f"/view?filename={filename}")
-                    video_resp.raise_for_status()
-                    media_bytes = video_resp.content
-                    media_type = "video"  # Set media type to video
-                    # Check video content length for debugging
-                    logger.info(f"Video size: {len(media_bytes)} bytes")
-                    break
-                
-                # Handle images
-                imgs = node_data.get("images", [])
-                if imgs:
-                    filename = imgs[0]["filename"]
-                    img_resp = await self.comfy.get(f"/view?filename={filename}")
-                    img_resp.raise_for_status()
-                    media_bytes = img_resp.content
-                    media_type = "image"
-                    break
+                logger.info(f"Found outputs: {list(outputs.keys())}")
+                # Try each output node until we find media
+                for node_id, node_data in outputs.items():
+                    logger.info(f"Checking node {node_id}: {list(node_data.keys())}")
+                    
+                    # Handle videos
+                    videos = node_data.get("videos", [])
+                    if videos:
+                        filename = videos[0]["filename"]
+                        logger.info(f"Found video file in node {node_id}: {filename}")
+                        video_resp = await self.comfy.get(f"/view?filename={filename}")
+                        video_resp.raise_for_status()
+                        media_bytes = video_resp.content
+                        media_type = "video"
+                        logger.info(f"Video size: {len(media_bytes)} bytes")
+                        break
+                    
+                    # Handle images
+                    imgs = node_data.get("images", [])
+                    if imgs:
+                        filename = imgs[0]["filename"]
+                        logger.info(f"Found image file in node {node_id}: {filename}")
+                        img_resp = await self.comfy.get(f"/view?filename={filename}")
+                        img_resp.raise_for_status()
+                        media_bytes = img_resp.content
+                        media_type = "image"
+                        break
+                else:
+                    # No media found in any output node
+                    logger.warning(f"Outputs found but no media. Continuing to wait...")
+                    await asyncio.sleep(1)
+                    continue
+                    
+                # If we got here, we found media and broke out of the for loop
+                break
                     
             await asyncio.sleep(1)
 
