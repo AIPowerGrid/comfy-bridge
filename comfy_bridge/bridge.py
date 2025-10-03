@@ -34,30 +34,9 @@ class ComfyUIBridge:
                         message = await asyncio.wait_for(websocket.recv(), timeout=5.0)
                         data = json.loads(message)
                         
-                        # Handle different message types
-                        if data.get("type") == "executing":
-                            if data.get("data", {}).get("node") is None:
-                                print(f"[COMFYUI] 🎯 Started processing prompt {prompt_id}")
-                            else:
-                                node_id = data.get("data", {}).get("node")
-                                print(f"[COMFYUI] ⚙️ Executing node {node_id}")
-                        
-                        elif data.get("type") == "executed":
-                            node_id = data.get("data", {}).get("node")
-                            print(f"[COMFYUI] ✅ Completed node {node_id}")
-                        
-                        elif data.get("type") == "execution_start":
-                            print(f"[COMFYUI] 🚀 Execution started for prompt {prompt_id}")
-                        
-                        elif data.get("type") == "execution_cached":
-                            node_id = data.get("data", {}).get("node")
-                            print(f"[COMFYUI] 💾 Cached node {node_id}")
-                        
-                        elif data.get("type") == "execution_error":
-                            error = data.get("data", {}).get("exception_message", "Unknown error")
-                            print(f"[COMFYUI] ❌ Execution error: {error}")
-                            # Raise an exception to stop the job processing
-                            raise Exception(f"ComfyUI execution error: {error}")
+                        # Handle different message types - only show essential logs
+                        if data.get("type") == "execution_start":
+                            print(f"[COMFYUI] got prompt")
                         
                         elif data.get("type") == "progress":
                             progress = data.get("data", {})
@@ -66,7 +45,17 @@ class ComfyUIBridge:
                                 max_value = progress.get("max", 1)
                                 if max_value > 0:
                                     percent = (value / max_value) * 100
-                                    print(f"[COMFYUI] 📊 Progress: {percent:.1f}% ({value}/{max_value})")
+                                    # Show progress bar like ComfyUI console
+                                    bar_length = 20
+                                    filled_length = int(bar_length * value // max_value)
+                                    bar = '█' * filled_length + '▎' * (bar_length - filled_length)
+                                    print(f"[COMFYUI] {percent:3.0f}%|{bar}| {value}/{max_value} [{value/max_value*100:.1f}s/it]")
+                        
+                        elif data.get("type") == "execution_error":
+                            error = data.get("data", {}).get("exception_message", "Unknown error")
+                            print(f"[COMFYUI] ❌ Execution error: {error}")
+                            # Raise an exception to stop the job processing
+                            raise Exception(f"ComfyUI execution error: {error}")
                         
                     except asyncio.TimeoutError:
                         # No message received, continue waiting
@@ -130,8 +119,8 @@ class ComfyUIBridge:
                 if int(elapsed) % 60 == 0 and int(elapsed) > 0:
                     print(f"[HEALTH] ⏱️ Job {job_id} still processing... ({elapsed:.0f}s elapsed)")
                 
-                # FALLBACK: If history is empty after 30s, try checking output directory directly
-                if not data and elapsed > 30:
+                # FALLBACK: If history is empty after 3 minutes, try checking output directory directly
+                if not data and elapsed > 180:
                     print(f"[FALLBACK] 🔍 History empty, checking filesystem for job {job_id}...")
                     expected_prefix = f"horde_{job_id}"
                     try:
