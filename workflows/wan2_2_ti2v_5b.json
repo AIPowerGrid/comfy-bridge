@@ -22,7 +22,7 @@
   },
   "39": {
     "inputs": {
-      "vae_name": "wan2.2_vae.safetensors"
+      "vae_name": "wan_2.1_vae.safetensors"
     },
     "class_type": "VAELoader",
     "_meta": {
@@ -70,9 +70,9 @@
   },
   "55": {
     "inputs": {
-      "width": 1280,
-      "height": 704,
-      "length": 121,
+      "width": 640,
+      "height": 640,
+      "length": 81,
       "batch_size": 1
     },
     "class_type": "EmptyHunyuanLatentVideo",
@@ -83,7 +83,7 @@
   "3": {
     "inputs": {
       "seed": 898471028164125,
-      "steps": 20,
+      "steps": 6,
       "cfg": 5,
       "sampler_name": "uni_pc",
       "scheduler": "simple",
@@ -128,7 +128,7 @@
   },
   "57": {
     "inputs": {
-      "fps": 24,
+      "fps": 16,
       "images": [
         "8",
         0
