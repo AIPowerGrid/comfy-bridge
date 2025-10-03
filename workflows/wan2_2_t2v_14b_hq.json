@@ -25,7 +25,7 @@
   },
   "73": {
     "inputs": {
-      "vae_name": "wan2.2_vae.safetensors"
+      "vae_name": "wan_2.1_vae.safetensors"
     },
     "class_type": "VAELoader",
     "_meta": {
