@@ -32,12 +32,10 @@ class ComfyUIBridge:
             return
             
         job_id = job.get("id")
-        logger.info(f"Processing job {job_id} for model {job.get('model', 'unknown')}")
-        logger.info(f"Picked up job {job_id} with metadata: {job}")
-        print(f"[INFO] 🎯 Processing job {job_id} for model {job.get('model', 'unknown')}")
+        model_name = job.get('model', 'unknown')
+        print(f"[JOB] 🎯 Processing job {job_id} for model {model_name}")
 
         wf = await build_workflow(job)
-        logger.info(f"Sending workflow to ComfyUI: {wf}")
         resp = await self.comfy.post("/prompt", json={"prompt": wf})
         if resp.status_code != 200:
             logger.error(f"ComfyUI error response: {resp.text}")
@@ -62,20 +60,13 @@ class ComfyUIBridge:
             hist.raise_for_status()
             data = hist.json().get(prompt_id, {})
             
-            # Log the full history response on first check and periodically
-            if not hasattr(self, '_first_history_check'):
-                self._first_history_check = time.time()
-                logger.info(f"First history check - Full response: {data}")
-            elif int(elapsed) % 60 == 0 and int(elapsed) > 0:
-                logger.info(f"History update at {elapsed:.0f}s: {data}")
-            
-            # Log progress every 30 seconds
-            if int(elapsed) % 30 == 0 and int(elapsed) > 0:
-                logger.info(f"Still waiting for job completion... ({elapsed:.0f}s elapsed)")
+            # Log progress every 60 seconds
+            if int(elapsed) % 60 == 0 and int(elapsed) > 0:
+                print(f"[HEALTH] ⏱️ Job {job_id} still processing... ({elapsed:.0f}s elapsed)")
             
             # FALLBACK: If history is empty after 30s, try checking output directory directly
             if not data and elapsed > 30:
-                logger.warning(f"History empty after {elapsed:.0f}s, checking output directory...")
+                print(f"[FALLBACK] 🔍 History empty, checking filesystem for job {job_id}...")
                 expected_prefix = f"horde_{job_id}"
                 try:
                     import glob
@@ -94,56 +85,44 @@ class ComfyUIBridge:
                             # Found the output file!
                             video_path = files[0]
                             filename = os.path.basename(video_path)
-                            logger.info(f"Found output file via filesystem: {filename}")
+                            print(f"[SUCCESS] 📁 Found output file: {filename}")
                             with open(video_path, 'rb') as f:
                                 media_bytes = f.read()
                             media_type = "video"
-                            logger.info(f"Loaded video from filesystem: {len(media_bytes)} bytes")
+                            print(f"[SUCCESS] 📊 Loaded video: {len(media_bytes)} bytes")
                             found_file = True
                             break
                     
                     if found_file:
                         # Exit the main polling loop
                         break
-                    else:
-                        # No file found yet
-                        logger.debug(f"No output file found yet with prefix {expected_prefix}")
                 except Exception as e:
                     logger.warning(f"Filesystem check failed: {e}")
             
-            # Log the status for debugging
+            # Check if workflow completed
             status = data.get("status", {})
-            logger.debug(f"Job status: {status}")
-            
-            # Check if workflow completed (status.completed exists and is not None)
             status_completed = status.get("completed", False)
             outputs = data.get("outputs", {})
             
-            # Log full history response when no outputs yet
-            if not outputs:
-                logger.debug(f"No outputs yet. Full history response: {data}")
-                # Check if the workflow has completed but failed
-                if status_completed and not outputs:
-                    logger.error(f"Workflow completed but no outputs found. Status: {status}")
-                    raise Exception("Workflow completed without outputs")
+            # Check if the workflow has completed but failed
+            if status_completed and not outputs:
+                logger.error(f"Workflow completed but no outputs found. Status: {status}")
+                raise Exception("Workflow completed without outputs")
             
             if outputs:
-                logger.info(f"Found outputs: {list(outputs.keys())}")
                 # Try each output node until we find media
                 media_found = False
                 for node_id, node_data in outputs.items():
-                    logger.info(f"Checking node {node_id}: {list(node_data.keys())}")
-                    
                     # Handle videos
                     videos = node_data.get("videos", [])
                     if videos:
                         filename = videos[0]["filename"]
-                        logger.info(f"Found video file in node {node_id}: {filename}")
+                        print(f"[SUCCESS] 🎥 Found video file: {filename}")
                         video_resp = await self.comfy.get(f"/view?filename={filename}")
                         video_resp.raise_for_status()
                         media_bytes = video_resp.content
                         media_type = "video"
-                        logger.info(f"Video size: {len(media_bytes)} bytes")
+                        print(f"[SUCCESS] 📊 Video size: {len(media_bytes)} bytes")
                         media_found = True
                         break
                     
@@ -151,11 +130,12 @@ class ComfyUIBridge:
                     imgs = node_data.get("images", [])
                     if imgs:
                         filename = imgs[0]["filename"]
-                        logger.info(f"Found image file in node {node_id}: {filename}")
+                        print(f"[SUCCESS] 🖼️ Found image file: {filename}")
                         img_resp = await self.comfy.get(f"/view?filename={filename}")
                         img_resp.raise_for_status()
                         media_bytes = img_resp.content
                         media_type = "image"
+                        print(f"[SUCCESS] 📊 Image size: {len(media_bytes)} bytes")
                         media_found = True
                         break
                 
@@ -163,54 +143,26 @@ class ComfyUIBridge:
                 if media_found:
                     break
                     
-                # No media found in any output node, keep waiting
-                logger.warning(f"Outputs found but no media. Continuing to wait...")
-                    
             await asyncio.sleep(1)
 
-        # Check if the file has a video extension as a fallback detection method
-        if 'filename' in locals() and filename.lower().endswith(('.mp4', '.webm', '.avi', '.mov')):
-            logger.info(f"Detected video file by extension: {filename}")
-            media_type = "video"
-        
         # Ensure we're using the correct job ID from the job metadata
         job_id = job.get("id")
         r2_upload_url = job.get("r2_upload")
         
         # For videos, use the R2 upload functionality if available
         if media_type == "video" and r2_upload_url:
-            logger.info(f"Using R2 upload for video: {r2_upload_url}")
-            
+            print(f"[UPLOAD] 📤 Uploading video to R2...")
             try:
-                # Extract the actual filename from the R2 URL - it's after the last / and before the ?
-                r2_filename = r2_upload_url.split('/')[-1].split('?')[0]
-                logger.info(f"R2 filename extracted: {r2_filename}")
-                
-                # DON'T change the URL extension - it breaks the signature!
-                # Instead, we'll just use the Content-Type header to specify it's an MP4
-                logger.info("Using original R2 URL - will specify video/mp4 in Content-Type header")
-                
                 # Upload the video directly to R2 storage
-                logger.info(f"Uploading video ({len(media_bytes)} bytes) to R2")
                 async with httpx.AsyncClient() as client:
-                    # Use video/mp4 Content-Type for the upload
                     headers = {"Content-Type": "video/mp4"}
                     r2_response = await client.put(r2_upload_url, content=media_bytes, headers=headers)
                     r2_response.raise_for_status()
-                    logger.info(f"R2 upload successful: {r2_response.status_code}")
+                    print(f"[UPLOAD] ✅ R2 upload successful")
                 
-                # Special approach for Discord videos
-                # Discord bot expects a specific payload format
-                # We'll create a payload that references the URL directly
-                
-                # Extract the job data from r2_uploads instead of using our upload
-                # This tells Discord to use its existing upload rather than our content
+                # Create payload for video
                 r2_uploads = job.get("r2_uploads", [])
-                
-                # Let's try a completely different approach - encode the video directly
-                # This is what worked for images, so let's try it for videos too
                 b64 = encode_media(media_bytes, media_type)
-                logger.info(f"Encoded video directly ({len(b64)} chars)")
                 
                 # Extract original filename and ensure it has the correct extension
                 original_filename = filename if 'filename' in locals() else f"video_{job_id}.mp4"
@@ -220,7 +172,7 @@ class ComfyUIBridge:
                 # Create a payload that matches the image format but with video-specific fields
                 payload = {
                     "id": job_id,
-                    "generation": b64,  # Full base64 encoded video
+                    "generation": b64,
                     "state": "ok",
                     "seed": int(job.get("payload", {}).get("seed", 0)),
                     "filename": original_filename,
@@ -232,24 +184,10 @@ class ComfyUIBridge:
                 # Include the original r2_uploads array if available
                 if r2_uploads:
                     payload["r2_uploads"] = r2_uploads
-                    logger.info(f"Including original r2_uploads URLs in payload")
-                
-                # Extract original filename and ensure it has the correct extension
-                original_filename = filename if 'filename' in locals() else f"video_{job_id}.mp4"
-                if not original_filename.lower().endswith(('.mp4', '.webm', '.avi', '.mov')):
-                    original_filename += ".mp4"
-                
-                # Add the filename to the payload
-                payload["filename"] = original_filename
-                
-                logger.info(f"Created R2 upload completion payload: id={job_id}, r2_uploaded=True")
             
             except Exception as e:
-                # If R2 upload fails, we'll use a special approach for Discord videos
-                logger.error(f"R2 upload failed: {e}")
-                logger.info("Using alternative Discord video handling approach")
-                
-                # Extract the job data from r2_uploads directly
+                # If R2 upload fails, fallback to direct encoding
+                print(f"[UPLOAD] ⚠️ R2 upload failed, using fallback: {e}")
                 r2_uploads = job.get("r2_uploads", [])
                 
                 # Use the same direct encoding approach for fallback
@@ -259,7 +197,6 @@ class ComfyUIBridge:
                 
                 # Encode the video directly
                 b64 = encode_media(media_bytes, media_type)
-                logger.info(f"Encoded video for fallback ({len(b64)} chars)")
                 
                 # Create the same payload structure as the main path
                 payload = {
@@ -276,15 +213,9 @@ class ComfyUIBridge:
                 # If we have r2_uploads info, pass it back to the API
                 if r2_uploads:
                     payload["r2_uploads"] = r2_uploads
-                    logger.info(f"Including original r2_uploads URLs in fallback payload")
-                    
-                # Create a filename for Discord
-                payload["filename"] = original_filename if 'original_filename' in locals() else f"video_{job_id}.mp4"
-                logger.info(f"Created Discord video fallback response for job {job_id}")
         else:
             # For images or when no R2 URL is available, use the standard approach
             b64 = encode_media(media_bytes, media_type)
-            logger.info(f"Encoded {media_type} for job {job_id}")
             
             # Create the standard payload structure
             payload = {
@@ -305,22 +236,18 @@ class ComfyUIBridge:
                 # Add video-specific fields
                 payload["filename"] = original_filename
                 payload["form"] = "video"
-                payload["type"] = "video" 
-                
-                logger.info(f"Added video parameters: filename={original_filename}, form=video, type=video")
-        # Make sure we're logging the right media type
-        logger.info(f"Submitting {payload.get('media_type', media_type)} result for job {job_id}")
+                payload["type"] = "video"
+        
+        # Submit result
+        print(f"[SUBMIT] 📋 Submitting {media_type} result for job {job_id}")
         await self.api.submit_result(payload)
-        logger.info(
-            f"Job {job_id} completed successfully with seed={payload.get('seed')}"
-        )
+        print(f"[COMPLETE] ✅ Job {job_id} completed successfully (seed: {payload.get('seed')})")
 
     async def run(self):
-        logger.info("Bridge starting...")
-        print(f"[INFO] 🚀 ComfyUI Bridge starting...")
-        print(f"[INFO] Connecting to ComfyUI at: {Settings.COMFYUI_URL}")
-        print(f"[INFO] Connecting to AI Power Grid at: {Settings.GRID_API_URL}")
-        print(f"[INFO] Worker name: {Settings.GRID_WORKER_NAME}")
+        print(f"[STARTUP] 🚀 ComfyUI Bridge starting...")
+        print(f"[STARTUP] 🔗 ComfyUI: {Settings.COMFYUI_URL}")
+        print(f"[STARTUP] 🔗 AI Power Grid: {Settings.GRID_API_URL}")
+        print(f"[STARTUP] 👤 Worker: {Settings.GRID_WORKER_NAME}")
         
         await initialize_model_mapper(Settings.COMFYUI_URL)
 
@@ -329,25 +256,18 @@ class ComfyUIBridge:
         if Settings.WORKFLOW_FILE:
             self.supported_models = derived_models
             if not self.supported_models:
-                logger.warning(
-                    "No checkpoint models resolved from WORKFLOW_FILE; advertising none."
-                )
-                print("[WARNING] ⚠️ No models resolved from WORKFLOW_FILE!")
+                print("[ERROR] ⚠️ No models resolved from WORKFLOW_FILE!")
         else:
             if derived_models:
                 self.supported_models = derived_models
-                print(f"[INFO] Using models from DEFAULT_WORKFLOW_MAP: {len(derived_models)} models")
             elif Settings.GRID_MODELS:
                 self.supported_models = Settings.GRID_MODELS
-                print(f"[INFO] Using models from GRID_MODELS env var: {len(Settings.GRID_MODELS)} models")
             else:
                 self.supported_models = []
-                print("[ERROR] ❌ No models configured! Bridge won't receive any jobs!")
                 
-        logger.info(f"Advertising models: {self.supported_models}")
-        print(f"[INFO] 📢 Advertising {len(self.supported_models)} models to AI Power Grid:")
+        print(f"[STARTUP] 📢 Advertising {len(self.supported_models)} models:")
         for i, model in enumerate(self.supported_models, 1):
-            print(f"[INFO]   {i}. {model}")
+            print(f"[STARTUP]   {i}. {model}")
             
         if not self.supported_models:
             print("[ERROR] ❌ CRITICAL: No models configured! The bridge will not receive any jobs.")
@@ -359,8 +279,9 @@ class ComfyUIBridge:
         job_count = 0
         while True:
             job_count += 1
-            logger.info("Waiting for jobs...")
-            print(f"[INFO] 🔄 Polling for jobs (attempt #{job_count})...")
+            # Only show polling message every 10 attempts to reduce noise
+            if job_count % 10 == 1:
+                print(f"[HEALTH] 💓 Service running (poll #{job_count})")
             try:
                 await self.process_once()
             except Exception as e:
