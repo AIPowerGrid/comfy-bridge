@@ -56,6 +56,8 @@ class ComfyUIBridge:
                         elif data.get("type") == "execution_error":
                             error = data.get("data", {}).get("exception_message", "Unknown error")
                             print(f"[COMFYUI] ❌ Execution error: {error}")
+                            # Raise an exception to stop the job processing
+                            raise Exception(f"ComfyUI execution error: {error}")
                         
                         elif data.get("type") == "progress":
                             progress = data.get("data", {})
@@ -167,6 +169,12 @@ class ComfyUIBridge:
                 status = data.get("status", {})
                 status_completed = status.get("completed", False)
                 outputs = data.get("outputs", {})
+                
+                # Check for execution errors in the status
+                if status_completed and status.get("status_str") == "error":
+                    error_msg = status.get("exception_message", "Unknown execution error")
+                    print(f"[COMFYUI] ❌ Workflow failed: {error_msg}")
+                    raise Exception(f"ComfyUI workflow failed: {error_msg}")
                 
                 # Check if the workflow has completed but failed
                 if status_completed and not outputs:
