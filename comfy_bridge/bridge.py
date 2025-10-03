@@ -2,8 +2,6 @@ import asyncio
 import logging
 import httpx
 import os
-import json
-import websockets
 from typing import List
 
 from .api_client import APIClient
@@ -20,53 +18,6 @@ class ComfyUIBridge:
         self.api = APIClient()
         self.comfy = httpx.AsyncClient(base_url=Settings.COMFYUI_URL, timeout=300)
         self.supported_models: List[str] = []
-        self.websocket_url = Settings.COMFYUI_URL.replace("http", "ws") + "/ws?clientId=comfy-bridge"
-
-    async def listen_comfyui_logs(self, prompt_id: str, job_id: str, duration: int = 600):
-        """Listen to ComfyUI WebSocket logs for a specific prompt"""
-        try:
-            async with websockets.connect(self.websocket_url) as websocket:
-                timeout_time = asyncio.get_event_loop().time() + duration
-                
-                while asyncio.get_event_loop().time() < timeout_time:
-                    try:
-                        # Set a short timeout for receiving messages
-                        message = await asyncio.wait_for(websocket.recv(), timeout=5.0)
-                        data = json.loads(message)
-                        
-                        # Handle different message types - only show essential logs
-                        if data.get("type") == "execution_start":
-                            print(f"[COMFYUI] got prompt")
-                        
-                        elif data.get("type") == "progress":
-                            progress = data.get("data", {})
-                            if progress.get("prompt_id") == prompt_id:
-                                value = progress.get("value", 0)
-                                max_value = progress.get("max", 1)
-                                if max_value > 0:
-                                    percent = (value / max_value) * 100
-                                    # Show progress bar like ComfyUI console
-                                    bar_length = 20
-                                    filled_length = int(bar_length * value // max_value)
-                                    bar = '█' * filled_length + '▎' * (bar_length - filled_length)
-                                    print(f"[COMFYUI] {percent:3.0f}%|{bar}| {value}/{max_value} [{value/max_value*100:.1f}s/it]")
-                        
-                        elif data.get("type") == "execution_error":
-                            error = data.get("data", {}).get("exception_message", "Unknown error")
-                            print(f"[COMFYUI] ❌ Execution error: {error}")
-                            # Raise an exception to stop the job processing
-                            raise Exception(f"ComfyUI execution error: {error}")
-                        
-                    except asyncio.TimeoutError:
-                        # No message received, continue waiting
-                        continue
-                    except json.JSONDecodeError:
-                        # Invalid JSON, skip this message
-                        continue
-                        
-        except Exception as e:
-            # WebSocket connection failed, continue without logs
-            print(f"[COMFYUI] ⚠️ WebSocket connection failed: {e}")
 
     async def process_once(self):
         # Reset history check flag for new job
@@ -98,121 +49,107 @@ class ComfyUIBridge:
         start_time = time.time()
         max_wait_time = 600  # 10 minutes timeout
         
-        # Start WebSocket log listener as a background task
-        log_task = asyncio.create_task(
-            self.listen_comfyui_logs(prompt_id, job_id, max_wait_time)
-        )
-        
-        try:
-            while True:
-                # Check timeout
-                elapsed = time.time() - start_time
-                if elapsed > max_wait_time:
-                    logger.error(f"Timeout waiting for job completion after {elapsed:.0f}s")
-                    raise Exception(f"Job timed out after {max_wait_time}s")
-                
-                hist = await self.comfy.get(f"/history/{prompt_id}")
-                hist.raise_for_status()
-                data = hist.json().get(prompt_id, {})
-                
-                # Log progress every 60 seconds
-                if int(elapsed) % 60 == 0 and int(elapsed) > 0:
-                    print(f"[HEALTH] ⏱️ Job {job_id} still processing... ({elapsed:.0f}s elapsed)")
-                
-                # FALLBACK: If history is empty after 3 minutes, try checking output directory directly
-                if not data and elapsed > 180:
-                    print(f"[FALLBACK] 🔍 History empty, checking filesystem for job {job_id}...")
-                    expected_prefix = f"horde_{job_id}"
-                    try:
-                        import glob
-                        import os
-                        # Check both output root and video subdirectory
-                        search_patterns = [
-                            f"{Settings.COMFYUI_OUTPUT_DIR}/{expected_prefix}*.mp4",
-                            f"{Settings.COMFYUI_OUTPUT_DIR}/{expected_prefix}*.webm",
-                            f"{Settings.COMFYUI_OUTPUT_DIR}/**/{expected_prefix}*.mp4",
-                            f"{Settings.COMFYUI_OUTPUT_DIR}/**/{expected_prefix}*.webm",
-                        ]
-                        found_file = False
-                        for pattern in search_patterns:
-                            files = glob.glob(pattern, recursive=True)
-                            if files:
-                                # Found the output file!
-                                video_path = files[0]
-                                filename = os.path.basename(video_path)
-                                print(f"[SUCCESS] 📁 Found output file: {filename}")
-                                with open(video_path, 'rb') as f:
-                                    media_bytes = f.read()
-                                media_type = "video"
-                                print(f"[SUCCESS] 📊 Loaded video: {len(media_bytes)} bytes")
-                                found_file = True
-                                break
-                        
-                        if found_file:
-                            # Exit the main polling loop
-                            break
-                    except Exception as e:
-                        logger.warning(f"Filesystem check failed: {e}")
-                
-                # Check if workflow completed
-                status = data.get("status", {})
-                status_completed = status.get("completed", False)
-                outputs = data.get("outputs", {})
-                
-                # Check for execution errors in the status
-                if status_completed and status.get("status_str") == "error":
-                    error_msg = status.get("exception_message", "Unknown execution error")
-                    print(f"[COMFYUI] ❌ Workflow failed: {error_msg}")
-                    raise Exception(f"ComfyUI workflow failed: {error_msg}")
-                
-                # Check if the workflow has completed but failed
-                if status_completed and not outputs:
-                    logger.error(f"Workflow completed but no outputs found. Status: {status}")
-                    raise Exception("Workflow completed without outputs")
-                
-                if outputs:
-                    # Try each output node until we find media
-                    media_found = False
-                    for node_id, node_data in outputs.items():
-                        # Handle videos
-                        videos = node_data.get("videos", [])
-                        if videos:
-                            filename = videos[0]["filename"]
-                            print(f"[SUCCESS] 🎥 Found video file: {filename}")
-                            video_resp = await self.comfy.get(f"/view?filename={filename}")
-                            video_resp.raise_for_status()
-                            media_bytes = video_resp.content
+        while True:
+            # Check timeout
+            elapsed = time.time() - start_time
+            if elapsed > max_wait_time:
+                logger.error(f"Timeout waiting for job completion after {elapsed:.0f}s")
+                raise Exception(f"Job timed out after {max_wait_time}s")
+            
+            hist = await self.comfy.get(f"/history/{prompt_id}")
+            hist.raise_for_status()
+            data = hist.json().get(prompt_id, {})
+            
+            # Log progress every 60 seconds
+            if int(elapsed) % 60 == 0 and int(elapsed) > 0:
+                print(f"[HEALTH] ⏱️ Job {job_id} still processing... ({elapsed:.0f}s elapsed)")
+            
+            # FALLBACK: If history is empty after 3 minutes, try checking output directory directly
+            if not data and elapsed > 180:
+                print(f"[FALLBACK] 🔍 History empty, checking filesystem for job {job_id}...")
+                expected_prefix = f"horde_{job_id}"
+                try:
+                    import glob
+                    import os
+                    # Check both output root and video subdirectory
+                    search_patterns = [
+                        f"{Settings.COMFYUI_OUTPUT_DIR}/{expected_prefix}*.mp4",
+                        f"{Settings.COMFYUI_OUTPUT_DIR}/{expected_prefix}*.webm",
+                        f"{Settings.COMFYUI_OUTPUT_DIR}/**/{expected_prefix}*.mp4",
+                        f"{Settings.COMFYUI_OUTPUT_DIR}/**/{expected_prefix}*.webm",
+                    ]
+                    found_file = False
+                    for pattern in search_patterns:
+                        files = glob.glob(pattern, recursive=True)
+                        if files:
+                            # Found the output file!
+                            video_path = files[0]
+                            filename = os.path.basename(video_path)
+                            print(f"[SUCCESS] 📁 Found output file: {filename}")
+                            with open(video_path, 'rb') as f:
+                                media_bytes = f.read()
                             media_type = "video"
-                            print(f"[SUCCESS] 📊 Video size: {len(media_bytes)} bytes")
-                            media_found = True
-                            break
-                        
-                        # Handle images
-                        imgs = node_data.get("images", [])
-                        if imgs:
-                            filename = imgs[0]["filename"]
-                            print(f"[SUCCESS] 🖼️ Found image file: {filename}")
-                            img_resp = await self.comfy.get(f"/view?filename={filename}")
-                            img_resp.raise_for_status()
-                            media_bytes = img_resp.content
-                            media_type = "image"
-                            print(f"[SUCCESS] 📊 Image size: {len(media_bytes)} bytes")
-                            media_found = True
+                            print(f"[SUCCESS] 📊 Loaded video: {len(media_bytes)} bytes")
+                            found_file = True
                             break
                     
-                    # If we found media, exit the polling loop
-                    if media_found:
+                    if found_file:
+                        # Exit the main polling loop
                         break
-                        
-                    await asyncio.sleep(1)
+                except Exception as e:
+                    logger.warning(f"Filesystem check failed: {e}")
+            
+            # Check if workflow completed
+            status = data.get("status", {})
+            status_completed = status.get("completed", False)
+            outputs = data.get("outputs", {})
+            
+            # Check for execution errors in the status
+            if status_completed and status.get("status_str") == "error":
+                error_msg = status.get("exception_message", "Unknown execution error")
+                print(f"[COMFYUI] ❌ Workflow failed: {error_msg}")
+                raise Exception(f"ComfyUI workflow failed: {error_msg}")
+            
+            # Check if the workflow has completed but failed
+            if status_completed and not outputs:
+                logger.error(f"Workflow completed but no outputs found. Status: {status}")
+                raise Exception("Workflow completed without outputs")
+            
+            if outputs:
+                # Try each output node until we find media
+                media_found = False
+                for node_id, node_data in outputs.items():
+                    # Handle videos
+                    videos = node_data.get("videos", [])
+                    if videos:
+                        filename = videos[0]["filename"]
+                        print(f"[SUCCESS] 🎥 Found video file: {filename}")
+                        video_resp = await self.comfy.get(f"/view?filename={filename}")
+                        video_resp.raise_for_status()
+                        media_bytes = video_resp.content
+                        media_type = "video"
+                        print(f"[SUCCESS] 📊 Video size: {len(media_bytes)} bytes")
+                        media_found = True
+                        break
+                    
+                    # Handle images
+                    imgs = node_data.get("images", [])
+                    if imgs:
+                        filename = imgs[0]["filename"]
+                        print(f"[SUCCESS] 🖼️ Found image file: {filename}")
+                        img_resp = await self.comfy.get(f"/view?filename={filename}")
+                        img_resp.raise_for_status()
+                        media_bytes = img_resp.content
+                        media_type = "image"
+                        print(f"[SUCCESS] 📊 Image size: {len(media_bytes)} bytes")
+                        media_found = True
+                        break
                 
-        finally:
-            # Cancel the WebSocket log task
-            log_task.cancel()
-            try:
-                await log_task
-            except asyncio.CancelledError:
-                pass
+                # If we found media, exit the polling loop
+                if media_found:
+                    break
+                    
+            await asyncio.sleep(1)
 
         # Ensure we're using the correct job ID from the job metadata
         job_id = job.get("id")
