@@ -1,32 +1,32 @@
 {
-  "37": {
+  "3": {
     "inputs": {
-      "unet_name": "wan2.2_ti2v_5B_fp16.safetensors",
-      "weight_dtype": "default"
+      "seed": 898471028164125,
+      "steps": 20,
+      "cfg": 5,
+      "sampler_name": "uni_pc",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "48",
+        0
+      ],
+      "positive": [
+        "6",
+        0
+      ],
+      "negative": [
+        "7",
+        0
+      ],
+      "latent_image": [
+        "55",
+        0
+      ]
     },
-    "class_type": "UNETLoader",
+    "class_type": "KSampler",
     "_meta": {
-      "title": "Load Diffusion Model"
-    }
-  },
-  "38": {
-    "inputs": {
-      "clip_name": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
-      "type": "wan",
-      "device": "default"
-    },
-    "class_type": "CLIPLoader",
-    "_meta": {
-      "title": "Load CLIP"
-    }
-  },
-  "39": {
-    "inputs": {
-      "vae_name": "wan_2.1_vae.safetensors"
-    },
-    "class_type": "VAELoader",
-    "_meta": {
-      "title": "Load VAE"
+      "title": "KSampler"
     }
   },
   "6": {
@@ -55,61 +55,6 @@
       "title": "CLIP Text Encode (Negative Prompt)"
     }
   },
-  "48": {
-    "inputs": {
-      "shift": 5,
-      "model": [
-        "37",
-        0
-      ]
-    },
-    "class_type": "ModelSamplingSD3",
-    "_meta": {
-      "title": "ModelSamplingSD3"
-    }
-  },
-  "55": {
-    "inputs": {
-      "width": 640,
-      "height": 640,
-      "length": 81,
-      "batch_size": 1
-    },
-    "class_type": "EmptyHunyuanLatentVideo",
-    "_meta": {
-      "title": "EmptyHunyuanLatentVideo"
-    }
-  },
-  "3": {
-    "inputs": {
-      "seed": 898471028164125,
-      "steps": 6,
-      "cfg": 5,
-      "sampler_name": "uni_pc",
-      "scheduler": "simple",
-      "denoise": 1,
-      "model": [
-        "48",
-        0
-      ],
-      "positive": [
-        "6",
-        0
-      ],
-      "negative": [
-        "7",
-        0
-      ],
-      "latent_image": [
-        "55",
-        0
-      ]
-    },
-    "class_type": "KSampler",
-    "_meta": {
-      "title": "KSampler"
-    }
-  },
   "8": {
     "inputs": {
       "samples": [
@@ -126,9 +71,68 @@
       "title": "VAE Decode"
     }
   },
+  "37": {
+    "inputs": {
+      "unet_name": "wan2.2_ti2v_5B_fp16.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "Load Diffusion Model"
+    }
+  },
+  "38": {
+    "inputs": {
+      "clip_name": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+      "type": "wan",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "Load CLIP"
+    }
+  },
+  "39": {
+    "inputs": {
+      "vae_name": "wan2.2_vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Load VAE"
+    }
+  },
+  "48": {
+    "inputs": {
+      "shift": 8,
+      "model": [
+        "37",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingSD3",
+    "_meta": {
+      "title": "ModelSamplingSD3"
+    }
+  },
+  "55": {
+    "inputs": {
+      "width": 1280,
+      "height": 704,
+      "length": 121,
+      "batch_size": 1,
+      "vae": [
+        "39",
+        0
+      ]
+    },
+    "class_type": "Wan22ImageToVideoLatent",
+    "_meta": {
+      "title": "Wan22ImageToVideoLatent"
+    }
+  },
   "57": {
     "inputs": {
-      "fps": 16,
+      "fps": 24,
       "images": [
         "8",
         0
@@ -155,4 +159,3 @@
     }
   }
 }
-
