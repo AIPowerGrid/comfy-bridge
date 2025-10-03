@@ -12,6 +12,9 @@ from .model_mapper import initialize_model_mapper, get_horde_models
 
 logger = logging.getLogger(__name__)
 
+# Disable httpx logging to stop HTTP request spam
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
 
 class ComfyUIBridge:
     def __init__(self):
@@ -44,6 +47,8 @@ class ComfyUIBridge:
         if not prompt_id:
             logger.error(f"No prompt_id for job {job_id}")
             return
+        
+        print(f"[COMFYUI] got prompt")
 
         import time
         start_time = time.time()
@@ -60,9 +65,9 @@ class ComfyUIBridge:
             hist.raise_for_status()
             data = hist.json().get(prompt_id, {})
             
-            # Log progress every 60 seconds
-            if int(elapsed) % 60 == 0 and int(elapsed) > 0:
-                print(f"[HEALTH] ⏱️ Job {job_id} still processing... ({elapsed:.0f}s elapsed)")
+            # Show progress dots every 10 seconds
+            if int(elapsed) % 10 == 0 and int(elapsed) > 0:
+                print(f"[COMFYUI] processing... ({elapsed:.0f}s)")
             
             # FALLBACK: If history is empty after 3 minutes, try checking output directory directly
             if not data and elapsed > 180:
