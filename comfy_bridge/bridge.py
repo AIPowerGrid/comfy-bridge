@@ -24,6 +24,8 @@ class ComfyUIBridge:
         self.api = APIClient()
         self.comfy = httpx.AsyncClient(base_url=Settings.COMFYUI_URL, timeout=300)
         self.supported_models: List[str] = []
+        # Track jobs currently being processed to prevent duplicates
+        self.processing_jobs: set = set()
 
     async def process_once(self):
         # Reset history check flag for new job
@@ -39,24 +41,34 @@ class ComfyUIBridge:
             
         job_id = job.get("id")
         model_name = job.get('model', 'unknown')
-        print(f"[JOB] 🎯 Processing job {job_id} for model {model_name}")
-
-        wf = await build_workflow(job)
-        resp = await self.comfy.post("/prompt", json={"prompt": wf})
-        if resp.status_code != 200:
-            logger.error(f"ComfyUI error response: {resp.text}")
-        resp.raise_for_status()
-        prompt_id = resp.json().get("prompt_id")
-        if not prompt_id:
-            logger.error(f"No prompt_id for job {job_id}")
-            return
-
-        # Start WebSocket listener for ComfyUI logs
-        websocket_task = asyncio.create_task(self.listen_comfyui_logs(prompt_id))
         
-        import time
-        start_time = time.time()
-        max_wait_time = 600  # 10 minutes timeout
+        # Check if we're already processing this job (prevent duplicates)
+        if job_id in self.processing_jobs:
+            print(f"[JOB] ⚠️ Job {job_id} already being processed, skipping duplicate")
+            return
+            
+        # Mark job as being processed
+        self.processing_jobs.add(job_id)
+        print(f"[JOB] 🎯 Processing job {job_id} for model {model_name}")
+        
+        try:
+            wf = await build_workflow(job)
+            resp = await self.comfy.post("/prompt", json={"prompt": wf})
+            if resp.status_code != 200:
+                logger.error(f"ComfyUI error response: {resp.text}")
+            resp.raise_for_status()
+            prompt_id = resp.json().get("prompt_id")
+            if not prompt_id:
+                logger.error(f"No prompt_id for job {job_id}")
+                self.processing_jobs.discard(job_id)
+                return
+
+            # Start WebSocket listener for ComfyUI logs
+            websocket_task = asyncio.create_task(self.listen_comfyui_logs(prompt_id))
+            
+            import time
+            start_time = time.time()
+            max_wait_time = 600  # 10 minutes timeout
         
         while True:
             # Check timeout
@@ -271,10 +283,19 @@ class ComfyUIBridge:
         except asyncio.CancelledError:
             pass
         
-        # Submit result
-        print(f"[SUBMIT] 📋 Submitting {media_type} result for job {job_id}")
-        await self.api.submit_result(payload)
-        print(f"[COMPLETE] ✅ Job {job_id} completed successfully (seed: {payload.get('seed')})")
+            # Submit result
+            print(f"[SUBMIT] 📋 Submitting {media_type} result for job {job_id}")
+            await self.api.submit_result(payload)
+            print(f"[COMPLETE] ✅ Job {job_id} completed successfully (seed: {payload.get('seed')})")
+            
+            # Remove job from processing set
+            self.processing_jobs.discard(job_id)
+            
+        except Exception as e:
+            # Clean up job from processing set on any error
+            self.processing_jobs.discard(job_id)
+            # Re-raise the exception so it can be handled by the caller
+            raise
 
     async def run(self):
         print(f"[STARTUP] 🚀 ComfyUI Bridge starting...")
@@ -322,6 +343,9 @@ class ComfyUIBridge:
                 print(f"[ERROR] ❌ Error processing job: {e}")
                 import traceback
                 print(f"[DEBUG] Full traceback: {traceback.format_exc()}")
+                
+                # Clean up any jobs that might be stuck in processing
+                # Note: We can't easily determine which job failed here, so we'll clean up on next cycle
             await asyncio.sleep(2)
 
     async def listen_comfyui_logs(self, prompt_id: str):
