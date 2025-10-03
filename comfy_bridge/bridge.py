@@ -105,11 +105,18 @@ class ComfyUIBridge:
                                 # Found the output file!
                                 video_path = files[0]
                                 filename = os.path.basename(video_path)
-                                print(f"[SUCCESS] 📁 Found output file: {filename}")
+                                
+                                # Check file extension to determine media type
+                                if filename.lower().endswith(('.mp4', '.webm', '.avi', '.mov', '.mkv')):
+                                    print(f"[SUCCESS] 📁 Found video output file: {filename}")
+                                    media_type = "video"
+                                else:
+                                    print(f"[SUCCESS] 📁 Found image output file: {filename}")
+                                    media_type = "image"
+                                
                                 with open(video_path, 'rb') as f:
                                     media_bytes = f.read()
-                                media_type = "video"
-                                print(f"[SUCCESS] 📊 Loaded video: {len(media_bytes)} bytes")
+                                print(f"[SUCCESS] 📊 Loaded {media_type}: {len(media_bytes)} bytes")
                                 found_file = True
                                 break
                         
@@ -163,16 +170,28 @@ class ComfyUIBridge:
                             media_found = True
                             break
                         
-                        # Handle images
+                        # Handle images (but check if they're actually videos)
                         imgs = node_data.get("images", [])
                         if imgs:
                             filename = imgs[0]["filename"]
-                            print(f"[SUCCESS] 🖼️ Found complete image file: {filename}")
-                            img_resp = await self.comfy.get(f"/view?filename={filename}")
-                            img_resp.raise_for_status()
-                            media_bytes = img_resp.content
-                            media_type = "image"
-                            print(f"[SUCCESS] 📊 Image size: {len(media_bytes)} bytes")
+                            
+                            # Check file extension to determine if it's actually a video
+                            if filename.lower().endswith(('.mp4', '.webm', '.avi', '.mov', '.mkv')):
+                                # It's a video file in the images array
+                                print(f"[SUCCESS] 🎥 Found complete video file: {filename}")
+                                video_resp = await self.comfy.get(f"/view?filename={filename}")
+                                video_resp.raise_for_status()
+                                media_bytes = video_resp.content
+                                media_type = "video"
+                                print(f"[SUCCESS] 📊 Video size: {len(media_bytes)} bytes")
+                            else:
+                                # It's actually an image
+                                print(f"[SUCCESS] 🖼️ Found complete image file: {filename}")
+                                img_resp = await self.comfy.get(f"/view?filename={filename}")
+                                img_resp.raise_for_status()
+                                media_bytes = img_resp.content
+                                media_type = "image"
+                                print(f"[SUCCESS] 📊 Image size: {len(media_bytes)} bytes")
                             media_found = True
                             break
                     
