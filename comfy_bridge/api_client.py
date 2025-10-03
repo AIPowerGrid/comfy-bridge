@@ -52,15 +52,10 @@ class APIClient:
             response.raise_for_status()
             result = response.json()
             
-            # Enhanced logging for job responses
+            # Only log when we actually get a job
             if result.get("id"):
                 logger.info(f"Received job {result.get('id')} for model {result.get('model', 'unknown')}")
                 print(f"[INFO] ✓ Got job {result.get('id')} for model {result.get('model', 'unknown')}")
-            else:
-                logger.info("No jobs available in queue")
-                print(f"[INFO] No jobs available (skipped: {result.get('skipped', 'unknown')})")
-            
-            print(f"[DEBUG] pop_job response: {result}")
             return result
         except httpx.HTTPStatusError as e:
             logger.error(f"pop_job payload: {payload}")
