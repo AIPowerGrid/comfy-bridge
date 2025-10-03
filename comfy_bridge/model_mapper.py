@@ -42,7 +42,8 @@ async def fetch_comfyui_models(comfy_url: str) -> List[str]:
                     return models
 
             except Exception as e:
-                print(f"Warning: {endpoint} fetch failed: {e}")
+                # Only log warnings in debug mode to reduce noise
+                pass
 
     return []
 
@@ -91,17 +92,11 @@ class ModelMapper:
             # No env override: fall back to static defaults
             self._build_workflow_map()
 
-        print(
-            f"Initialized workflow mapper with {len(self.workflow_map)} Grid models mapped to workflows"
-        )
+        print(f"[MAPPING] ✓ Initialized with {len(self.workflow_map)} model mappings")
 
     def _build_workflow_map(self):
         """Build mapping from Grid models to ComfyUI workflows"""
         self.workflow_map = self.DEFAULT_WORKFLOW_MAP.copy()
-        print(f"[INFO] 📋 Built workflow map with {len(self.workflow_map)} models:")
-        for model, workflow in self.workflow_map.items():
-            print(f"[INFO]   {model} -> {workflow}")
-            
         # Verify workflow files exist
         missing_workflows = []
         from .config import Settings
@@ -113,10 +108,7 @@ class ModelMapper:
                 missing_workflows.append(f"{model} -> {workflow_file}")
                 
         if missing_workflows:
-            print(f"[WARNING] ⚠️ Missing {len(missing_workflows)} workflow files:")
-            for missing in missing_workflows:
-                print(f"[WARNING]   {missing}")
-            print(f"[WARNING] These models will be removed from the advertised list.")
+            print(f"[WARNING] ⚠️ Missing {len(missing_workflows)} workflow files, removing from map")
             
             # Remove models with missing workflow files
             for model in list(self.workflow_map.keys()):
@@ -124,8 +116,6 @@ class ModelMapper:
                 workflow_path = os.path.join(Settings.WORKFLOW_DIR, workflow_file)
                 if not os.path.exists(workflow_path):
                     del self.workflow_map[model]
-                    
-            print(f"[INFO] ✓ Final workflow map has {len(self.workflow_map)} valid models")
 
     def _load_local_reference(self) -> Dict[str, str]:
         """Load Grid model reference and return mapping path → Grid model name.
@@ -315,13 +305,11 @@ class ModelMapper:
 
     def get_workflow_file(self, horde_model_name: str) -> str:
         """Get the workflow file for a Grid model"""
-        print(f"[DEBUG] Looking up workflow for model: {horde_model_name}")
-        print(f"[DEBUG] Available workflow map keys: {list(self.workflow_map.keys())}")
+        # Look up workflow for model
         
         # Direct lookup
         direct_match = self.workflow_map.get(horde_model_name)
         if direct_match:
-            print(f"[DEBUG] Direct match found: {horde_model_name} -> {direct_match}")
             return direct_match
         
         # Partial match
@@ -334,10 +322,7 @@ class ModelMapper:
             None,
         )
         if partial_match:
-            print(f"[DEBUG] Partial match found: {horde_model_name} -> {partial_match}")
             return partial_match
-        
-        print(f"[DEBUG] No match found for {horde_model_name}, using default: Dreamshaper.json")
         return "Dreamshaper.json"  # Default workflow
 
     def get_available_horde_models(self) -> List[str]:
