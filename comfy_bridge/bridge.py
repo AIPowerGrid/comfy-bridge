@@ -124,18 +124,29 @@ class ComfyUIBridge:
                 logger.error(f"Workflow completed but no outputs found. Status: {status}")
                 raise Exception("Workflow completed without outputs")
             
-            if outputs:
-                # Try each output node until we find media
+            if outputs and status_completed:
+                # Only process outputs when the workflow is truly completed
+                # This ensures we get the final video, not an interrupted one
                 media_found = False
                 for node_id, node_data in outputs.items():
                     # Handle videos
                     videos = node_data.get("videos", [])
                     if videos:
                         filename = videos[0]["filename"]
-                        print(f"[SUCCESS] 🎥 Found video file: {filename}")
+                        
+                        # Check if this is a complete video by file size
+                        # Skip videos that are likely incomplete (too small or from interrupted prompts)
                         video_resp = await self.comfy.get(f"/view?filename={filename}")
                         video_resp.raise_for_status()
                         media_bytes = video_resp.content
+                        
+                        # Only accept videos that are reasonably sized (at least 1MB)
+                        # This helps filter out incomplete/interrupted videos
+                        if len(media_bytes) < 1024 * 1024:  # Less than 1MB
+                            print(f"[SKIP] 🎥 Skipping small video: {filename} ({len(media_bytes)} bytes)")
+                            continue
+                        
+                        print(f"[SUCCESS] 🎥 Found complete video file: {filename}")
                         media_type = "video"
                         print(f"[SUCCESS] 📊 Video size: {len(media_bytes)} bytes")
                         media_found = True
@@ -145,7 +156,7 @@ class ComfyUIBridge:
                     imgs = node_data.get("images", [])
                     if imgs:
                         filename = imgs[0]["filename"]
-                        print(f"[SUCCESS] 🖼️ Found image file: {filename}")
+                        print(f"[SUCCESS] 🖼️ Found complete image file: {filename}")
                         img_resp = await self.comfy.get(f"/view?filename={filename}")
                         img_resp.raise_for_status()
                         media_bytes = img_resp.content
