@@ -60,7 +60,6 @@ class ComfyUIBridge:
             prompt_id = resp.json().get("prompt_id")
             if not prompt_id:
                 logger.error(f"No prompt_id for job {job_id}")
-                self.processing_jobs.discard(job_id)
                 return
 
             # Start WebSocket listener for ComfyUI logs
@@ -69,220 +68,220 @@ class ComfyUIBridge:
             import time
             start_time = time.time()
             max_wait_time = 600  # 10 minutes timeout
-        
-        while True:
-            # Check timeout
-            elapsed = time.time() - start_time
-            if elapsed > max_wait_time:
-                logger.error(f"Timeout waiting for job completion after {elapsed:.0f}s")
-                raise Exception(f"Job timed out after {max_wait_time}s")
             
-            hist = await self.comfy.get(f"/history/{prompt_id}")
-            hist.raise_for_status()
-            data = hist.json().get(prompt_id, {})
-            
-            # Show fallback health check every 30 seconds (if WebSocket fails)
-            if int(elapsed) % 30 == 0 and int(elapsed) > 0:
-                print(f"[COMFYUI] processing... ({elapsed:.0f}s)")
-            
-            # FALLBACK: If history is empty after 3 minutes, try checking output directory directly
-            if not data and elapsed > 180:
-                print(f"[FALLBACK] 🔍 History empty, checking filesystem for job {job_id}...")
-                expected_prefix = f"horde_{job_id}"
-                try:
-                    import glob
-                    import os
-                    # Check both output root and video subdirectory
-                    search_patterns = [
-                        f"{Settings.COMFYUI_OUTPUT_DIR}/{expected_prefix}*.mp4",
-                        f"{Settings.COMFYUI_OUTPUT_DIR}/{expected_prefix}*.webm",
-                        f"{Settings.COMFYUI_OUTPUT_DIR}/**/{expected_prefix}*.mp4",
-                        f"{Settings.COMFYUI_OUTPUT_DIR}/**/{expected_prefix}*.webm",
-                    ]
-                    found_file = False
-                    for pattern in search_patterns:
-                        files = glob.glob(pattern, recursive=True)
-                        if files:
-                            # Found the output file!
-                            video_path = files[0]
-                            filename = os.path.basename(video_path)
-                            print(f"[SUCCESS] 📁 Found output file: {filename}")
-                            with open(video_path, 'rb') as f:
-                                media_bytes = f.read()
+            while True:
+                # Check timeout
+                elapsed = time.time() - start_time
+                if elapsed > max_wait_time:
+                    logger.error(f"Timeout waiting for job completion after {elapsed:.0f}s")
+                    raise Exception(f"Job timed out after {max_wait_time}s")
+                
+                hist = await self.comfy.get(f"/history/{prompt_id}")
+                hist.raise_for_status()
+                data = hist.json().get(prompt_id, {})
+                
+                # Show fallback health check every 30 seconds (if WebSocket fails)
+                if int(elapsed) % 30 == 0 and int(elapsed) > 0:
+                    print(f"[COMFYUI] processing... ({elapsed:.0f}s)")
+                
+                # FALLBACK: If history is empty after 3 minutes, try checking output directory directly
+                if not data and elapsed > 180:
+                    print(f"[FALLBACK] 🔍 History empty, checking filesystem for job {job_id}...")
+                    expected_prefix = f"horde_{job_id}"
+                    try:
+                        import glob
+                        import os
+                        # Check both output root and video subdirectory
+                        search_patterns = [
+                            f"{Settings.COMFYUI_OUTPUT_DIR}/{expected_prefix}*.mp4",
+                            f"{Settings.COMFYUI_OUTPUT_DIR}/{expected_prefix}*.webm",
+                            f"{Settings.COMFYUI_OUTPUT_DIR}/**/{expected_prefix}*.mp4",
+                            f"{Settings.COMFYUI_OUTPUT_DIR}/**/{expected_prefix}*.webm",
+                        ]
+                        found_file = False
+                        for pattern in search_patterns:
+                            files = glob.glob(pattern, recursive=True)
+                            if files:
+                                # Found the output file!
+                                video_path = files[0]
+                                filename = os.path.basename(video_path)
+                                print(f"[SUCCESS] 📁 Found output file: {filename}")
+                                with open(video_path, 'rb') as f:
+                                    media_bytes = f.read()
+                                media_type = "video"
+                                print(f"[SUCCESS] 📊 Loaded video: {len(media_bytes)} bytes")
+                                found_file = True
+                                break
+                        
+                        if found_file:
+                            # Exit the main polling loop
+                            break
+                    except Exception as e:
+                        logger.warning(f"Filesystem check failed: {e}")
+                
+                # Check if workflow completed
+                status = data.get("status", {})
+                status_completed = status.get("completed", False)
+                outputs = data.get("outputs", {})
+                
+                # Check for execution errors in the status
+                if status_completed and status.get("status_str") == "error":
+                    error_msg = status.get("exception_message", "Unknown execution error")
+                    print(f"[COMFYUI] ❌ Workflow failed: {error_msg}")
+                    raise Exception(f"ComfyUI workflow failed: {error_msg}")
+                
+                # Check if the workflow has completed but failed
+                if status_completed and not outputs:
+                    logger.error(f"Workflow completed but no outputs found. Status: {status}")
+                    raise Exception("Workflow completed without outputs")
+                
+                if outputs and status_completed:
+                    # Only process outputs when the workflow is truly completed
+                    # This ensures we get the final video, not an interrupted one
+                    media_found = False
+                    for node_id, node_data in outputs.items():
+                        # Handle videos
+                        videos = node_data.get("videos", [])
+                        if videos:
+                            filename = videos[0]["filename"]
+                            
+                            # Check if this is a complete video by file size
+                            # Skip videos that are likely incomplete (too small or from interrupted prompts)
+                            video_resp = await self.comfy.get(f"/view?filename={filename}")
+                            video_resp.raise_for_status()
+                            media_bytes = video_resp.content
+                            
+                            # Only accept videos that are reasonably sized (at least 1MB)
+                            # This helps filter out incomplete/interrupted videos
+                            if len(media_bytes) < 1024 * 1024:  # Less than 1MB
+                                print(f"[SKIP] 🎥 Skipping small video: {filename} ({len(media_bytes)} bytes)")
+                                continue
+                            
+                            print(f"[SUCCESS] 🎥 Found complete video file: {filename}")
                             media_type = "video"
-                            print(f"[SUCCESS] 📊 Loaded video: {len(media_bytes)} bytes")
-                            found_file = True
+                            print(f"[SUCCESS] 📊 Video size: {len(media_bytes)} bytes")
+                            media_found = True
+                            break
+                        
+                        # Handle images
+                        imgs = node_data.get("images", [])
+                        if imgs:
+                            filename = imgs[0]["filename"]
+                            print(f"[SUCCESS] 🖼️ Found complete image file: {filename}")
+                            img_resp = await self.comfy.get(f"/view?filename={filename}")
+                            img_resp.raise_for_status()
+                            media_bytes = img_resp.content
+                            media_type = "image"
+                            print(f"[SUCCESS] 📊 Image size: {len(media_bytes)} bytes")
+                            media_found = True
                             break
                     
-                    if found_file:
-                        # Exit the main polling loop
+                    # If we found media, exit the polling loop
+                    if media_found:
                         break
-                except Exception as e:
-                    logger.warning(f"Filesystem check failed: {e}")
-            
-            # Check if workflow completed
-            status = data.get("status", {})
-            status_completed = status.get("completed", False)
-            outputs = data.get("outputs", {})
-            
-            # Check for execution errors in the status
-            if status_completed and status.get("status_str") == "error":
-                error_msg = status.get("exception_message", "Unknown execution error")
-                print(f"[COMFYUI] ❌ Workflow failed: {error_msg}")
-                raise Exception(f"ComfyUI workflow failed: {error_msg}")
-            
-            # Check if the workflow has completed but failed
-            if status_completed and not outputs:
-                logger.error(f"Workflow completed but no outputs found. Status: {status}")
-                raise Exception("Workflow completed without outputs")
-            
-            if outputs and status_completed:
-                # Only process outputs when the workflow is truly completed
-                # This ensures we get the final video, not an interrupted one
-                media_found = False
-                for node_id, node_data in outputs.items():
-                    # Handle videos
-                    videos = node_data.get("videos", [])
-                    if videos:
-                        filename = videos[0]["filename"]
                         
-                        # Check if this is a complete video by file size
-                        # Skip videos that are likely incomplete (too small or from interrupted prompts)
-                        video_resp = await self.comfy.get(f"/view?filename={filename}")
-                        video_resp.raise_for_status()
-                        media_bytes = video_resp.content
-                        
-                        # Only accept videos that are reasonably sized (at least 1MB)
-                        # This helps filter out incomplete/interrupted videos
-                        if len(media_bytes) < 1024 * 1024:  # Less than 1MB
-                            print(f"[SKIP] 🎥 Skipping small video: {filename} ({len(media_bytes)} bytes)")
-                            continue
-                        
-                        print(f"[SUCCESS] 🎥 Found complete video file: {filename}")
-                        media_type = "video"
-                        print(f"[SUCCESS] 📊 Video size: {len(media_bytes)} bytes")
-                        media_found = True
-                        break
-                    
-                    # Handle images
-                    imgs = node_data.get("images", [])
-                    if imgs:
-                        filename = imgs[0]["filename"]
-                        print(f"[SUCCESS] 🖼️ Found complete image file: {filename}")
-                        img_resp = await self.comfy.get(f"/view?filename={filename}")
-                        img_resp.raise_for_status()
-                        media_bytes = img_resp.content
-                        media_type = "image"
-                        print(f"[SUCCESS] 📊 Image size: {len(media_bytes)} bytes")
-                        media_found = True
-                        break
-                
-                # If we found media, exit the polling loop
-                if media_found:
-                    break
-                    
-            await asyncio.sleep(1)
+                await asyncio.sleep(1)
 
-        # Ensure we're using the correct job ID from the job metadata
-        job_id = job.get("id")
-        r2_upload_url = job.get("r2_upload")
-        
-        # For videos, use the R2 upload functionality if available
-        if media_type == "video" and r2_upload_url:
-            print(f"[UPLOAD] 📤 Uploading video to R2...")
-            try:
-                # Upload the video directly to R2 storage
-                async with httpx.AsyncClient() as client:
-                    headers = {"Content-Type": "video/mp4"}
-                    r2_response = await client.put(r2_upload_url, content=media_bytes, headers=headers)
-                    r2_response.raise_for_status()
-                    print(f"[UPLOAD] ✅ R2 upload successful")
-                
-                # Create payload for video
-                r2_uploads = job.get("r2_uploads", [])
-                b64 = encode_media(media_bytes, media_type)
-                
-                # Extract original filename and ensure it has the correct extension
-                original_filename = filename if 'filename' in locals() else f"video_{job_id}.mp4"
-                if not original_filename.lower().endswith('.mp4'):
-                    original_filename += ".mp4"
-                
-                # Create a payload that matches the image format but with video-specific fields
-                payload = {
-                    "id": job_id,
-                    "generation": b64,
-                    "state": "ok",
-                    "seed": int(job.get("payload", {}).get("seed", 0)),
-                    "filename": original_filename,
-                    "form": "video",
-                    "type": "video",
-                    "media_type": "video"
-                }
-                
-                # Include the original r2_uploads array if available
-                if r2_uploads:
-                    payload["r2_uploads"] = r2_uploads
+            # Ensure we're using the correct job ID from the job metadata
+            job_id = job.get("id")
+            r2_upload_url = job.get("r2_upload")
             
-            except Exception as e:
-                # If R2 upload fails, fallback to direct encoding
-                print(f"[UPLOAD] ⚠️ R2 upload failed, using fallback: {e}")
-                r2_uploads = job.get("r2_uploads", [])
-                
-                # Use the same direct encoding approach for fallback
-                original_filename = filename if 'filename' in locals() else f"video_{job_id}.mp4"
-                if not original_filename.lower().endswith('.mp4'):
-                    original_filename += ".mp4"
-                
-                # Encode the video directly
-                b64 = encode_media(media_bytes, media_type)
-                
-                # Create the same payload structure as the main path
-                payload = {
-                    "id": job_id,
-                    "generation": b64,
-                    "state": "ok",
-                    "seed": int(job.get("payload", {}).get("seed", 0)),
-                    "filename": original_filename,
-                    "form": "video",
-                    "type": "video",
-                    "media_type": "video"
-                }
-                
-                # If we have r2_uploads info, pass it back to the API
-                if r2_uploads:
-                    payload["r2_uploads"] = r2_uploads
-        else:
-            # For images or when no R2 URL is available, use the standard approach
-            b64 = encode_media(media_bytes, media_type)
-            
-            # Create the standard payload structure
-            payload = {
-                "id": job_id,
-                "generation": b64,
-                "state": "ok",
-                "seed": int(job.get("payload", {}).get("seed", 0)),
-                "media_type": media_type
-            }
-            
-            # Add video-specific parameters if needed
-            if media_type == "video":
-                # Extract original filename and ensure it has the correct extension
-                original_filename = filename if 'filename' in locals() else f"video_{job_id}.mp4"
-                if not original_filename.lower().endswith(('.mp4', '.webm', '.avi', '.mov')):
-                    original_filename += ".mp4"
+            # For videos, use the R2 upload functionality if available
+            if media_type == "video" and r2_upload_url:
+                print(f"[UPLOAD] 📤 Uploading video to R2...")
+                try:
+                    # Upload the video directly to R2 storage
+                    async with httpx.AsyncClient() as client:
+                        headers = {"Content-Type": "video/mp4"}
+                        r2_response = await client.put(r2_upload_url, content=media_bytes, headers=headers)
+                        r2_response.raise_for_status()
+                        print(f"[UPLOAD] ✅ R2 upload successful")
                     
-                # Add video-specific fields
-                payload["filename"] = original_filename
-                payload["form"] = "video"
-                payload["type"] = "video"
-        
-        # Clean up WebSocket task
-        websocket_task.cancel()
-        try:
-            await websocket_task
-        except asyncio.CancelledError:
-            pass
-        
+                    # Create payload for video
+                    r2_uploads = job.get("r2_uploads", [])
+                    b64 = encode_media(media_bytes, media_type)
+                    
+                    # Extract original filename and ensure it has the correct extension
+                    original_filename = filename if 'filename' in locals() else f"video_{job_id}.mp4"
+                    if not original_filename.lower().endswith('.mp4'):
+                        original_filename += ".mp4"
+                    
+                    # Create a payload that matches the image format but with video-specific fields
+                    payload = {
+                        "id": job_id,
+                        "generation": b64,
+                        "state": "ok",
+                        "seed": int(job.get("payload", {}).get("seed", 0)),
+                        "filename": original_filename,
+                        "form": "video",
+                        "type": "video",
+                        "media_type": "video"
+                    }
+                    
+                    # Include the original r2_uploads array if available
+                    if r2_uploads:
+                        payload["r2_uploads"] = r2_uploads
+                
+                except Exception as e:
+                    # If R2 upload fails, fallback to direct encoding
+                    print(f"[UPLOAD] ⚠️ R2 upload failed, using fallback: {e}")
+                    r2_uploads = job.get("r2_uploads", [])
+                    
+                    # Use the same direct encoding approach for fallback
+                    original_filename = filename if 'filename' in locals() else f"video_{job_id}.mp4"
+                    if not original_filename.lower().endswith('.mp4'):
+                        original_filename += ".mp4"
+                    
+                    # Encode the video directly
+                    b64 = encode_media(media_bytes, media_type)
+                    
+                    # Create the same payload structure as the main path
+                    payload = {
+                        "id": job_id,
+                        "generation": b64,
+                        "state": "ok",
+                        "seed": int(job.get("payload", {}).get("seed", 0)),
+                        "filename": original_filename,
+                        "form": "video",
+                        "type": "video",
+                        "media_type": "video"
+                    }
+                    
+                    # If we have r2_uploads info, pass it back to the API
+                    if r2_uploads:
+                        payload["r2_uploads"] = r2_uploads
+            else:
+                # For images or when no R2 URL is available, use the standard approach
+                b64 = encode_media(media_bytes, media_type)
+                
+                # Create the standard payload structure
+                payload = {
+                    "id": job_id,
+                    "generation": b64,
+                    "state": "ok",
+                    "seed": int(job.get("payload", {}).get("seed", 0)),
+                    "media_type": media_type
+                }
+                
+                # Add video-specific parameters if needed
+                if media_type == "video":
+                    # Extract original filename and ensure it has the correct extension
+                    original_filename = filename if 'filename' in locals() else f"video_{job_id}.mp4"
+                    if not original_filename.lower().endswith(('.mp4', '.webm', '.avi', '.mov')):
+                        original_filename += ".mp4"
+                        
+                    # Add video-specific fields
+                    payload["filename"] = original_filename
+                    payload["form"] = "video"
+                    payload["type"] = "video"
+            
+            # Clean up WebSocket task
+            websocket_task.cancel()
+            try:
+                await websocket_task
+            except asyncio.CancelledError:
+                pass
+            
             # Submit result
             print(f"[SUBMIT] 📋 Submitting {media_type} result for job {job_id}")
             await self.api.submit_result(payload)
