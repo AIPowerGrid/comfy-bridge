@@ -2,6 +2,8 @@ import asyncio
 import logging
 import httpx
 import os
+import json
+import websockets
 from typing import List
 
 from .api_client import APIClient
@@ -48,9 +50,10 @@ class ComfyUIBridge:
         if not prompt_id:
             logger.error(f"No prompt_id for job {job_id}")
             return
-        
-        print(f"[COMFYUI] got prompt")
 
+        # Start WebSocket listener for ComfyUI logs
+        websocket_task = asyncio.create_task(self.listen_comfyui_logs(prompt_id))
+        
         import time
         start_time = time.time()
         max_wait_time = 600  # 10 minutes timeout
@@ -66,8 +69,8 @@ class ComfyUIBridge:
             hist.raise_for_status()
             data = hist.json().get(prompt_id, {})
             
-            # Show health check every 15 seconds
-            if int(elapsed) % 15 == 0 and int(elapsed) > 0:
+            # Show fallback health check every 30 seconds (if WebSocket fails)
+            if int(elapsed) % 30 == 0 and int(elapsed) > 0:
                 print(f"[COMFYUI] processing... ({elapsed:.0f}s)")
             
             # FALLBACK: If history is empty after 3 minutes, try checking output directory directly
@@ -250,6 +253,13 @@ class ComfyUIBridge:
                 payload["form"] = "video"
                 payload["type"] = "video"
         
+        # Clean up WebSocket task
+        websocket_task.cancel()
+        try:
+            await websocket_task
+        except asyncio.CancelledError:
+            pass
+        
         # Submit result
         print(f"[SUBMIT] 📋 Submitting {media_type} result for job {job_id}")
         await self.api.submit_result(payload)
@@ -302,6 +312,54 @@ class ComfyUIBridge:
                 import traceback
                 print(f"[DEBUG] Full traceback: {traceback.format_exc()}")
             await asyncio.sleep(2)
+
+    async def listen_comfyui_logs(self, prompt_id: str):
+        """Listen to ComfyUI WebSocket for real-time logs and progress"""
+        try:
+            # Convert http:// to ws:// and https:// to wss://
+            ws_url = Settings.COMFYUI_URL.replace("http://", "ws://").replace("https://", "wss://")
+            ws_url = f"{ws_url}/ws?clientId={prompt_id}"
+            
+            async with websockets.connect(ws_url) as websocket:
+                async for message in websocket:
+                    try:
+                        data = json.loads(message)
+                        
+                        # Handle execution start
+                        if data.get("type") == "execution_start":
+                            print(f"[COMFYUI] got prompt")
+                        
+                        # Handle progress updates
+                        elif data.get("type") == "progress":
+                            progress_data = data.get("data", {})
+                            current_step = progress_data.get("value", 0)
+                            total_steps = progress_data.get("max", 1)
+                            node_name = progress_data.get("prompt_id", "")
+                            
+                            if total_steps > 0:
+                                percentage = (current_step / total_steps) * 100
+                                print(f"[COMFYUI] {percentage:.0f}%|{'█' * int(percentage/10):<10}| {current_step}/{total_steps} [{node_name}]")
+                        
+                        # Handle execution error
+                        elif data.get("type") == "execution_error":
+                            error_data = data.get("data", {})
+                            error_msg = error_data.get("exception_message", "Unknown error")
+                            print(f"[COMFYUI] ❌ Error: {error_msg}")
+                        
+                        # Handle execution complete
+                        elif data.get("type") == "execution_cached":
+                            print(f"[COMFYUI] ✅ Execution completed")
+                        
+                    except json.JSONDecodeError:
+                        # Skip non-JSON messages
+                        continue
+                    except Exception as e:
+                        # Continue on any other errors
+                        continue
+                        
+        except Exception as e:
+            # If WebSocket fails, continue without real-time logs
+            print(f"[COMFYUI] ⚠️ WebSocket connection failed, using fallback logging")
 
     async def cleanup(self):
         await self.comfy.aclose()
