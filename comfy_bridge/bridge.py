@@ -12,8 +12,9 @@ from .model_mapper import initialize_model_mapper, get_horde_models
 
 logger = logging.getLogger(__name__)
 
-# Disable httpx logging to stop HTTP request spam
-logging.getLogger("httpx").setLevel(logging.WARNING)
+# Completely disable httpx logging to stop HTTP request spam
+logging.getLogger("httpx").setLevel(logging.CRITICAL)
+logging.getLogger("httpcore").setLevel(logging.CRITICAL)
 
 
 class ComfyUIBridge:
@@ -65,8 +66,8 @@ class ComfyUIBridge:
             hist.raise_for_status()
             data = hist.json().get(prompt_id, {})
             
-            # Show progress dots every 10 seconds
-            if int(elapsed) % 10 == 0 and int(elapsed) > 0:
+            # Show health check every 15 seconds
+            if int(elapsed) % 15 == 0 and int(elapsed) > 0:
                 print(f"[COMFYUI] processing... ({elapsed:.0f}s)")
             
             # FALLBACK: If history is empty after 3 minutes, try checking output directory directly

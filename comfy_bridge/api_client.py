@@ -5,6 +5,10 @@ from .config import Settings
 
 logger = logging.getLogger(__name__)
 
+# Disable httpx logging in API client too
+logging.getLogger("httpx").setLevel(logging.CRITICAL)
+logging.getLogger("httpcore").setLevel(logging.CRITICAL)
+
 
 class APIClient:
     def __init__(self):
