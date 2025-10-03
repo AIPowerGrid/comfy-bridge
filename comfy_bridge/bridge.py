@@ -20,6 +20,10 @@ class ComfyUIBridge:
         self.supported_models: List[str] = []
 
     async def process_once(self):
+        # Reset history check flag for new job
+        if hasattr(self, '_first_history_check'):
+            delattr(self, '_first_history_check')
+            
         job = await self.api.pop_job(self.supported_models)
         
         # Handle the case where no job is available
@@ -43,10 +47,69 @@ class ComfyUIBridge:
             logger.error(f"No prompt_id for job {job_id}")
             return
 
+        import time
+        start_time = time.time()
+        max_wait_time = 600  # 10 minutes timeout
+        
         while True:
+            # Check timeout
+            elapsed = time.time() - start_time
+            if elapsed > max_wait_time:
+                logger.error(f"Timeout waiting for job completion after {elapsed:.0f}s")
+                raise Exception(f"Job timed out after {max_wait_time}s")
+            
             hist = await self.comfy.get(f"/history/{prompt_id}")
             hist.raise_for_status()
             data = hist.json().get(prompt_id, {})
+            
+            # Log the full history response on first check and periodically
+            if not hasattr(self, '_first_history_check'):
+                self._first_history_check = time.time()
+                logger.info(f"First history check - Full response: {data}")
+            elif int(elapsed) % 60 == 0 and int(elapsed) > 0:
+                logger.info(f"History update at {elapsed:.0f}s: {data}")
+            
+            # Log progress every 30 seconds
+            if int(elapsed) % 30 == 0 and int(elapsed) > 0:
+                logger.info(f"Still waiting for job completion... ({elapsed:.0f}s elapsed)")
+            
+            # FALLBACK: If history is empty after 30s, try checking output directory directly
+            if not data and elapsed > 30:
+                logger.warning(f"History empty after {elapsed:.0f}s, checking output directory...")
+                expected_prefix = f"horde_{job_id}"
+                try:
+                    import glob
+                    import os
+                    # Check both output root and video subdirectory
+                    search_patterns = [
+                        f"{Settings.COMFYUI_OUTPUT_DIR}/{expected_prefix}*.mp4",
+                        f"{Settings.COMFYUI_OUTPUT_DIR}/{expected_prefix}*.webm",
+                        f"{Settings.COMFYUI_OUTPUT_DIR}/**/{expected_prefix}*.mp4",
+                        f"{Settings.COMFYUI_OUTPUT_DIR}/**/{expected_prefix}*.webm",
+                    ]
+                    found_file = False
+                    for pattern in search_patterns:
+                        files = glob.glob(pattern, recursive=True)
+                        if files:
+                            # Found the output file!
+                            video_path = files[0]
+                            filename = os.path.basename(video_path)
+                            logger.info(f"Found output file via filesystem: {filename}")
+                            with open(video_path, 'rb') as f:
+                                media_bytes = f.read()
+                            media_type = "video"
+                            logger.info(f"Loaded video from filesystem: {len(media_bytes)} bytes")
+                            found_file = True
+                            break
+                    
+                    if found_file:
+                        # Exit the main polling loop
+                        break
+                    else:
+                        # No file found yet
+                        logger.debug(f"No output file found yet with prefix {expected_prefix}")
+                except Exception as e:
+                    logger.warning(f"Filesystem check failed: {e}")
             
             # Log the status for debugging
             status = data.get("status", {})
@@ -67,6 +130,7 @@ class ComfyUIBridge:
             if outputs:
                 logger.info(f"Found outputs: {list(outputs.keys())}")
                 # Try each output node until we find media
+                media_found = False
                 for node_id, node_data in outputs.items():
                     logger.info(f"Checking node {node_id}: {list(node_data.keys())}")
                     
@@ -80,6 +144,7 @@ class ComfyUIBridge:
                         media_bytes = video_resp.content
                         media_type = "video"
                         logger.info(f"Video size: {len(media_bytes)} bytes")
+                        media_found = True
                         break
                     
                     # Handle images
@@ -91,15 +156,15 @@ class ComfyUIBridge:
                         img_resp.raise_for_status()
                         media_bytes = img_resp.content
                         media_type = "image"
+                        media_found = True
                         break
-                else:
-                    # No media found in any output node
-                    logger.warning(f"Outputs found but no media. Continuing to wait...")
-                    await asyncio.sleep(1)
-                    continue
+                
+                # If we found media, exit the polling loop
+                if media_found:
+                    break
                     
-                # If we got here, we found media and broke out of the for loop
-                break
+                # No media found in any output node, keep waiting
+                logger.warning(f"Outputs found but no media. Continuing to wait...")
                     
             await asyncio.sleep(1)
 
