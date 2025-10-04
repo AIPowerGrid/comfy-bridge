@@ -244,7 +244,11 @@ class ComfyUIBridge:
                     if media_found:
                         break
                         
-                await asyncio.sleep(1)
+                # Reduce polling interval when we're close to completion to be more responsive
+                if elapsed > 200:  # After 200 seconds, poll more frequently
+                    await asyncio.sleep(0.5)  # Poll every 500ms
+                else:
+                    await asyncio.sleep(1)  # Normal 1 second polling
 
             # Ensure we're using the correct job ID from the job metadata
             job_id = job.get("id")
@@ -254,8 +258,8 @@ class ComfyUIBridge:
             if media_type == "video" and r2_upload_url:
                 print(f"[UPLOAD] 📤 Uploading video to R2...")
                 try:
-                    # Upload the video directly to R2 storage
-                    async with httpx.AsyncClient() as client:
+                    # Upload the video directly to R2 storage with timeout
+                    async with httpx.AsyncClient(timeout=30) as client:
                         headers = {"Content-Type": "video/mp4"}
                         r2_response = await client.put(r2_upload_url, content=media_bytes, headers=headers)
                         r2_response.raise_for_status()
