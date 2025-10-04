@@ -19,23 +19,6 @@ class APIClient:
             "Content-Type": "application/json",
         }
 
-    async def claim_job(self, job_id: str) -> bool:
-        """Claim a job to prevent other workers from picking it up"""
-        try:
-            response = await self.client.post(
-                f"/v2/generate/claim/{job_id}", 
-                headers=self.headers
-            )
-            response.raise_for_status()
-            result = response.json()
-            return result.get("success", False)
-        except httpx.HTTPStatusError as e:
-            logger.warning(f"Failed to claim job {job_id}: {e.response.status_code}")
-            return False
-        except Exception as e:
-            logger.warning(f"Error claiming job {job_id}: {e}")
-            return False
-
     async def pop_job(self, models: Optional[List[str]] = None) -> Dict[str, Any]:
         payload: Dict[str, Any] = {
             "name": Settings.GRID_WORKER_NAME,
