@@ -28,14 +28,14 @@ class ComfyUIBridge:
         self.processing_jobs: set = set()
 
     async def process_once(self):
-            # Reset flags for new job
-            if hasattr(self, '_first_history_check'):
-                delattr(self, '_first_history_check')
-            if hasattr(self, '_filesystem_checked'):
-                delattr(self, '_filesystem_checked')
-            if hasattr(self, '_debug_logged'):
-                delattr(self, '_debug_logged')
-            
+        # Reset flags for new job
+        if hasattr(self, '_first_history_check'):
+            delattr(self, '_first_history_check')
+        if hasattr(self, '_filesystem_checked'):
+            delattr(self, '_filesystem_checked')
+        if hasattr(self, '_debug_logged'):
+            delattr(self, '_debug_logged')
+        
         job = await self.api.pop_job(self.supported_models)
         
         # Handle the case where no job is available
