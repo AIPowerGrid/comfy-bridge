@@ -196,10 +196,17 @@ class ComfyUIBridge:
                             # Check file extension to determine if it's actually a video
                             if filename.lower().endswith(('.mp4', '.webm', '.avi', '.mov', '.mkv')):
                                 # It's a video file in the images array
-                                print(f"[SUCCESS] 🎥 Found complete video file: {filename}")
                                 video_resp = await self.comfy.get(f"/view?filename={filename}")
                                 video_resp.raise_for_status()
                                 media_bytes = video_resp.content
+                                
+                                # Only accept videos that are reasonably sized (at least 5MB for complete videos)
+                                # This helps filter out incomplete/interrupted videos
+                                if len(media_bytes) < 5 * 1024 * 1024:  # Less than 5MB
+                                    print(f"[SKIP] 🎥 Skipping small video from images array: {filename} ({len(media_bytes)} bytes) - likely incomplete")
+                                    continue
+                                
+                                print(f"[SUCCESS] 🎥 Found complete video file: {filename}")
                                 media_type = "video"
                                 print(f"[SUCCESS] 📊 Video size: {len(media_bytes)} bytes")
                             else:
