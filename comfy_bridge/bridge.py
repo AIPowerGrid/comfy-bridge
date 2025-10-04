@@ -87,8 +87,8 @@ class ComfyUIBridge:
                 if int(elapsed) % 30 == 0 and int(elapsed) > 0:
                     print(f"[COMFYUI] processing... ({elapsed:.0f}s)")
                 
-                # FALLBACK: If history is empty after 5 minutes OR we're stuck with incomplete files, try filesystem
-                if (not data and elapsed > 300) or (data and elapsed > 300 and not hasattr(self, '_filesystem_checked')):
+                # FALLBACK: If history is empty after 2 minutes OR we're stuck with incomplete files, try filesystem
+                if (not data and elapsed > 120) or (data and elapsed > 120 and not hasattr(self, '_filesystem_checked')):
                     self._filesystem_checked = True  # Mark that we've checked filesystem for this job
                     print(f"[FALLBACK] 🔍 Checking filesystem for complete video for job {job_id}...")
                     expected_prefix = f"horde_{job_id}"
@@ -166,6 +166,18 @@ class ComfyUIBridge:
                 status = data.get("status", {})
                 status_completed = status.get("completed", False)
                 outputs = data.get("outputs", {})
+                
+                # Debug logging to see what's happening
+                if elapsed > 60:  # Only debug after 60 seconds to avoid spam
+                    print(f"[DEBUG] Status: {status}")
+                    print(f"[DEBUG] Outputs keys: {list(outputs.keys()) if outputs else 'None'}")
+                    if outputs:
+                        for node_id, node_data in outputs.items():
+                            print(f"[DEBUG] Node {node_id}: {list(node_data.keys())}")
+                            if "videos" in node_data:
+                                print(f"[DEBUG] Videos in node {node_id}: {node_data['videos']}")
+                            if "images" in node_data:
+                                print(f"[DEBUG] Images in node {node_id}: {node_data['images']}")
                 
                 # Check for execution errors in the status
                 if status_completed and status.get("status_str") == "error":
