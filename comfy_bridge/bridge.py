@@ -111,6 +111,11 @@ class ComfyUIBridge:
                                     print(f"[SUCCESS] 📁 Found video output file: {filename}")
                                     media_type = "video"
                                 else:
+                                    # It's an image file - but check if this is a video job
+                                    if model_name and 'wan2' in model_name.lower():
+                                        # This is a video job, skip image files
+                                        print(f"[SKIP] 🖼️ Skipping image file for video job in filesystem: {filename}")
+                                        continue
                                     print(f"[SUCCESS] 📁 Found image output file: {filename}")
                                     media_type = "image"
                                 
@@ -210,7 +215,12 @@ class ComfyUIBridge:
                                 media_type = "video"
                                 print(f"[SUCCESS] 📊 Video size: {len(media_bytes)} bytes")
                             else:
-                                # It's actually an image
+                                # It's actually an image - but check if this is a video job
+                                if model_name and 'wan2' in model_name.lower():
+                                    # This is a video job, skip image files
+                                    print(f"[SKIP] 🖼️ Skipping image file for video job: {filename}")
+                                    continue
+                                
                                 print(f"[SUCCESS] 🖼️ Found complete image file: {filename}")
                                 img_resp = await self.comfy.get(f"/view?filename={filename}")
                                 img_resp.raise_for_status()
