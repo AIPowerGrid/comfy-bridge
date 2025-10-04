@@ -84,8 +84,8 @@ class ComfyUIBridge:
                 if int(elapsed) % 30 == 0 and int(elapsed) > 0:
                     print(f"[COMFYUI] processing... ({elapsed:.0f}s)")
                 
-                # FALLBACK: If history is empty after 3 minutes, try checking output directory directly
-                if not data and elapsed > 180:
+                # FALLBACK: If history is empty after 5 minutes, try checking output directory directly
+                if not data and elapsed > 300:
                     print(f"[FALLBACK] 🔍 History empty, checking filesystem for job {job_id}...")
                     expected_prefix = f"horde_{job_id}"
                     try:
@@ -116,7 +116,25 @@ class ComfyUIBridge:
                                 
                                 with open(video_path, 'rb') as f:
                                     media_bytes = f.read()
+                                
+                                # Validate file size - skip if too small (likely incomplete)
+                                if media_type == "video" and len(media_bytes) < 5 * 1024 * 1024:  # Less than 5MB
+                                    print(f"[SKIP] 🎥 Skipping small video from filesystem: {filename} ({len(media_bytes)} bytes) - likely incomplete")
+                                    continue
+                                
                                 print(f"[SUCCESS] 📊 Loaded {media_type}: {len(media_bytes)} bytes")
+                                
+                                # For videos, wait a bit more to ensure the file is completely written
+                                if media_type == "video":
+                                    print(f"[WAIT] ⏳ Waiting 10 seconds to ensure video is completely written...")
+                                    await asyncio.sleep(10)
+                                    # Re-read the file to check if size changed
+                                    with open(video_path, 'rb') as f:
+                                        new_media_bytes = f.read()
+                                    if len(new_media_bytes) != len(media_bytes):
+                                        print(f"[UPDATE] 📈 Video size changed from {len(media_bytes)} to {len(new_media_bytes)} bytes - using updated file")
+                                        media_bytes = new_media_bytes
+                                
                                 found_file = True
                                 break
                         
@@ -158,10 +176,10 @@ class ComfyUIBridge:
                             video_resp.raise_for_status()
                             media_bytes = video_resp.content
                             
-                            # Only accept videos that are reasonably sized (at least 1MB)
+                            # Only accept videos that are reasonably sized (at least 5MB for complete videos)
                             # This helps filter out incomplete/interrupted videos
-                            if len(media_bytes) < 1024 * 1024:  # Less than 1MB
-                                print(f"[SKIP] 🎥 Skipping small video: {filename} ({len(media_bytes)} bytes)")
+                            if len(media_bytes) < 5 * 1024 * 1024:  # Less than 5MB
+                                print(f"[SKIP] 🎥 Skipping small video: {filename} ({len(media_bytes)} bytes) - likely incomplete")
                                 continue
                             
                             print(f"[SUCCESS] 🎥 Found complete video file: {filename}")
