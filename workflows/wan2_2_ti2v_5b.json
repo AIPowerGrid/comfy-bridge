@@ -116,9 +116,9 @@
   },
   "55": {
     "inputs": {
-      "width": 1280,
-      "height": 704,
-      "length": 121,
+      "width": 1920,
+      "height": 1080,
+      "length": 160,
       "batch_size": 1,
       "vae": [
         "39",
