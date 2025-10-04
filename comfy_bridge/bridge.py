@@ -137,9 +137,8 @@ class ComfyUIBridge:
                                 media_bytes = f.read()
                             
                             # Validate file size - skip if too small (likely incomplete)
-                            if media_type == "video" and len(media_bytes) < 5 * 1024 * 1024:  # Less than 5MB
-                                print(f"[SKIP] 🎥 Skipping small video from filesystem: {filename} ({len(media_bytes)} bytes) - likely incomplete")
-                                continue
+                            if media_type == "video" and len(media_bytes) < 2 * 1024 * 1024:  # Less than 2MB
+                                continue  # Skip silently to reduce log spam
                             
                             print(f"[SUCCESS] 📊 Loaded {media_type}: {len(media_bytes)} bytes")
                             
@@ -195,11 +194,10 @@ class ComfyUIBridge:
                             video_resp.raise_for_status()
                             media_bytes = video_resp.content
                             
-                            # Only accept videos that are reasonably sized (at least 5MB for complete videos)
+                            # Only accept videos that are reasonably sized (at least 2MB for complete videos)
                             # This helps filter out incomplete/interrupted videos
-                            if len(media_bytes) < 5 * 1024 * 1024:  # Less than 5MB
-                                print(f"[SKIP] 🎥 Skipping small video: {filename} ({len(media_bytes)} bytes) - likely incomplete")
-                                continue
+                            if len(media_bytes) < 2 * 1024 * 1024:  # Less than 2MB
+                                continue  # Skip silently to reduce log spam
                             
                             print(f"[SUCCESS] 🎥 Found complete video file: {filename}")
                             media_type = "video"
@@ -219,11 +217,10 @@ class ComfyUIBridge:
                                 video_resp.raise_for_status()
                                 media_bytes = video_resp.content
                                 
-                                # Only accept videos that are reasonably sized (at least 5MB for complete videos)
+                                # Only accept videos that are reasonably sized (at least 2MB for complete videos)
                                 # This helps filter out incomplete/interrupted videos
-                                if len(media_bytes) < 5 * 1024 * 1024:  # Less than 5MB
-                                    print(f"[SKIP] 🎥 Skipping small video from images array: {filename} ({len(media_bytes)} bytes) - likely incomplete")
-                                    continue
+                                if len(media_bytes) < 2 * 1024 * 1024:  # Less than 2MB
+                                    continue  # Skip silently to reduce log spam
                                 
                                 print(f"[SUCCESS] 🎥 Found complete video file: {filename}")
                                 media_type = "video"
@@ -232,8 +229,7 @@ class ComfyUIBridge:
                                 # It's actually an image - but check if this is a video job
                                 if model_name and 'wan2' in model_name.lower():
                                     # This is a video job, skip image files
-                                    print(f"[SKIP] 🖼️ Skipping image file for video job: {filename}")
-                                    continue
+                                    continue  # Skip silently to reduce log spam
                                 
                                 print(f"[SUCCESS] 🖼️ Found complete image file: {filename}")
                                 img_resp = await self.comfy.get(f"/view?filename={filename}")
