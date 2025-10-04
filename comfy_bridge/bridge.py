@@ -31,6 +31,9 @@ class ComfyUIBridge:
         # Reset history check flag for new job
         if hasattr(self, '_first_history_check'):
             delattr(self, '_first_history_check')
+        # Reset filesystem check flag for new job
+        if hasattr(self, '_filesystem_checked'):
+            delattr(self, '_filesystem_checked')
             
         job = await self.api.pop_job(self.supported_models)
         
@@ -84,64 +87,75 @@ class ComfyUIBridge:
                 if int(elapsed) % 30 == 0 and int(elapsed) > 0:
                     print(f"[COMFYUI] processing... ({elapsed:.0f}s)")
                 
-                # FALLBACK: If history is empty after 5 minutes, try checking output directory directly
-                if not data and elapsed > 300:
-                    print(f"[FALLBACK] 🔍 History empty, checking filesystem for job {job_id}...")
+                # FALLBACK: If history is empty after 5 minutes OR we're stuck with incomplete files, try filesystem
+                if (not data and elapsed > 300) or (data and elapsed > 300 and not hasattr(self, '_filesystem_checked')):
+                    self._filesystem_checked = True  # Mark that we've checked filesystem for this job
+                    print(f"[FALLBACK] 🔍 Checking filesystem for complete video for job {job_id}...")
                     expected_prefix = f"horde_{job_id}"
                     try:
                         import glob
                         import os
-                        # Check both output root and video subdirectory
+                        # Check both output root and video subdirectory with multiple patterns
                         search_patterns = [
                             f"{Settings.COMFYUI_OUTPUT_DIR}/{expected_prefix}*.mp4",
                             f"{Settings.COMFYUI_OUTPUT_DIR}/{expected_prefix}*.webm",
                             f"{Settings.COMFYUI_OUTPUT_DIR}/**/{expected_prefix}*.mp4",
                             f"{Settings.COMFYUI_OUTPUT_DIR}/**/{expected_prefix}*.webm",
+                            # Also check for files without the exact prefix (in case naming changed)
+                            f"{Settings.COMFYUI_OUTPUT_DIR}/*{job_id}*.mp4",
+                            f"{Settings.COMFYUI_OUTPUT_DIR}/*{job_id}*.webm",
+                            f"{Settings.COMFYUI_OUTPUT_DIR}/**/*{job_id}*.mp4",
+                            f"{Settings.COMFYUI_OUTPUT_DIR}/**/*{job_id}*.webm",
                         ]
                         found_file = False
+                        all_video_files = []
                         for pattern in search_patterns:
                             files = glob.glob(pattern, recursive=True)
                             if files:
-                                # Found the output file!
-                                video_path = files[0]
-                                filename = os.path.basename(video_path)
-                                
-                                # Check file extension to determine media type
-                                if filename.lower().endswith(('.mp4', '.webm', '.avi', '.mov', '.mkv')):
-                                    print(f"[SUCCESS] 📁 Found video output file: {filename}")
-                                    media_type = "video"
-                                else:
-                                    # It's an image file - but check if this is a video job
-                                    if model_name and 'wan2' in model_name.lower():
-                                        # This is a video job, skip image files
-                                        print(f"[SKIP] 🖼️ Skipping image file for video job in filesystem: {filename}")
-                                        continue
-                                    print(f"[SUCCESS] 📁 Found image output file: {filename}")
-                                    media_type = "image"
-                                
+                                print(f"[DEBUG] 🔍 Found {len(files)} files matching pattern: {pattern}")
+                                for file_path in files:
+                                    filename = os.path.basename(file_path)
+                                    if filename.lower().endswith(('.mp4', '.webm', '.avi', '.mov', '.mkv')):
+                                        # Get file size
+                                        try:
+                                            file_size = os.path.getsize(file_path)
+                                            all_video_files.append((file_path, filename, file_size))
+                                            print(f"[DEBUG] 📹 Video file: {filename} ({file_size} bytes)")
+                                        except Exception as e:
+                                            print(f"[DEBUG] ⚠️ Could not get size for {filename}: {e}")
+                        
+                        if all_video_files:
+                            # Sort by file size (largest first) and pick the biggest one
+                            all_video_files.sort(key=lambda x: x[2], reverse=True)
+                            video_path, filename, file_size = all_video_files[0]
+                            print(f"[DEBUG] 🎯 Selected largest video file: {filename} ({file_size} bytes)")
+                            
+                            # Since we already filtered for video files, we know this is a video
+                            media_type = "video"
+                            
+                            with open(video_path, 'rb') as f:
+                                media_bytes = f.read()
+                            
+                            # Validate file size - skip if too small (likely incomplete)
+                            if media_type == "video" and len(media_bytes) < 5 * 1024 * 1024:  # Less than 5MB
+                                print(f"[SKIP] 🎥 Skipping small video from filesystem: {filename} ({len(media_bytes)} bytes) - likely incomplete")
+                                continue
+                            
+                            print(f"[SUCCESS] 📊 Loaded {media_type}: {len(media_bytes)} bytes")
+                            
+                            # For videos, wait a bit more to ensure the file is completely written
+                            if media_type == "video":
+                                print(f"[WAIT] ⏳ Waiting 10 seconds to ensure video is completely written...")
+                                await asyncio.sleep(10)
+                                # Re-read the file to check if size changed
                                 with open(video_path, 'rb') as f:
-                                    media_bytes = f.read()
-                                
-                                # Validate file size - skip if too small (likely incomplete)
-                                if media_type == "video" and len(media_bytes) < 5 * 1024 * 1024:  # Less than 5MB
-                                    print(f"[SKIP] 🎥 Skipping small video from filesystem: {filename} ({len(media_bytes)} bytes) - likely incomplete")
-                                    continue
-                                
-                                print(f"[SUCCESS] 📊 Loaded {media_type}: {len(media_bytes)} bytes")
-                                
-                                # For videos, wait a bit more to ensure the file is completely written
-                                if media_type == "video":
-                                    print(f"[WAIT] ⏳ Waiting 10 seconds to ensure video is completely written...")
-                                    await asyncio.sleep(10)
-                                    # Re-read the file to check if size changed
-                                    with open(video_path, 'rb') as f:
-                                        new_media_bytes = f.read()
-                                    if len(new_media_bytes) != len(media_bytes):
-                                        print(f"[UPDATE] 📈 Video size changed from {len(media_bytes)} to {len(new_media_bytes)} bytes - using updated file")
-                                        media_bytes = new_media_bytes
-                                
-                                found_file = True
-                                break
+                                    new_media_bytes = f.read()
+                                if len(new_media_bytes) != len(media_bytes):
+                                    print(f"[UPDATE] 📈 Video size changed from {len(media_bytes)} to {len(new_media_bytes)} bytes - using updated file")
+                                    media_bytes = new_media_bytes
+                            
+                            found_file = True
+                            break
                         
                         if found_file:
                             # Exit the main polling loop
