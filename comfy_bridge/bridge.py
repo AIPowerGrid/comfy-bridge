@@ -28,12 +28,13 @@ class ComfyUIBridge:
         self.processing_jobs: set = set()
 
     async def process_once(self):
-        # Reset history check flag for new job
-        if hasattr(self, '_first_history_check'):
-            delattr(self, '_first_history_check')
-        # Reset filesystem check flag for new job
-        if hasattr(self, '_filesystem_checked'):
-            delattr(self, '_filesystem_checked')
+            # Reset flags for new job
+            if hasattr(self, '_first_history_check'):
+                delattr(self, '_first_history_check')
+            if hasattr(self, '_filesystem_checked'):
+                delattr(self, '_filesystem_checked')
+            if hasattr(self, '_debug_logged'):
+                delattr(self, '_debug_logged')
             
         job = await self.api.pop_job(self.supported_models)
         
@@ -95,24 +96,16 @@ class ComfyUIBridge:
                     try:
                         import glob
                         import os
-                        # Check both output root and video subdirectory with multiple patterns
+                        # Simplified search patterns to reduce noise
                         search_patterns = [
                             f"{Settings.COMFYUI_OUTPUT_DIR}/{expected_prefix}*.mp4",
-                            f"{Settings.COMFYUI_OUTPUT_DIR}/{expected_prefix}*.webm",
-                            f"{Settings.COMFYUI_OUTPUT_DIR}/**/{expected_prefix}*.mp4",
-                            f"{Settings.COMFYUI_OUTPUT_DIR}/**/{expected_prefix}*.webm",
-                            # Also check for files without the exact prefix (in case naming changed)
                             f"{Settings.COMFYUI_OUTPUT_DIR}/*{job_id}*.mp4",
-                            f"{Settings.COMFYUI_OUTPUT_DIR}/*{job_id}*.webm",
-                            f"{Settings.COMFYUI_OUTPUT_DIR}/**/*{job_id}*.mp4",
-                            f"{Settings.COMFYUI_OUTPUT_DIR}/**/*{job_id}*.webm",
                         ]
                         found_file = False
                         all_video_files = []
                         for pattern in search_patterns:
                             files = glob.glob(pattern, recursive=True)
                             if files:
-                                print(f"[DEBUG] 🔍 Found {len(files)} files matching pattern: {pattern}")
                                 for file_path in files:
                                     filename = os.path.basename(file_path)
                                     if filename.lower().endswith(('.mp4', '.webm', '.avi', '.mov', '.mkv')):
@@ -120,15 +113,13 @@ class ComfyUIBridge:
                                         try:
                                             file_size = os.path.getsize(file_path)
                                             all_video_files.append((file_path, filename, file_size))
-                                            print(f"[DEBUG] 📹 Video file: {filename} ({file_size} bytes)")
                                         except Exception as e:
-                                            print(f"[DEBUG] ⚠️ Could not get size for {filename}: {e}")
+                                            continue
                         
                         if all_video_files:
                             # Sort by file size (largest first) and pick the biggest one
                             all_video_files.sort(key=lambda x: x[2], reverse=True)
                             video_path, filename, file_size = all_video_files[0]
-                            print(f"[DEBUG] 🎯 Selected largest video file: {filename} ({file_size} bytes)")
                             
                             # Since we already filtered for video files, we know this is a video
                             media_type = "video"
@@ -144,8 +135,8 @@ class ComfyUIBridge:
                             
                             # For videos, wait a bit more to ensure the file is completely written
                             if media_type == "video":
-                                print(f"[WAIT] ⏳ Waiting 10 seconds to ensure video is completely written...")
-                                await asyncio.sleep(10)
+                                print(f"[WAIT] ⏳ Waiting 2 seconds to ensure video is completely written...")
+                                await asyncio.sleep(2)
                                 # Re-read the file to check if size changed
                                 with open(video_path, 'rb') as f:
                                     new_media_bytes = f.read()
