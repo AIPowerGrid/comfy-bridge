@@ -167,8 +167,9 @@ class ComfyUIBridge:
                 status_completed = status.get("completed", False)
                 outputs = data.get("outputs", {})
                 
-                # Debug logging to see what's happening
-                if elapsed > 60:  # Only debug after 60 seconds to avoid spam
+                # Debug logging to see what's happening (only once)
+                if elapsed > 60 and not hasattr(self, '_debug_logged'):
+                    self._debug_logged = True
                     print(f"[DEBUG] Status: {status}")
                     print(f"[DEBUG] Outputs keys: {list(outputs.keys()) if outputs else 'None'}")
                     if outputs:
@@ -224,19 +225,29 @@ class ComfyUIBridge:
                             
                             # Check file extension to determine if it's actually a video
                             if filename.lower().endswith(('.mp4', '.webm', '.avi', '.mov', '.mkv')):
+                                print(f"[DEBUG] 🎥 Found video file in images array: {filename}")
                                 # It's a video file in the images array
-                                video_resp = await self.comfy.get(f"/view?filename={filename}")
-                                video_resp.raise_for_status()
-                                media_bytes = video_resp.content
-                                
-                                # Only accept videos that are reasonably sized (at least 1MB for complete videos)
-                                # This helps filter out incomplete/interrupted videos
-                                if len(media_bytes) < 1 * 1024 * 1024:  # Less than 1MB
-                                    continue  # Skip silently to reduce log spam
-                                
-                                print(f"[SUCCESS] 🎥 Found complete video file: {filename}")
-                                media_type = "video"
-                                print(f"[SUCCESS] 📊 Video size: {len(media_bytes)} bytes")
+                                try:
+                                    video_resp = await self.comfy.get(f"/view?filename={filename}")
+                                    video_resp.raise_for_status()
+                                    media_bytes = video_resp.content
+                                    
+                                    print(f"[DEBUG] 📊 Video file size: {len(media_bytes)} bytes")
+                                    
+                                    # Only accept videos that are reasonably sized (at least 1MB for complete videos)
+                                    # This helps filter out incomplete/interrupted videos
+                                    if len(media_bytes) < 1 * 1024 * 1024:  # Less than 1MB
+                                        print(f"[DEBUG] ⚠️ Video too small, skipping: {len(media_bytes)} bytes")
+                                        continue  # Skip silently to reduce log spam
+                                    
+                                    print(f"[SUCCESS] 🎥 Found complete video file: {filename}")
+                                    media_type = "video"
+                                    print(f"[SUCCESS] 📊 Video size: {len(media_bytes)} bytes")
+                                    media_found = True
+                                    break
+                                except Exception as e:
+                                    print(f"[ERROR] ❌ Failed to fetch video file: {e}")
+                                    continue
                             else:
                                 # It's actually an image - but check if this is a video job
                                 if model_name and 'wan2' in model_name.lower():
