@@ -88,8 +88,8 @@ class ComfyUIBridge:
                 if int(elapsed) % 30 == 0 and int(elapsed) > 0:
                     print(f"[COMFYUI] processing... ({elapsed:.0f}s)")
                 
-                # FALLBACK: If history is empty after 2 minutes OR we're stuck with incomplete files, try filesystem
-                if (not data and elapsed > 120) or (data and elapsed > 120 and not hasattr(self, '_filesystem_checked')):
+                # FALLBACK: If history is empty after 5 minutes OR we're stuck with incomplete files, try filesystem (only once)
+                if ((not data and elapsed > 300) or (data and elapsed > 300)) and not hasattr(self, '_filesystem_checked'):
                     self._filesystem_checked = True  # Mark that we've checked filesystem for this job
                     print(f"[FALLBACK] 🔍 Checking filesystem for complete video for job {job_id}...")
                     expected_prefix = f"horde_{job_id}"
