@@ -161,7 +161,7 @@ async def process_workflow(
                 w = payload.get("width")
                 h = payload.get("height")
                 # Length can be specified directly or via the length parameter (from styles.json)
-                length = payload.get("video_length", payload.get("length", 81))  # Default to 81 if not specified
+                length = payload.get("length", payload.get("video_length", 81))  # Default to 81 if not specified
                 if isinstance(widgets, list):
                     if w and len(widgets) >= 1:
                         widgets[0] = w
