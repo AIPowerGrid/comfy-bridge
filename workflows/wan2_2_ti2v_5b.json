@@ -116,9 +116,9 @@
   },
   "55": {
     "inputs": {
-      "width": 1920,
-      "height": 1080,
-      "length": 160,
+      "width": 640,
+      "height": 640,
+      "length": 80,
       "batch_size": 1,
       "vae": [
         "39",
@@ -132,7 +132,7 @@
   },
   "57": {
     "inputs": {
-      "fps": 24,
+      "fps": 16,
       "images": [
         "8",
         0
