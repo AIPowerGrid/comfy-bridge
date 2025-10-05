@@ -309,7 +309,7 @@ async def process_workflow(
                     inputs["height"] = payload.get("height")
                 if "length" in inputs:
                     # Length can be specified directly or via the length parameter (from styles.json)
-                    inputs["length"] = payload.get("video_length", payload.get("length", 81))  # Default to 81 frames if not specified
+                    inputs["length"] = payload.get("length", payload.get("video_length", 81))  # Default to 81 frames if not specified
                 # Check for fps in the CreateVideo node
                 if "fps" in inputs and payload.get("fps"):
                     inputs["fps"] = payload.get("fps")
