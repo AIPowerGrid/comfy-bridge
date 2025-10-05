@@ -128,7 +128,7 @@ class ComfyUIBridge:
                                 media_bytes = f.read()
                             
                             # Validate file size - skip if too small (likely incomplete)
-                            if media_type == "video" and len(media_bytes) < 1 * 1024 * 1024:  # Less than 1MB
+                            if media_type == "video" and len(media_bytes) < 100 * 1024:  # Less than 100KB
                                 continue  # Skip silently to reduce log spam
                             
                             print(f"[SUCCESS] 📊 Loaded {media_type}: {len(media_bytes)} bytes")
@@ -198,9 +198,9 @@ class ComfyUIBridge:
                             video_resp.raise_for_status()
                             media_bytes = video_resp.content
                             
-                            # Only accept videos that are reasonably sized (at least 1MB for complete videos)
+                            # Only accept videos that are reasonably sized (at least 100KB for complete videos)
                             # This helps filter out incomplete/interrupted videos
-                            if len(media_bytes) < 1 * 1024 * 1024:  # Less than 1MB
+                            if len(media_bytes) < 100 * 1024:  # Less than 100KB
                                 continue  # Skip silently to reduce log spam
                             
                             print(f"[SUCCESS] 🎥 Found complete video file: {filename}")
@@ -225,9 +225,9 @@ class ComfyUIBridge:
                                     
                                     print(f"[DEBUG] 📊 Video file size: {len(media_bytes)} bytes")
                                     
-                                    # Only accept videos that are reasonably sized (at least 1MB for complete videos)
+                                    # Only accept videos that are reasonably sized (at least 100KB for complete videos)
                                     # This helps filter out incomplete/interrupted videos
-                                    if len(media_bytes) < 1 * 1024 * 1024:  # Less than 1MB
+                                    if len(media_bytes) < 100 * 1024:  # Less than 100KB
                                         print(f"[DEBUG] ⚠️ Video too small, skipping: {len(media_bytes)} bytes")
                                         continue  # Skip silently to reduce log spam
                                     
