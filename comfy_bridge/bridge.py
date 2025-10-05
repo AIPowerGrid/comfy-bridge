@@ -375,6 +375,13 @@ class ComfyUIBridge:
         except Exception as e:
             # Clean up job from processing set on any error
             self.processing_jobs.discard(job_id)
+            
+            # Cancel the job in the API to prevent other workers from picking it up
+            try:
+                await self.api.cancel_job(job_id)
+            except Exception as cancel_error:
+                print(f"[ERROR] ❌ Failed to cancel job {job_id}: {cancel_error}")
+            
             # Re-raise the exception so it can be handled by the caller
             raise
 

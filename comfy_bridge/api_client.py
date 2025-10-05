@@ -68,6 +68,21 @@ class APIClient:
             )
             raise
 
+    async def cancel_job(self, job_id: str) -> None:
+        """Cancel a job that was picked up but cannot be completed."""
+        payload = {"id": job_id}
+        
+        try:
+            response = await self.client.post(
+                "/v2/generate/cancel", headers=self.headers, json=payload
+            )
+            response.raise_for_status()
+            logger.info(f"Successfully cancelled job {job_id}")
+            print(f"[INFO] ✓ Cancelled job {job_id}")
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Failed to cancel job {job_id}: {e.response.status_code} - {e.response.text}")
+            print(f"[ERROR] ❌ Failed to cancel job {job_id}: {e.response.status_code} - {e.response.text}")
+
     async def submit_result(self, payload: Dict[str, Any]) -> None:
         """Submit a completed job result back to the AI Power Grid."""
         media_type = payload.get("media_type", "image")
