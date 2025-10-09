@@ -1,23 +1,63 @@
-version: '3.8'
-
 services:
+  # Management UI - Next.js web interface for model selection
+  management-ui:
+        build:
+          context: ./management-ui-nextjs
+          dockerfile: Dockerfile
+        container_name: comfy-bridge-ui
+        
+        # GPU access for detection
+        runtime: nvidia
+        environment:
+          - NVIDIA_VISIBLE_DEVICES=all
+          - NVIDIA_DRIVER_CAPABILITIES=utility
+          - COMFY_BRIDGE_PATH=/app/comfy-bridge
+          - MODELS_PATH=/app/ComfyUI/models
+          - ENV_FILE_PATH=/app/comfy-bridge/.env
+          - MODEL_CONFIGS_PATH=/app/comfy-bridge/model_configs.json
+          - GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH=/app/grid-image-model-reference
+          - CIVITAI_API_KEY=${CIVITAI_API_KEY:-}
+          - HUGGING_FACE_API_KEY=${HUGGING_FACE_API_KEY:-}
+        
+        ports:
+          - "5000:5000"  # Management UI
+        
+        volumes:
+          # Share .env file for reading/writing model selections
+          - ./.env:/app/comfy-bridge/.env
+          # Share model configs
+          - ./model_configs.json:/app/comfy-bridge/model_configs.json:ro
+          # Share download scripts
+          - ./download_models.py:/app/comfy-bridge/download_models.py:ro
+          - ./download_models_from_catalog.py:/app/comfy-bridge/download_models_from_catalog.py:ro
+          # Share utility scripts
+          - ./model_manager.py:/app/comfy-bridge/model_manager.py:ro
+          - ./get_gpu_info.py:/app/comfy-bridge/get_gpu_info.py:ro
+          # Access to models directory to check installed models
+          - models:/app/ComfyUI/models
+        
+        restart: unless-stopped
+        healthcheck:
+          test: ["CMD", "curl", "-f", "http://localhost:5000"]
+          interval: 30s
+          timeout: 10s
+          retries: 3
+          start_period: 20s
+        depends_on:
+          - comfy-bridge
+
+  # Main ComfyUI Bridge service
   comfy-bridge:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: comfy-bridge
     
-    # GPU support - requires nvidia-docker
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    
-    # Environment variables
+    # GPU support for NVIDIA GPUs (including Blackwell Pro)
+    runtime: nvidia
     environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
       - GRID_API_KEY=${GRID_API_KEY}
       - GRID_WORKER_NAME=${GRID_WORKER_NAME:-ComfyBridge-Worker}
       - COMFYUI_URL=http://localhost:8188
@@ -29,24 +69,28 @@ services:
       - GRID_MODEL=${GRID_MODEL:-}
       - GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH=${GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH:-}
       - COMFYUI_EXTRA_ARGS=${COMFYUI_EXTRA_ARGS:-}
+      - HUGGING_FACE_API_KEY=${HUGGING_FACE_API_KEY:-}
     
     # Ports
     ports:
       - "8188:8188"  # ComfyUI API
       - "8000:8000"  # ComfyUI Web UI (optional)
+      - "8001:8001"  # GPU Info Server
     
-    # Volumes for persistent storage
+    # Volumes for persistent storage - survives container removal
     volumes:
-      # ComfyUI models (mount your model directory)
-      - comfyui-models:/app/ComfyUI/models
-      # ComfyUI outputs
-      - comfyui-output:/app/ComfyUI/output
-      # ComfyUI inputs
-      - comfyui-input:/app/ComfyUI/input
+      # ComfyUI models - persistent storage for downloaded models
+      - models:/app/ComfyUI/models
+      # ComfyUI outputs - where generated images are saved
+      - output:/app/ComfyUI/output
+      # ComfyUI inputs - for input images
+      - input:/app/ComfyUI/input
+      # Model cache and metadata - for tracking downloads and checksums
+      - cache:/app/comfy-bridge/.cache
       # Workflows (optional: use local workflows)
       - ./workflows:/app/comfy-bridge/workflows:ro
       # Config file (optional)
-      # - ./.env:/app/comfy-bridge/.env:ro
+      - ./.env:/app/comfy-bridge/.env:ro
     
     # Restart policy
     restart: unless-stopped
@@ -67,10 +111,29 @@ services:
       start_period: 60s
 
 volumes:
-  comfyui-models:
+  # Persistent volumes that survive container removal
+  models:
     driver: local
-  comfyui-output:
+    driver_opts:
+      type: none
+      device: ${PWD}/persistent_volumes/models
+      o: bind
+  output:
     driver: local
-  comfyui-input:
+    driver_opts:
+      type: none
+      device: ${PWD}/persistent_volumes/output
+      o: bind
+  input:
     driver: local
+    driver_opts:
+      type: none
+      device: ${PWD}/persistent_volumes/input
+      o: bind
+  cache:
+    driver: local
+    driver_opts:
+      type: none
+      device: ${PWD}/persistent_volumes/cache
+      o: bind
 

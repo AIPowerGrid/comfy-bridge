@@ -1,0 +1,24 @@
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="32" height="32" fill="#000000"/>
+  
+  <!-- Impossible Cube Frame -->
+  <path d="M8 8 L24 8 L24 24 L8 24 Z M8 8 L8 24 M24 8 L24 24" 
+        stroke="#E5E5E5" stroke-width="2" fill="none"/>
+  
+  <!-- Inner cube lines creating impossible geometry -->
+  <path d="M8 8 L16 4 L24 8 M8 16 L16 12 L24 16 M8 24 L16 20 L24 24" 
+        stroke="#FF6B35" stroke-width="2" fill="none"/>
+  
+  <!-- Vertical connector -->
+  <path d="M16 4 L16 20" stroke="#FF6B35" stroke-width="2"/>
+  
+  <!-- Orange internal beams -->
+  <rect x="14" y="10" width="4" height="2" fill="#FF6B35"/>
+  <rect x="15" y="9" width="2" height="4" fill="#FF6B35"/>
+  <rect x="14.5" y="11" width="3" height="1" fill="#FF6B35"/>
+  
+  <!-- Additional impossible geometry lines -->
+  <path d="M8 8 L16 4 M8 16 L16 12 M8 24 L16 20" 
+        stroke="#FF6B35" stroke-width="1" fill="none"/>
+</svg>

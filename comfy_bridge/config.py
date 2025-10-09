@@ -6,8 +6,8 @@ load_dotenv()
 
 class Settings:
     GRID_API_KEY = os.getenv("GRID_API_KEY", "")
-    _GRID_MODELS_RAW = os.getenv("GRID_MODEL", "")
-    GRID_MODELS = [m.strip() for m in _GRID_MODELS_RAW.split(",") if m.strip()]
+    _WORKFLOW_MODELS_RAW = os.getenv("WORKFLOW_FILE", "")
+    GRID_MODELS = [m.strip() for m in _WORKFLOW_MODELS_RAW.split(",") if m.strip()]
     GRID_WORKER_NAME = os.getenv("GRID_WORKER_NAME", "ComfyUI-Bridge-Worker")
     COMFYUI_URL = os.getenv("COMFYUI_URL", "http://127.0.0.1:8000")
     GRID_API_URL = os.getenv("GRID_API_URL", "https://api.aipowergrid.io/api")

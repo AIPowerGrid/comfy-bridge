@@ -1,5 +1,5 @@
 # Multi-stage build for ComfyUI Bridge with integrated ComfyUI
-FROM nvidia/cuda:12.1.0-runtime-ubuntu22.04 as base
+FROM nvidia/cuda:12.1.0-runtime-ubuntu22.04 AS base
 
 # Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -52,12 +52,13 @@ RUN mkdir -p \
 WORKDIR /app/comfy-bridge
 COPY requirements.txt pyproject.toml ./
 RUN pip3 install --no-cache-dir -r requirements.txt && \
-    pip3 install --no-cache-dir -e .
+    pip3 install --no-cache-dir .
 
 # Copy comfy-bridge code
 COPY comfy_bridge ./comfy_bridge
 COPY workflows ./workflows
-COPY *.py ./
+COPY download_models.py download_models_from_catalog.py model_manager.py model_configs.json gpu_info_api.py get_gpu_info.py ./
+RUN chmod +x gpu_info_api.py get_gpu_info.py download_models_from_catalog.py
 
 # Create startup script
 COPY docker-entrypoint.sh /app/
