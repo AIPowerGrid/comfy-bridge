@@ -29,7 +29,7 @@ export async function POST(request: Request) {
           GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH: process.env.GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH || '/app/grid-image-model-reference'
         };
         
-        // Run the download script directly in this container
+        // Run the download script directly in this container (it has access to mounted files)
         const { stdout, stderr } = await execAsync(
           `python3 /app/comfy-bridge/download_models_from_catalog.py --models "${modelsList}" --models-path /app/ComfyUI/models`,
           {

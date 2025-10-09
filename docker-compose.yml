@@ -28,7 +28,6 @@ services:
           # Share model configs
           - ./model_configs.json:/app/comfy-bridge/model_configs.json:ro
           # Share download scripts
-          - ./download_models.py:/app/comfy-bridge/download_models.py:ro
           - ./download_models_from_catalog.py:/app/comfy-bridge/download_models_from_catalog.py:ro
           # Share utility scripts
           - ./model_manager.py:/app/comfy-bridge/model_manager.py:ro
