@@ -1,0 +1,126 @@
+{
+  "WAN2.2-T2V-A14B": {
+    "type": "checkpoints",
+    "filename": "wan2.2-t2v-a14b.safetensors",
+    "url": "https://huggingface.co/black-forest-labs/WAN2.2-T2V-A14B/resolve/main/wan2.2-t2v-a14b.safetensors",
+    "sha256": null,
+    "size_mb": 28000,
+    "description": "WAN2.2 Text-to-Video A14B model - Advanced video generation from text prompts",
+    "dependencies": []
+  },
+  "WAN2.2-T2V-A14B-HQ": {
+    "type": "checkpoints",
+    "filename": "wan2.2-t2v-a14b-hq.safetensors",
+    "url": "https://huggingface.co/black-forest-labs/WAN2.2-T2V-A14B-HQ/resolve/main/wan2.2-t2v-a14b-hq.safetensors",
+    "sha256": null,
+    "size_mb": 28000,
+    "description": "WAN2.2 Text-to-Video A14B High Quality model - Premium video generation with enhanced quality",
+    "dependencies": []
+  },
+  "WAN2.2-TI2V-B5": {
+    "type": "checkpoints",
+    "filename": "wan2.2-ti2v-b5.safetensors",
+    "url": "https://huggingface.co/black-forest-labs/WAN2.2-TI2V-B5/resolve/main/wan2.2-ti2v-b5.safetensors",
+    "sha256": null,
+    "size_mb": 10000,
+    "description": "WAN2.2 Text-to-Image-to-Video B5 model - Video generation from text and image inputs",
+    "dependencies": []
+  },
+  "FLUX.1-dev": {
+    "type": "checkpoints",
+    "filename": "flux1-dev.safetensors",
+    "url": "https://huggingface.co/black-forest-labs/FLUX.1-dev/resolve/main/flux1-dev.safetensors",
+    "sha256": null,
+    "size_mb": 23000,
+    "description": "FLUX.1 Dev text-to-image model - State-of-the-art image generation",
+    "dependencies": [
+      {
+        "type": "clip",
+        "filename": "t5xxl_fp16.safetensors",
+        "url": "https://huggingface.co/black-forest-labs/FLUX.1-dev/resolve/main/t5xxl_fp16.safetensors",
+        "sha256": null,
+        "size_mb": 12000
+      },
+      {
+        "type": "vae",
+        "filename": "ae.safetensors",
+        "url": "https://huggingface.co/black-forest-labs/FLUX.1-dev/resolve/main/ae.safetensors",
+        "sha256": null,
+        "size_mb": 340
+      }
+    ]
+  },
+  "FLUX.1-Krea-dev": {
+    "type": "checkpoints",
+    "filename": "flux1-krea-dev.safetensors",
+    "url": "https://huggingface.co/black-forest-labs/FLUX.1-Krea-dev/resolve/main/flux1-krea-dev.safetensors",
+    "sha256": null,
+    "size_mb": 23000,
+    "description": "FLUX.1 Krea Dev text-to-image model - Optimized for creative workflows",
+    "dependencies": [
+      {
+        "type": "clip",
+        "filename": "t5xxl_fp8.safetensors",
+        "url": "https://huggingface.co/black-forest-labs/FLUX.1-Krea-dev/resolve/main/t5xxl_fp8.safetensors",
+        "sha256": null,
+        "size_mb": 6000
+      },
+      {
+        "type": "vae",
+        "filename": "ae.safetensors",
+        "url": "https://huggingface.co/black-forest-labs/FLUX.1-Krea-dev/resolve/main/ae.safetensors",
+        "sha256": null,
+        "size_mb": 340
+      }
+    ]
+  },
+  "stable-diffusion-xl-base-1.0": {
+    "type": "checkpoints",
+    "filename": "sd_xl_base_1.0.safetensors",
+    "url": "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors",
+    "sha256": null,
+    "size_mb": 6700,
+    "description": "Stable Diffusion XL Base 1.0 - High-resolution image generation",
+    "dependencies": [
+      {
+        "type": "clip",
+        "filename": "text_encoder.safetensors",
+        "url": "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/text_encoder.safetensors",
+        "sha256": null,
+        "size_mb": 250
+      },
+      {
+        "type": "clip",
+        "filename": "text_encoder_2.safetensors",
+        "url": "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/text_encoder_2.safetensors",
+        "sha256": null,
+        "size_mb": 250
+      },
+      {
+        "type": "vae",
+        "filename": "vae.safetensors",
+        "url": "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/vae.safetensors",
+        "sha256": null,
+        "size_mb": 340
+      }
+    ]
+  },
+  "stable-diffusion-v1-5": {
+    "type": "checkpoints",
+    "filename": "v1-5-pruned-emaonly.safetensors",
+    "url": "https://huggingface.co/runwayml/stable-diffusion-v1-5/resolve/main/v1-5-pruned-emaonly.safetensors",
+    "sha256": null,
+    "size_mb": 4000,
+    "description": "Stable Diffusion v1.5 - Classic and reliable image generation",
+    "dependencies": []
+  },
+  "stable-diffusion-3-medium": {
+    "type": "checkpoints",
+    "filename": "sd3_medium.safetensors",
+    "url": "https://huggingface.co/stabilityai/stable-diffusion-3-medium/resolve/main/sd3_medium.safetensors",
+    "sha256": null,
+    "size_mb": 22000,
+    "description": "Stable Diffusion 3 Medium - Latest SD3 model with balanced performance",
+    "dependencies": []
+  }
+}

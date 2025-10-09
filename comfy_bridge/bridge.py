@@ -393,17 +393,21 @@ class ComfyUIBridge:
         
         await initialize_model_mapper(Settings.COMFYUI_URL)
 
-        # Prefer models derived from env workflows; if WORKFLOW_FILE is set, do not fall back to GRID_MODEL
+        # Prioritize WORKFLOW_FILE when set, otherwise use auto-detected models
         derived_models = get_horde_models()
-        if Settings.WORKFLOW_FILE:
+        if Settings.GRID_MODELS:
+            # WORKFLOW_FILE is explicitly set - use only those models
+            self.supported_models = Settings.GRID_MODELS
+            print(f"[STARTUP] 📋 Using models from WORKFLOW_FILE: {Settings.GRID_MODELS}")
+        elif Settings.WORKFLOW_FILE:
+            # WORKFLOW_FILE is set - use auto-detected models
             self.supported_models = derived_models
             if not self.supported_models:
                 print("[ERROR] ⚠️ No models resolved from WORKFLOW_FILE!")
         else:
+            # Fallback to auto-detected models
             if derived_models:
                 self.supported_models = derived_models
-            elif Settings.GRID_MODELS:
-                self.supported_models = Settings.GRID_MODELS
             else:
                 self.supported_models = []
                 
@@ -414,9 +418,8 @@ class ComfyUIBridge:
         if not self.supported_models:
             print("[ERROR] ❌ CRITICAL: No models configured! The bridge will not receive any jobs.")
             print("[ERROR] To fix this, either:")
-            print("[ERROR]   1. Set GRID_MODEL in your .env file, or")
-            print("[ERROR]   2. Set WORKFLOW_FILE in your .env file, or") 
-            print("[ERROR]   3. Ensure DEFAULT_WORKFLOW_MAP contains models")
+            print("[ERROR]   1. Set WORKFLOW_FILE in your .env file, or") 
+            print("[ERROR]   2. Ensure DEFAULT_WORKFLOW_MAP contains models")
 
         job_count = 0
         while True:

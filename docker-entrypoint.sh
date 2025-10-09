@@ -5,6 +5,30 @@ echo "================================================"
 echo "  ComfyUI Bridge with Integrated ComfyUI"
 echo "================================================"
 
+# Function to download required models
+download_models() {
+    echo "🤖 Checking configured models..."
+    cd /app/comfy-bridge
+    
+    # Check if GRID_MODEL is set and not empty
+    if [ -z "$GRID_MODEL" ] || [ "$GRID_MODEL" = "" ]; then
+        echo "ℹ️  No models configured in GRID_MODEL"
+        echo "   Please visit http://localhost:5000 to select models via the Management UI"
+        return 0
+    fi
+    
+    echo "📦 Downloading configured models..."
+    # Run the model download script
+    if python3 download_models.py; then
+        echo "✅ Model download completed successfully"
+    else
+        echo "⚠️  Model download had issues, but continuing..."
+        echo "   You can manage models via the UI at http://localhost:5000"
+        # Don't exit - allow container to continue
+        return 0
+    fi
+}
+
 # Function to check if ComfyUI is ready
 wait_for_comfyui() {
     echo "Waiting for ComfyUI to be ready..."
@@ -25,16 +49,53 @@ wait_for_comfyui() {
     return 1
 }
 
+# Download required models
+download_models
+
+# Start GPU info API in background
+echo "🔧 Starting GPU info API..."
+python3 /app/comfy-bridge/gpu_info_api.py > /tmp/gpu_api.log 2>&1 &
+GPU_API_PID=$!
+echo "GPU info API started with PID: $GPU_API_PID"
+sleep 2  # Give API time to start
+if ! ps -p $GPU_API_PID > /dev/null 2>&1; then
+    echo "⚠️  GPU API failed to start, check /tmp/gpu_api.log"
+    cat /tmp/gpu_api.log
+fi
+
+# Function to detect GPU availability
+detect_gpu() {
+    echo "🔍 Detecting GPU availability..."
+    if python3 -c "import torch; print('GPU available:', torch.cuda.is_available())" 2>/dev/null; then
+        if python3 -c "import torch; torch.cuda.is_available()" 2>/dev/null; then
+            echo "✅ GPU detected and available"
+            return 0
+        else
+            echo "⚠️  GPU not available, falling back to CPU"
+            return 1
+        fi
+    else
+        echo "⚠️  GPU detection failed, falling back to CPU"
+        return 1
+    fi
+}
+
 # Start ComfyUI in the background
 echo "Starting ComfyUI..."
 cd /app/ComfyUI
 
+# Detect GPU and set appropriate flags
+if detect_gpu; then
+    echo "🚀 Starting ComfyUI with GPU support..."
+    COMFYUI_ARGS="--listen 0.0.0.0 --port 8188 ${COMFYUI_EXTRA_ARGS}"
+else
+    echo "💻 Starting ComfyUI with CPU fallback..."
+    # Force CPU mode to avoid CUDA errors
+    COMFYUI_ARGS="--listen 0.0.0.0 --port 8188 --cpu ${COMFYUI_EXTRA_ARGS}"
+fi
+
 # Start ComfyUI with proper settings
-python3 main.py \
-    --listen 0.0.0.0 \
-    --port 8188 \
-    ${COMFYUI_EXTRA_ARGS} \
-    > /tmp/comfyui.log 2>&1 &
+python3 main.py ${COMFYUI_ARGS} > /tmp/comfyui.log 2>&1 &
 
 COMFYUI_PID=$!
 echo "ComfyUI started with PID: $COMFYUI_PID"
