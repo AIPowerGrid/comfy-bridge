@@ -57,8 +57,8 @@ RUN pip3 install --no-cache-dir -r requirements.txt && \
 # Copy comfy-bridge code
 COPY comfy_bridge ./comfy_bridge
 COPY workflows ./workflows
-COPY download_models.py download_models_from_catalog.py model_manager.py model_configs.json gpu_info_api.py get_gpu_info.py ./
-RUN chmod +x gpu_info_api.py get_gpu_info.py download_models_from_catalog.py
+COPY download_models_from_catalog.py model_manager.py model_configs.json get_gpu_info.py ./
+RUN chmod +x get_gpu_info.py download_models_from_catalog.py
 
 # Create startup script
 COPY docker-entrypoint.sh /app/
