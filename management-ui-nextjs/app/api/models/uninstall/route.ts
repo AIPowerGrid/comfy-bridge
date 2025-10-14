@@ -12,13 +12,44 @@ export async function POST(request: Request) {
   try {
     const { model_id } = await request.json();
     const modelsPath = process.env.MODELS_PATH || '/app/ComfyUI/models';
-    const repoPath = process.env.GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH || '/app/grid-image-model-reference';
+    const catalogPath = process.env.MODEL_CONFIGS_PATH || '/app/comfy-bridge/model_configs.json';
     const bridgePath = process.env.COMFY_BRIDGE_PATH || '/app/comfy-bridge';
     
     console.log('Uninstalling model:', model_id);
     
+    // First, stop hosting the model if it's currently being hosted
+    try {
+      const envFilePath = process.env.ENV_FILE_PATH || '/app/comfy-bridge/.env';
+      let envContent = await fs.readFile(envFilePath, 'utf-8');
+      
+      // Check if model is currently being hosted
+      const match = envContent.match(/^WORKFLOW_FILE=(.*)$/m);
+      let currentModels: string[] = [];
+      
+      if (match && match[1]) {
+        currentModels = match[1].split(',').map(s => s.trim()).filter(Boolean);
+      }
+      
+      // If model is being hosted, stop hosting it first
+      if (currentModels.includes(model_id)) {
+        console.log(`Stopping hosting for model: ${model_id}`);
+        currentModels = currentModels.filter(m => m !== model_id);
+        const newModelsValue = currentModels.join(',');
+        
+        // Update WORKFLOW_FILE
+        if (match) {
+          envContent = envContent.replace(/^WORKFLOW_FILE=.*$/m, `WORKFLOW_FILE=${newModelsValue}`);
+        }
+        
+        await fs.writeFile(envFilePath, envContent, 'utf-8');
+        console.log(`Model ${model_id} is no longer being hosted`);
+      }
+    } catch (hostingError) {
+      console.warn('Failed to stop hosting model:', hostingError);
+      // Continue with uninstall even if hosting stop fails
+    }
+    
     // Load model info from catalog
-    const catalogPath = path.join(repoPath, 'stable_diffusion.json');
     const catalogContent = await fs.readFile(catalogPath, 'utf-8');
     const catalog = JSON.parse(catalogContent);
     
@@ -27,35 +58,49 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Model not found in catalog' }, { status: 404 });
     }
     
-    const files = modelInfo.config?.files || [];
     const deletedFiles: string[] = [];
     
-    // Delete all files associated with this model
-    for (const file of files) {
-      const fileName = path.basename(file.path);
-      const fileType = file.file_type || 'checkpoints'; // Default to checkpoints
-      
-      // Map file types to directories
-      const typeToDir: { [key: string]: string } = {
-        'checkpoint': 'checkpoints',
-        'vae': 'vae',
-        'clip': 'clip',
-        'lora': 'loras',
-        'unet': 'unet',
-        'diffusion': 'diffusion_models',
-        'text_encoder': 'text_encoders',
-      };
-      
-      const targetDir = typeToDir[fileType] || 'checkpoints';
-      const filePath = path.join(modelsPath, targetDir, fileName);
+    // Delete main model file
+    const filename = modelInfo.filename;
+    const fileType = modelInfo.type || 'checkpoints';
+    
+    // Map file types to directories
+    const typeToDir: { [key: string]: string } = {
+      'checkpoints': 'checkpoints',
+      'vae': 'vae',
+      'clip': 'clip',
+      'loras': 'loras',
+      'unet': 'unet',
+      'diffusion_models': 'diffusion_models',
+      'text_encoders': 'text_encoders',
+    };
+    
+    const targetDir = typeToDir[fileType] || 'checkpoints';
+    const filePath = path.join(modelsPath, targetDir, filename);
+    
+    try {
+      await fs.access(filePath);
+      await fs.unlink(filePath);
+      deletedFiles.push(filePath);
+      console.log(`Deleted: ${filePath}`);
+    } catch (err) {
+      console.log(`File not found: ${filePath}`);
+    }
+    
+    // Delete dependency files
+    for (const dep of modelInfo.dependencies || []) {
+      const depFilename = dep.filename;
+      const depType = dep.type || 'checkpoints';
+      const depTargetDir = typeToDir[depType] || 'checkpoints';
+      const depFilePath = path.join(modelsPath, depTargetDir, depFilename);
       
       try {
-        await fs.access(filePath);
-        await fs.unlink(filePath);
-        deletedFiles.push(filePath);
-        console.log(`Deleted: ${filePath}`);
+        await fs.access(depFilePath);
+        await fs.unlink(depFilePath);
+        deletedFiles.push(depFilePath);
+        console.log(`Deleted dependency: ${depFilePath}`);
       } catch (err) {
-        console.log(`File not found: ${filePath}`);
+        console.log(`Dependency file not found: ${depFilePath}`);
       }
     }
     

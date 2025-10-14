@@ -13,15 +13,16 @@ from urllib.parse import urlparse
 import time
 
 def load_catalog():
-    """Load the model catalog from stable_diffusion.json"""
-    repo_path = os.environ.get('GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH', '/app/grid-image-model-reference')
-    catalog_path = os.path.join(repo_path, 'stable_diffusion.json')
+    """Load the model catalog from model_configs.json"""
+    catalog_path = '/app/comfy-bridge/model_configs.json'
     
     try:
         with open(catalog_path, 'r') as f:
-            return json.load(f)
+            catalog = json.load(f)
+            print(f"✅ Loaded catalog from: {catalog_path}")
+            return catalog
     except Exception as e:
-        print(f"Error loading catalog: {e}")
+        print(f"❌ Error loading catalog from {catalog_path}: {e}")
         return {}
 
 def get_api_headers(url, huggingface_key=None, civitai_key=None):
@@ -38,30 +39,64 @@ def get_api_headers(url, huggingface_key=None, civitai_key=None):
     return headers
 
 def download_file(url, filepath, headers=None, max_retries=3):
-    """Download a file with retry logic"""
+    """Download a file with retry logic and detailed progress"""
     if headers is None:
         headers = {}
     
+    def format_bytes(bytes_val):
+        """Format bytes to human readable format"""
+        if bytes_val < 1024:
+            return f"{bytes_val} B"
+        elif bytes_val < 1024 * 1024:
+            return f"{bytes_val / 1024:.1f} KB"
+        elif bytes_val < 1024 * 1024 * 1024:
+            return f"{bytes_val / (1024 * 1024):.1f} MB"
+        else:
+            return f"{bytes_val / (1024 * 1024 * 1024):.1f} GB"
+    
     for attempt in range(max_retries):
         try:
-            print(f"Downloading {os.path.basename(filepath)}... (attempt {attempt + 1})")
+            filename = os.path.basename(filepath)
+            print(f"Downloading {filename}... (attempt {attempt + 1})")
             
             response = requests.get(url, headers=headers, stream=True, timeout=300)
             response.raise_for_status()
             
             total_size = int(response.headers.get('content-length', 0))
             downloaded = 0
+            start_time = time.time()
+            last_update = start_time
             
             with open(filepath, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     if chunk:
                         f.write(chunk)
                         downloaded += len(chunk)
-                        if total_size > 0:
-                            percent = (downloaded / total_size) * 100
-                            print(f"\rProgress: {percent:.1f}%", end='', flush=True)
+                        current_time = time.time()
+                        
+                        # Update progress every 0.5 seconds to avoid spam
+                        if current_time - last_update >= 0.5 or downloaded == total_size:
+                            if total_size > 0:
+                                percent = (downloaded / total_size) * 100
+                                elapsed = current_time - start_time
+                                speed = downloaded / elapsed if elapsed > 0 else 0
+                                
+                                # Calculate ETA
+                                if speed > 0 and downloaded < total_size:
+                                    remaining = total_size - downloaded
+                                    eta_seconds = remaining / speed
+                                    eta_str = f"ETA: {int(eta_seconds//60)}m{int(eta_seconds%60)}s"
+                                else:
+                                    eta_str = "ETA: --"
+                                
+                                progress_str = (
+                                    f"\r[{percent:5.1f}%] {format_bytes(downloaded)}/{format_bytes(total_size)} "
+                                    f"({format_bytes(speed)}/s) {eta_str}"
+                                )
+                                print(progress_str, end='', flush=True)
+                            last_update = current_time
             
-            print(f"\n✅ Downloaded: {os.path.basename(filepath)}")
+            print(f"\n✅ Downloaded: {filename}")
             return True
             
         except Exception as e:
@@ -99,51 +134,69 @@ def download_model(model_id, catalog, models_path, huggingface_key=None, civitai
         return False
     
     model_info = catalog[model_id]
-    print(f"\n🔄 Downloading model: {model_info['name']}")
+    print(f"\n🔄 Downloading model: {model_id}")
     
-    downloads = model_info['config'].get('download', [])
-    if not downloads:
-        print(f"❌ No download URLs found for {model_id}")
+    # Get main model file info
+    filename = model_info.get('filename', f"{model_id}.safetensors")
+    url = model_info.get('url')
+    file_type = model_info.get('type', 'checkpoints')
+    
+    if not url:
+        print(f"❌ No download URL found for {model_id}")
         return False
     
     success_count = 0
-    total_files = len(downloads)
+    total_files = 1 + len(model_info.get('dependencies', []))
     
-    for download in downloads:
-        file_name = download['file_name']
-        file_url = download['file_url']
+    # Download main model file
+    target_dir = get_model_directory(file_type, models_path)
+    file_path = os.path.join(target_dir, filename)
+    
+    if os.path.exists(file_path):
+        print(f"⏭️  Skipping {filename} (already exists)")
+        success_count += 1
+    else:
+        print(f"Downloading {filename}... (attempt 1)")
+        headers = get_api_headers(url, huggingface_key, civitai_key)
+        if download_file(url, file_path, headers):
+            success_count += 1
+        else:
+            print(f"❌ Failed to download {filename}")
+    
+    # Download dependencies
+    for dep in model_info.get('dependencies', []):
+        dep_filename = dep.get('filename', '')
+        dep_url = dep.get('url', '')
+        dep_type = dep.get('type', 'checkpoints')
         
-        # Determine file type and directory
-        file_type = 'checkpoint'  # Default
-        for file_info in model_info['config'].get('files', []):
-            if file_info.get('path') == file_name or file_info.get('file_name') == file_name:
-                file_type = file_info.get('file_type', 'checkpoint')
-                break
+        if not dep_filename or not dep_url:
+            continue
         
-        target_dir = get_model_directory(file_type, models_path)
-        file_path = os.path.join(target_dir, file_name)
+        dep_target_dir = get_model_directory(dep_type, models_path)
+        dep_file_path = os.path.join(dep_target_dir, dep_filename)
         
         # Skip if file already exists
-        if os.path.exists(file_path):
-            print(f"⏭️  Skipping {file_name} (already exists)")
+        if os.path.exists(dep_file_path):
+            print(f"⏭️  Skipping {dep_filename} (already exists)")
             success_count += 1
             continue
         
         # Get appropriate headers
-        headers = get_api_headers(file_url, huggingface_key, civitai_key)
+        headers = get_api_headers(dep_url, huggingface_key, civitai_key)
         
-        # Download the file
-        if download_file(file_url, file_path, headers):
+        # Download the dependency
+        print(f"Downloading {dep_filename}... (attempt 1)")
+        if download_file(dep_url, dep_file_path, headers):
             success_count += 1
         else:
-            print(f"❌ Failed to download {file_name}")
+            print(f"❌ Failed to download {dep_filename}")
     
     if success_count == total_files:
-        print(f"✅ Successfully downloaded {model_info['name']}")
+        print(f"✅ Successfully downloaded {model_id}")
         return True
     else:
-        print(f"⚠️  Downloaded {success_count}/{total_files} files for {model_info['name']}")
-        return False
+        print(f"⚠️  Downloaded {success_count}/{total_files} files for {model_id}")
+        return success_count > 0
 
 def main():
     parser = argparse.ArgumentParser(description='Download models from AI Power Grid catalog')
