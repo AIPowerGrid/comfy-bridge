@@ -1,10 +1,13 @@
 import asyncio
 import logging
 import httpx
-import os
 import json
 import websockets
-from typing import List
+import time
+import glob
+import os
+from typing import List, Dict, Any, Optional, Set
+from pathlib import Path
 
 from .api_client import APIClient
 from .workflow import build_workflow
@@ -25,22 +28,169 @@ class ComfyUIBridge:
         self.comfy = httpx.AsyncClient(base_url=Settings.COMFYUI_URL, timeout=300)
         self.supported_models: List[str] = []
         # Track jobs currently being processed to prevent duplicates
-        self.processing_jobs: set = set()
+        self.processing_jobs: Set[str] = set()
+        # Cache for frequently accessed data
+        self._workflow_cache: Dict[str, Any] = {}
+        self._model_cache: Dict[str, bool] = {}
+    
+    def _reset_job_flags(self) -> None:
+        """Reset job-specific flags for a new job."""
+        for attr in ['_first_history_check', '_filesystem_checked', '_debug_logged']:
+            if hasattr(self, attr):
+                delattr(self, attr)
+    
+    async def _process_job_polling(self, prompt_id: str, job_id: str, model_name: str) -> tuple[bytes, str, str]:
+        """Optimized job polling with fallback mechanisms."""
+        start_time = time.time()
+        max_wait_time = 600  # 10 minutes timeout
+        
+        while True:
+            elapsed = time.time() - start_time
+            if elapsed > max_wait_time:
+                raise Exception(f"Job timed out after {max_wait_time}s")
+            
+            # Get job status
+            hist = await self.comfy.get(f"/history/{prompt_id}")
+            hist.raise_for_status()
+            data = hist.json().get(prompt_id, {})
+            
+            # Show progress every 30 seconds
+            if int(elapsed) % 30 == 0 and int(elapsed) > 0:
+                logger.info(f"Processing... ({elapsed:.0f}s)")
+            
+            # Check filesystem fallback after 5 minutes
+            if elapsed > 300 and not hasattr(self, '_filesystem_checked'):
+                self._filesystem_checked = True
+                result = await self._check_filesystem_fallback(job_id)
+                if result:
+                    return result
+            
+            # Check workflow completion
+            status = data.get("status", {})
+            status_completed = status.get("completed", False)
+            outputs = data.get("outputs", {})
+            
+            # Debug logging once after 60 seconds
+            if elapsed > 60 and not hasattr(self, '_debug_logged'):
+                self._debug_logged = True
+                logger.debug(f"Status: {status}, Outputs: {list(outputs.keys()) if outputs else 'None'}")
+            
+            # Check for errors
+            if status_completed and status.get("status_str") == "error":
+                error_msg = status.get("exception_message", "Unknown execution error")
+                raise Exception(f"ComfyUI workflow failed: {error_msg}")
+            
+            if status_completed and not outputs:
+                raise Exception("Workflow completed without outputs")
+            
+            # Process completed outputs
+            if outputs and status_completed:
+                result = await self._process_completed_outputs(outputs, model_name)
+                if result:
+                    return result
+            
+            # Adaptive polling interval
+            await asyncio.sleep(0.5 if elapsed > 200 else 1.0)
+    
+    async def _check_filesystem_fallback(self, job_id: str) -> Optional[tuple[bytes, str, str]]:
+        """Check filesystem for completed files as fallback."""
+        logger.info(f"Checking filesystem for complete files for job {job_id}")
+        expected_prefix = f"horde_{job_id}"
+        
+        search_patterns = [
+            f"{Settings.COMFYUI_OUTPUT_DIR}/{expected_prefix}*.mp4",
+            f"{Settings.COMFYUI_OUTPUT_DIR}/*{job_id}*.mp4",
+        ]
+        
+        video_files = []
+        for pattern in search_patterns:
+            files = glob.glob(pattern, recursive=True)
+            for file_path in files:
+                if Path(file_path).suffix.lower() in ['.mp4', '.webm', '.avi', '.mov', '.mkv']:
+                    try:
+                        file_size = os.path.getsize(file_path)
+                        video_files.append((file_path, Path(file_path).name, file_size))
+                    except OSError:
+                        continue
+        
+        if video_files:
+            # Sort by file size (largest first)
+            video_files.sort(key=lambda x: x[2], reverse=True)
+            video_path, filename, file_size = video_files[0]
+            
+            with open(video_path, 'rb') as f:
+                media_bytes = f.read()
+            
+            # Validate file size
+            if len(media_bytes) < 100 * 1024:  # Less than 100KB
+                return None
+            
+            logger.info(f"Found complete video: {len(media_bytes)} bytes")
+            
+            # Wait for file to be completely written
+            await asyncio.sleep(2)
+            with open(video_path, 'rb') as f:
+                new_media_bytes = f.read()
+            
+            return (new_media_bytes, "video", filename)
+        
+        return None
+    
+    async def _process_completed_outputs(self, outputs: Dict[str, Any], model_name: str) -> Optional[tuple[bytes, str, str]]:
+        """Process completed workflow outputs."""
+        for node_id, node_data in outputs.items():
+            # Handle videos
+            videos = node_data.get("videos", [])
+            if videos:
+                filename = videos[0]["filename"]
+                video_resp = await self.comfy.get(f"/view?filename={filename}")
+                video_resp.raise_for_status()
+                media_bytes = video_resp.content
+                
+                if len(media_bytes) >= 100 * 1024:  # At least 100KB
+                    logger.info(f"Found complete video: {filename}")
+                    return (media_bytes, "video", filename)
+            
+            # Handle images (check if they're actually videos)
+            imgs = node_data.get("images", [])
+            if imgs:
+                filename = imgs[0]["filename"]
+                
+                if filename.lower().endswith(('.mp4', '.webm', '.avi', '.mov', '.mkv')):
+                    # Video file in images array
+                    try:
+                        video_resp = await self.comfy.get(f"/view?filename={filename}")
+                        video_resp.raise_for_status()
+                        media_bytes = video_resp.content
+                        
+                        if len(media_bytes) >= 100 * 1024:
+                            logger.info(f"Found complete video: {filename}")
+                            return (media_bytes, "video", filename)
+                    except Exception as e:
+                        logger.error(f"Failed to fetch video file: {e}")
+                        continue
+                else:
+                    # Actual image
+                    if model_name and 'wan2' in model_name.lower():
+                        continue  # Skip images for video jobs
+                    
+                    img_resp = await self.comfy.get(f"/view?filename={filename}")
+                    img_resp.raise_for_status()
+                    media_bytes = img_resp.content
+                    logger.info(f"Found complete image: {filename}")
+                    return (media_bytes, "image", filename)
+        
+        return None
 
-    async def process_once(self):
+    async def process_once(self) -> None:
+        """Process a single job from the queue."""
         # Reset flags for new job
-        if hasattr(self, '_first_history_check'):
-            delattr(self, '_first_history_check')
-        if hasattr(self, '_filesystem_checked'):
-            delattr(self, '_filesystem_checked')
-        if hasattr(self, '_debug_logged'):
-            delattr(self, '_debug_logged')
+        self._reset_job_flags()
         
         job = await self.api.pop_job(self.supported_models)
         
         # Handle the case where no job is available
         if not job or not job.get("id"):
-            # This is normal - no jobs in queue
             return
             
         job_id = job.get("id")
@@ -48,19 +198,25 @@ class ComfyUIBridge:
         
         # Check if we're already processing this job (prevent duplicates)
         if job_id in self.processing_jobs:
-            print(f"[JOB] ⚠️ Job {job_id} already being processed, skipping duplicate")
+            logger.warning(f"Job {job_id} already being processed, skipping duplicate")
             return
             
         # Mark job as being processed
         self.processing_jobs.add(job_id)
-        print(f"[JOB] 🎯 Processing job {job_id} for model {model_name}")
+        logger.info(f"Processing job {job_id} for model {model_name}")
         
         try:
-            wf = await build_workflow(job)
+            # Use cached workflow if available
+            workflow_key = f"{model_name}_{job.get('params', {}).get('width', 512)}_{job.get('params', {}).get('height', 512)}"
+            if workflow_key in self._workflow_cache:
+                wf = self._workflow_cache[workflow_key]
+            else:
+                wf = await build_workflow(job)
+                self._workflow_cache[workflow_key] = wf
+                
             resp = await self.comfy.post("/prompt", json={"prompt": wf})
-            if resp.status_code != 200:
-                logger.error(f"ComfyUI error response: {resp.text}")
             resp.raise_for_status()
+            
             prompt_id = resp.json().get("prompt_id")
             if not prompt_id:
                 logger.error(f"No prompt_id for job {job_id}")
@@ -69,200 +225,10 @@ class ComfyUIBridge:
             # Start WebSocket listener for ComfyUI logs
             websocket_task = asyncio.create_task(self.listen_comfyui_logs(prompt_id))
             
-            import time
-            start_time = time.time()
-            max_wait_time = 600  # 10 minutes timeout
-            
-            while True:
-                # Check timeout
-                elapsed = time.time() - start_time
-                if elapsed > max_wait_time:
-                    logger.error(f"Timeout waiting for job completion after {elapsed:.0f}s")
-                    raise Exception(f"Job timed out after {max_wait_time}s")
-                
-                hist = await self.comfy.get(f"/history/{prompt_id}")
-                hist.raise_for_status()
-                data = hist.json().get(prompt_id, {})
-                
-                # Show fallback health check every 30 seconds (if WebSocket fails)
-                if int(elapsed) % 30 == 0 and int(elapsed) > 0:
-                    print(f"[COMFYUI] processing... ({elapsed:.0f}s)")
-                
-                # FALLBACK: If history is empty after 5 minutes OR we're stuck with incomplete files, try filesystem (only once)
-                if ((not data and elapsed > 300) or (data and elapsed > 300)) and not hasattr(self, '_filesystem_checked'):
-                    self._filesystem_checked = True  # Mark that we've checked filesystem for this job
-                    print(f"[FALLBACK] 🔍 Checking filesystem for complete video for job {job_id}...")
-                    expected_prefix = f"horde_{job_id}"
-                    try:
-                        import glob
-                        import os
-                        # Simplified search patterns to reduce noise
-                        search_patterns = [
-                            f"{Settings.COMFYUI_OUTPUT_DIR}/{expected_prefix}*.mp4",
-                            f"{Settings.COMFYUI_OUTPUT_DIR}/*{job_id}*.mp4",
-                        ]
-                        found_file = False
-                        all_video_files = []
-                        for pattern in search_patterns:
-                            files = glob.glob(pattern, recursive=True)
-                            if files:
-                                for file_path in files:
-                                    filename = os.path.basename(file_path)
-                                    if filename.lower().endswith(('.mp4', '.webm', '.avi', '.mov', '.mkv')):
-                                        # Get file size
-                                        try:
-                                            file_size = os.path.getsize(file_path)
-                                            all_video_files.append((file_path, filename, file_size))
-                                        except Exception as e:
-                                            continue
-                        
-                        if all_video_files:
-                            # Sort by file size (largest first) and pick the biggest one
-                            all_video_files.sort(key=lambda x: x[2], reverse=True)
-                            video_path, filename, file_size = all_video_files[0]
-                            
-                            # Since we already filtered for video files, we know this is a video
-                            media_type = "video"
-                            
-                            with open(video_path, 'rb') as f:
-                                media_bytes = f.read()
-                            
-                            # Validate file size - skip if too small (likely incomplete)
-                            if media_type == "video" and len(media_bytes) < 100 * 1024:  # Less than 100KB
-                                continue  # Skip silently to reduce log spam
-                            
-                            print(f"[SUCCESS] 📊 Loaded {media_type}: {len(media_bytes)} bytes")
-                            
-                            # For videos, wait a bit more to ensure the file is completely written
-                            if media_type == "video":
-                                print(f"[WAIT] ⏳ Waiting 2 seconds to ensure video is completely written...")
-                                await asyncio.sleep(2)
-                                # Re-read the file to check if size changed
-                                with open(video_path, 'rb') as f:
-                                    new_media_bytes = f.read()
-                                if len(new_media_bytes) != len(media_bytes):
-                                    print(f"[UPDATE] 📈 Video size changed from {len(media_bytes)} to {len(new_media_bytes)} bytes - using updated file")
-                                    media_bytes = new_media_bytes
-                            
-                            found_file = True
-                            break
-                        
-                        if found_file:
-                            # Exit the main polling loop
-                            break
-                    except Exception as e:
-                        logger.warning(f"Filesystem check failed: {e}")
-                
-                # Check if workflow completed
-                status = data.get("status", {})
-                status_completed = status.get("completed", False)
-                outputs = data.get("outputs", {})
-                
-                # Debug logging to see what's happening (only once)
-                if elapsed > 60 and not hasattr(self, '_debug_logged'):
-                    self._debug_logged = True
-                    print(f"[DEBUG] Status: {status}")
-                    print(f"[DEBUG] Outputs keys: {list(outputs.keys()) if outputs else 'None'}")
-                    if outputs:
-                        for node_id, node_data in outputs.items():
-                            print(f"[DEBUG] Node {node_id}: {list(node_data.keys())}")
-                            if "videos" in node_data:
-                                print(f"[DEBUG] Videos in node {node_id}: {node_data['videos']}")
-                            if "images" in node_data:
-                                print(f"[DEBUG] Images in node {node_id}: {node_data['images']}")
-                
-                # Check for execution errors in the status
-                if status_completed and status.get("status_str") == "error":
-                    error_msg = status.get("exception_message", "Unknown execution error")
-                    print(f"[COMFYUI] ❌ Workflow failed: {error_msg}")
-                    raise Exception(f"ComfyUI workflow failed: {error_msg}")
-                
-                # Check if the workflow has completed but failed
-                if status_completed and not outputs:
-                    logger.error(f"Workflow completed but no outputs found. Status: {status}")
-                    raise Exception("Workflow completed without outputs")
-                
-                if outputs and status_completed:
-                    # Only process outputs when the workflow is truly completed
-                    # This ensures we get the final video, not an interrupted one
-                    media_found = False
-                    for node_id, node_data in outputs.items():
-                        # Handle videos
-                        videos = node_data.get("videos", [])
-                        if videos:
-                            filename = videos[0]["filename"]
-                            
-                            # Check if this is a complete video by file size
-                            # Skip videos that are likely incomplete (too small or from interrupted prompts)
-                            video_resp = await self.comfy.get(f"/view?filename={filename}")
-                            video_resp.raise_for_status()
-                            media_bytes = video_resp.content
-                            
-                            # Only accept videos that are reasonably sized (at least 100KB for complete videos)
-                            # This helps filter out incomplete/interrupted videos
-                            if len(media_bytes) < 100 * 1024:  # Less than 100KB
-                                continue  # Skip silently to reduce log spam
-                            
-                            print(f"[SUCCESS] 🎥 Found complete video file: {filename}")
-                            media_type = "video"
-                            print(f"[SUCCESS] 📊 Video size: {len(media_bytes)} bytes")
-                            media_found = True
-                            break
-                        
-                        # Handle images (but check if they're actually videos)
-                        imgs = node_data.get("images", [])
-                        if imgs:
-                            filename = imgs[0]["filename"]
-                            
-                            # Check file extension to determine if it's actually a video
-                            if filename.lower().endswith(('.mp4', '.webm', '.avi', '.mov', '.mkv')):
-                                print(f"[DEBUG] 🎥 Found video file in images array: {filename}")
-                                # It's a video file in the images array
-                                try:
-                                    video_resp = await self.comfy.get(f"/view?filename={filename}")
-                                    video_resp.raise_for_status()
-                                    media_bytes = video_resp.content
-                                    
-                                    print(f"[DEBUG] 📊 Video file size: {len(media_bytes)} bytes")
-                                    
-                                    # Only accept videos that are reasonably sized (at least 100KB for complete videos)
-                                    # This helps filter out incomplete/interrupted videos
-                                    if len(media_bytes) < 100 * 1024:  # Less than 100KB
-                                        print(f"[DEBUG] ⚠️ Video too small, skipping: {len(media_bytes)} bytes")
-                                        continue  # Skip silently to reduce log spam
-                                    
-                                    print(f"[SUCCESS] 🎥 Found complete video file: {filename}")
-                                    media_type = "video"
-                                    print(f"[SUCCESS] 📊 Video size: {len(media_bytes)} bytes")
-                                    media_found = True
-                                    break
-                                except Exception as e:
-                                    print(f"[ERROR] ❌ Failed to fetch video file: {e}")
-                                    continue
-                            else:
-                                # It's actually an image - but check if this is a video job
-                                if model_name and 'wan2' in model_name.lower():
-                                    # This is a video job, skip image files
-                                    continue  # Skip silently to reduce log spam
-                                
-                                print(f"[SUCCESS] 🖼️ Found complete image file: {filename}")
-                                img_resp = await self.comfy.get(f"/view?filename={filename}")
-                                img_resp.raise_for_status()
-                                media_bytes = img_resp.content
-                                media_type = "image"
-                                print(f"[SUCCESS] 📊 Image size: {len(media_bytes)} bytes")
-                            media_found = True
-                            break
-                    
-                    # If we found media, exit the polling loop
-                    if media_found:
-                        break
-                        
-                # Reduce polling interval when we're close to completion to be more responsive
-                if elapsed > 200:  # After 200 seconds, poll more frequently
-                    await asyncio.sleep(0.5)  # Poll every 500ms
-                else:
-                    await asyncio.sleep(1)  # Normal 1 second polling
+            # Process the job with optimized polling
+            media_bytes, media_type, filename = await self._process_job_polling(
+                prompt_id, job_id, model_name
+            )
 
             # Ensure we're using the correct job ID from the job metadata
             job_id = job.get("id")

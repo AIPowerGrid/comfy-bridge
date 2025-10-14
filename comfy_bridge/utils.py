@@ -2,6 +2,7 @@ from typing import Any, Union
 import base64
 import random
 import os
+from pathlib import Path
 
 
 def generate_seed(provided: Any) -> int:
@@ -12,7 +13,7 @@ def generate_seed(provided: Any) -> int:
         return random.randint(1, 2**32 - 1)
 
 
-def encode_media(data: Union[str, bytes], media_type: str = "media") -> str:
+def encode_media(data: Union[str, bytes, Path], media_type: str = "media") -> str:
     """Encode image/video file or bytes to base64 string
     
     Args:
@@ -26,8 +27,10 @@ def encode_media(data: Union[str, bytes], media_type: str = "media") -> str:
         raw = data
     else:
         try:
-            with open(data, "rb") as f:
-                raw = f.read()
+            path = Path(data)
+            if not path.exists():
+                raise FileNotFoundError(f"{media_type} file not found: {path}")
+            raw = path.read_bytes()
         except Exception as e:
             raise ValueError(f"Unable to read {media_type} file '{data}': {e}")
     return base64.b64encode(raw).decode()
