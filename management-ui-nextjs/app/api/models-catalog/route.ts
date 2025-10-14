@@ -196,12 +196,33 @@ async function checkModelInstalled(modelId: string, files: ModelFile[], modelsPa
 
 export async function GET() {
   try {
-    const repoPath = process.env.GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH || '/app/grid-image-model-reference';
-    const modelsFilePath = path.join(repoPath, 'stable_diffusion.json');
+    const modelsFilePath = '/app/comfy-bridge/model_configs.json';
     const comfyUIModelsPath = process.env.MODELS_PATH || '/app/ComfyUI/models';
 
+    // Check if catalog file exists, if not trigger a sync
+    try {
+      await fs.access(modelsFilePath);
+    } catch (error) {
+      console.log('Catalog file not found, triggering sync...');
+      try {
+        const { exec } = await import('child_process');
+        const { promisify } = await import('util');
+        const execAsync = promisify(exec);
+        await execAsync('python3 /app/comfy-bridge/catalog_sync.py', { timeout: 30000 });
+      } catch (syncError) {
+        console.error('Failed to sync catalog:', syncError);
+        return NextResponse.json({ 
+          error: 'Catalog not available and sync failed', 
+          message: 'Please try again in a few moments',
+          models: [],
+          total_count: 0,
+          installed_count: 0,
+        }, { status: 503 });
+      }
+    }
+
     const data = await fs.readFile(modelsFilePath, 'utf-8');
-    const rawModels: Record<string, ModelInfo> = JSON.parse(data);
+    const rawModels: Record<string, any> = JSON.parse(data);
 
     // Get currently hosted models from WORKFLOW_FILE
     const hostedModels = await getHostedModels();
@@ -211,27 +232,50 @@ export async function GET() {
     
     for (const [modelId, modelInfo] of Object.entries(rawModels)) {
       try {
-        const { source, requiresHuggingface, requiresCivitai } = detectDownloadSource(modelInfo);
-        const installed = await checkModelInstalled(modelId, modelInfo.config?.files || [], comfyUIModelsPath);
-        const hosting = hostedModels.has(modelId);
+        // Convert simple catalog format to enhanced format
+        const enhancedModel: EnhancedModel = {
+          id: modelId,
+          name: modelId.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+          baseline: modelInfo.type || 'stable_diffusion',
+          type: modelInfo.type || 'checkpoints',
+          inpainting: false,
+          description: modelInfo.description || '',
+          version: '1.0',
+          style: 'generalist',
+          homepage: '',
+          nsfw: false,
+          download_all: false,
+          requirements: {},
+          config: {
+            files: [{
+              path: modelInfo.filename,
+              file_type: modelInfo.type || 'checkpoints'
+            }],
+            download_url: modelInfo.url
+          },
+          features_not_supported: [],
+          size_on_disk_bytes: modelInfo.size_mb ? modelInfo.size_mb * 1024 * 1024 : 0,
+          display_name: modelId.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+          size_gb: modelInfo.size_mb ? Math.round((modelInfo.size_mb / 1024) * 100) / 100 : 0,
+          vram_required_gb: modelInfo.size_mb ? Math.ceil(modelInfo.size_mb / 1000) : 8,
+          requires_huggingface_key: modelInfo.url?.includes('huggingface.co') || false,
+          requires_civitai_key: modelInfo.url?.includes('civitai.com') || false,
+          download_source: modelInfo.url?.includes('huggingface.co') ? 'huggingface' : 
+                          modelInfo.url?.includes('civitai.com') ? 'civitai' : 'other',
+          installed: false, // Will be checked below
+          hosting: hostedModels.has(modelId),
+          capability_type: 'Text-to-Image' // Default, could be enhanced based on model name
+        };
+
+        // Check if model is installed
+        const installed = await checkModelInstalled(modelId, enhancedModel.config.files, comfyUIModelsPath);
+        enhancedModel.installed = installed;
         
         if (installed) {
           installedCount++;
         }
         
-        enhancedModels.push({
-          ...modelInfo,
-          id: modelId,
-          display_name: modelInfo.name,
-          size_gb: modelInfo.size_on_disk_bytes ? Math.round((modelInfo.size_on_disk_bytes / (1024 * 1024 * 1024)) * 100) / 100 : 0,
-          vram_required_gb: estimateVramRequirement(modelInfo),
-          requires_civitai_key: requiresCivitai,
-          requires_huggingface_key: requiresHuggingface,
-          download_source: source,
-          installed,
-          hosting,
-          capability_type: getCapabilityType(modelInfo),
-        });
+        enhancedModels.push(enhancedModel);
       } catch (error) {
         console.error(`Error processing model ${modelId}:`, error);
         // Skip this model if there's an error
@@ -239,10 +283,10 @@ export async function GET() {
       }
     }
     
-    // Sort by baseline, then by name
+    // Sort by type, then by name
     enhancedModels.sort((a, b) => {
-      if (a.baseline !== b.baseline) {
-        return a.baseline.localeCompare(b.baseline);
+      if (a.type !== b.type) {
+        return a.type.localeCompare(b.type);
       }
       return a.name.localeCompare(b.name);
     });

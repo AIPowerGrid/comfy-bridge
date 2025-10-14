@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import GPUInfo from '@/components/GPUInfo';
 import DiskSpace from '@/components/DiskSpace';
-import ModelGrid from '@/components/ModelGrid';
+import ModelDetailView from '@/components/ModelDetailView';
 import Header from '@/components/Header';
 import StatusMessage from '@/components/StatusMessage';
 import APIKeyEditor from '@/components/APIKeyEditor';
@@ -18,12 +18,13 @@ export default function Home() {
   const [catalog, setCatalog] = useState<any>(null);
   const [apiKeys, setApiKeys] = useState<any>({ huggingface: '', civitai: '' });
   const [gridConfig, setGridConfig] = useState<any>({ gridApiKey: '', workerName: '', aipgWallet: '' });
-  const [selectedModels, setSelectedModels] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState<'all' | 'compatible' | 'selected'>('compatible');
   const [styleFilter, setStyleFilter] = useState<'all' | 'text-to-image' | 'text-to-video' | 'image-to-video' | 'image-to-image' | 'anime' | 'realistic' | 'generalist' | 'artistic' | 'video'>('all');
   const [loading, setLoading] = useState(true);
   const [statusMessage, setStatusMessage] = useState<{type: 'success' | 'error' | 'info', message: string} | null>(null);
   const [showGettingStarted, setShowGettingStarted] = useState(false);
+  const [isModelsCollapsed, setIsModelsCollapsed] = useState(false);
+  const [isApiKeysCollapsed, setIsApiKeysCollapsed] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -69,15 +70,6 @@ export default function Home() {
     setTimeout(() => setStatusMessage(null), 5000);
   };
 
-  const toggleModel = (modelName: string) => {
-    const newSelected = new Set(selectedModels);
-    if (newSelected.has(modelName)) {
-      newSelected.delete(modelName);
-    } else {
-      newSelected.add(modelName);
-    }
-    setSelectedModels(newSelected);
-  };
 
   const handleSaveAPIKeys = async (keys: { huggingface: string; civitai: string }) => {
     try {
@@ -209,53 +201,6 @@ export default function Home() {
     }
   };
 
-  const handleSaveAndDownload = async () => {
-    try {
-      // Check if we have required API keys
-      const selectedModelsList = Array.from(selectedModels);
-      const modelsNeedingKeys = catalog?.models?.filter((m: any) => selectedModelsList.includes(m.id)) || [];
-      
-      const needsHF = modelsNeedingKeys.some((m: any) => m.requires_huggingface_key);
-      const needsCivitai = modelsNeedingKeys.some((m: any) => m.requires_civitai_key);
-      
-      if (needsHF && !apiKeys.huggingface) {
-        showStatus('error', 'Some models need a HuggingFace account. Get a free key above and paste it in.');
-        return;
-      }
-      
-      if (needsCivitai && !apiKeys.civitai) {
-        showStatus('error', 'Some models need a Civitai account. Get a free key above and paste it in.');
-        return;
-      }
-      
-      showStatus('info', 'Starting download... This may take several minutes.');
-
-      // Trigger download
-      const downloadRes = await fetch('/api/models/download', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          models: selectedModelsList,
-        }),
-      });
-
-      const result = await downloadRes.json();
-
-      if (result.success) {
-        showStatus('success', 'Models downloaded successfully! Your AI worker is ready.');
-        await loadData(); // Reload to update installed status
-      } else {
-        showStatus('error', 'Download failed: ' + (result.error || 'Unknown error'));
-      }
-    } catch (error: any) {
-      showStatus('error', 'Error: ' + error.message);
-    }
-  };
-
-  const clearSelection = () => {
-    setSelectedModels(new Set());
-  };
-
   const handleUninstall = async (modelId: string) => {
     if (!confirm(`Are you sure you want to remove ${modelId}? This will delete all associated files.`)) {
       return;
@@ -349,21 +294,58 @@ export default function Home() {
             />
             
             {/* API Keys Section */}
-            <div className="bg-gray-900 rounded-xl p-6 border border-gray-700">
-              <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
-                <svg className="w-6 h-6 text-aipg-orange" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-                </svg>
-                API Keys Setup
-              </h2>
-              <p className="text-gray-400 mb-4">
-                Some AI models require API keys to download. Don't worry - these are free to get!
-              </p>
-              <APIKeyEditor
-                huggingfaceKey={apiKeys.huggingface || ''}
-                civitaiKey={apiKeys.civitai || ''}
-                onSave={handleSaveAPIKeys}
-              />
+            <div className="bg-gray-900 rounded-xl border border-gray-700 mt-8">
+              {/* Collapsible Header */}
+              <div
+                className="flex items-center justify-between p-6 cursor-pointer hover:bg-gray-800/30 transition-colors"
+                onClick={() => setIsApiKeysCollapsed(!isApiKeysCollapsed)}
+              >
+                <div className="flex items-center gap-3">
+                  <svg className="w-6 h-6 text-aipg-orange" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                  </svg>
+                  <div>
+                    <h2 className="text-2xl font-bold text-white">API Keys Setup</h2>
+                    <p className="text-sm text-gray-400">
+                      {apiKeys.huggingface || apiKeys.civitai ? '✓ API keys configured' : 'Configure API keys for model downloads'}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {(apiKeys.huggingface || apiKeys.civitai) && (
+                    <span className="px-3 py-1 text-xs bg-green-500/20 text-green-400 rounded-full border border-green-500/50">
+                      Configured
+                    </span>
+                  )}
+                  <svg
+                    className={`w-5 h-5 text-gray-400 transition-transform ${isApiKeysCollapsed ? 'rotate-180' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </div>
+
+              {/* Collapsible Content */}
+              <motion.div
+                initial={false}
+                animate={{ height: isApiKeysCollapsed ? 0 : 'auto' }}
+                transition={{ duration: 0.3 }}
+                className="overflow-hidden"
+              >
+                <div className="px-6 pb-6">
+                  <p className="text-gray-400 mb-4">
+                    Some AI models require API keys to download. Don't worry - these are free to get!
+                  </p>
+                  <APIKeyEditor
+                    huggingfaceKey={apiKeys.huggingface || ''}
+                    civitaiKey={apiKeys.civitai || ''}
+                    onSave={handleSaveAPIKeys}
+                  />
+                </div>
+              </motion.div>
             </div>
             
             {/* API Key Warning */}
@@ -374,46 +356,74 @@ export default function Home() {
             />
             
             {/* Model Selection */}
-            <div className="bg-gray-900 rounded-xl p-6 border border-gray-700">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold flex items-center gap-2">
+            <div className="bg-gray-900 rounded-xl border border-gray-700">
+              {/* Collapsible Header */}
+              <div 
+                className="flex items-center justify-between p-6 cursor-pointer hover:bg-gray-800/30 transition-colors"
+                onClick={() => setIsModelsCollapsed(!isModelsCollapsed)}
+              >
+                <div className="flex items-center gap-3">
                   <svg className="w-6 h-6 text-aipg-orange" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                   </svg>
-                  Choose Your AI Models
-                </h2>
-                <div className="text-sm text-gray-400">
-                  <span className="font-semibold text-aipg-orange">{catalog?.total_count || 0}</span> models available
+                  <div>
+                    <h2 className="text-2xl font-bold text-white">Choose Your AI Models</h2>
+                    <p className="text-sm text-gray-400">
+                      {catalog?.models ? 
+                        `${catalog.models.filter((m: any) => {
+                          const maxVram = gpuInfo?.gpus?.[0]?.vram_available_gb || gpuInfo?.total_memory_gb || 0;
+                          return m.vram_required_gb <= maxVram;
+                        }).length} models compatible (${catalog.total_count || 0} models available)` :
+                        'Select AI models for your worker'
+                      }
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
                   {catalog?.installed_count > 0 && (
-                    <span className="ml-3">
-                      • <span className="font-semibold text-green-400">{catalog.installed_count}</span> installed
+                    <span className="px-3 py-1 text-xs bg-blue-500/20 text-blue-400 rounded-full border border-blue-500/50">
+                      {catalog.installed_count} installed
                     </span>
                   )}
+                  <svg 
+                    className={`w-5 h-5 text-gray-400 transition-transform ${isModelsCollapsed ? 'rotate-180' : ''}`}
+                    fill="none" 
+                    stroke="currentColor" 
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
                 </div>
               </div>
-              
-              <p className="text-gray-400 mb-6">
-                Select the AI models you want to run on your worker. Each model is specialized for different types of content creation.
-              </p>
-              
-              <ModelGrid
-                catalog={catalog}
-                selectedModels={selectedModels}
-                diskSpace={diskSpace}
-                filter={filter}
-                styleFilter={styleFilter}
-                gpuInfo={gpuInfo}
-                onToggleModel={toggleModel}
-                onFilterChange={setFilter}
-                onStyleFilterChange={setStyleFilter}
-                onUninstall={handleUninstall}
-                onHost={handleHost}
-                onUnhost={handleUnhost}
-                onDownload={(modelId) => handleDownloadSingle(modelId, false)}
-                onDownloadAndHost={(modelId) => handleDownloadSingle(modelId, true)}
-                onSave={handleSaveAndDownload}
-                onClear={clearSelection}
-              />
+
+              {/* Collapsible Content */}
+              <motion.div
+                initial={false}
+                animate={{ height: isModelsCollapsed ? 0 : 'auto' }}
+                transition={{ duration: 0.3 }}
+                className="overflow-hidden"
+              >
+                <div className="px-6 pb-6">
+                  <p className="text-gray-400 mb-6">
+                    Select the AI models you want to run on your worker. Each model is specialized for different types of content creation.
+                  </p>
+                  
+                  <ModelDetailView
+                    catalog={catalog}
+                    diskSpace={diskSpace}
+                    filter={filter}
+                    styleFilter={styleFilter}
+                    gpuInfo={gpuInfo}
+                    onFilterChange={setFilter}
+                    onStyleFilterChange={setStyleFilter}
+                    onUninstall={handleUninstall}
+                    onHost={handleHost}
+                    onUnhost={handleUnhost}
+                    onDownload={(modelId) => handleDownloadSingle(modelId, false)}
+                    onDownloadAndHost={(modelId) => handleDownloadSingle(modelId, true)}
+                  />
+                </div>
+              </motion.div>
             </div>
           </div>
         </div>
