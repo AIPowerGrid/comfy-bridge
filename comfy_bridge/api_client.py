@@ -13,11 +13,17 @@ logging.getLogger("httpcore").setLevel(logging.CRITICAL)
 class APIClient:
     def __init__(self):
         Settings.validate()
-        self.client = httpx.AsyncClient(base_url=Settings.GRID_API_URL, timeout=60)
+        self.client = httpx.AsyncClient(
+            base_url=Settings.GRID_API_URL, 
+            timeout=60,
+            limits=httpx.Limits(max_keepalive_connections=5, max_connections=10)
+        )
         self.headers = {
             "apikey": Settings.GRID_API_KEY,
             "Content-Type": "application/json",
         }
+        # Cache for job metadata to reduce API calls
+        self._job_cache: Dict[str, Dict[str, Any]] = {}
 
     async def pop_job(self, models: Optional[List[str]] = None) -> Dict[str, Any]:
         payload: Dict[str, Any] = {
@@ -44,10 +50,7 @@ class APIClient:
         if models:
             payload["models"] = models
 
-        logger.info(f"Polling for jobs with models: {payload.get('models', 'None')}")
-        logger.debug(f"pop_job sending payload: {payload}")
-        print(f"[DEBUG] pop_job sending payload: {payload}")
-        print(f"[INFO] Polling for jobs with {len(payload.get('models', []))} models: {payload.get('models', [])}")
+        logger.debug(f"Polling for jobs with {len(payload.get('models', []))} models")
         
         try:
             response = await self.client.post(
@@ -56,10 +59,12 @@ class APIClient:
             response.raise_for_status()
             result = response.json()
             
-            # Only log when we actually get a job
+            # Cache job metadata for potential reuse
             if result.get("id"):
-                logger.info(f"Received job {result.get('id')} for model {result.get('model', 'unknown')}")
-                print(f"[INFO] ✓ Got job {result.get('id')} for model {result.get('model', 'unknown')}")
+                job_id = result.get("id")
+                self._job_cache[job_id] = result
+                logger.info(f"Received job {job_id} for model {result.get('model', 'unknown')}")
+            
             return result
         except httpx.HTTPStatusError as e:
             logger.error(f"pop_job payload: {payload}")
@@ -85,29 +90,23 @@ class APIClient:
 
     async def submit_result(self, payload: Dict[str, Any]) -> None:
         """Submit a completed job result back to the AI Power Grid."""
+        job_id = payload.get("id")
         media_type = payload.get("media_type", "image")
         
-        # For video submissions, we need a consistent approach that was working before
-        # Don't modify headers or add any special handling that might break completion reporting
+        logger.info(f"Submitting {media_type} result for job {job_id}")
         
-        # Log detailed information about the payload for debugging
-        logger.info(f"Submitting {media_type} result to API")
-        response = await self.client.post(
+        try:
+            response = await self.client.post(
                 "/v2/generate/submit", headers=self.headers, json=payload
-        )
+            )
+            response.raise_for_status()
             
-        # Handle response
-        logger.info(f"API response status: {response.status_code}")
-        
-        if response.status_code == 200:
-            logger.info("API submission successful")
-            try:
-                resp_data = response.json()
-                logger.info(f"API response: {resp_data}")
-            except:
-                logger.info(f"API response text: {response.text}")
-        else:
-            logger.error(f"API error response status: {response.status_code}")
-            logger.error(f"API error response: {response.text}")
+            # Clean up job cache
+            if job_id in self._job_cache:
+                del self._job_cache[job_id]
             
-        response.raise_for_status()
+            logger.info(f"Successfully submitted {media_type} result for job {job_id}")
+            
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Failed to submit result for job {job_id}: {e.response.status_code} - {e.response.text}")
+            raise
