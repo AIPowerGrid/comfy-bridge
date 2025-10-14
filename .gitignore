@@ -40,4 +40,4 @@ bridge_log.txt
 # OS specific
 .DS_Store
 Thumbs.db 
-persistent_volumes/*
+*/persistent_volumes/
