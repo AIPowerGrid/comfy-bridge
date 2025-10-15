@@ -33,6 +33,42 @@ export default function GridConfigEditor({
 
   const isComplete = localGridApiKey && localWorkerName && localAipgWallet;
 
+  // Load validation state from localStorage on mount and when API key changes
+  useEffect(() => {
+    const savedValidation = localStorage.getItem('grid-api-key-validation');
+    if (savedValidation) {
+      try {
+        const { validatedKey, isValid } = JSON.parse(savedValidation);
+        if (validatedKey === localGridApiKey && isValid) {
+          setTokenValid(true);
+          setLastValidatedKey(validatedKey);
+        } else {
+          setTokenValid(false);
+          setLastValidatedKey('');
+        }
+      } catch (error) {
+        console.error('Error parsing saved validation state:', error);
+        setTokenValid(false);
+        setLastValidatedKey('');
+      }
+    } else {
+      setTokenValid(false);
+      setLastValidatedKey('');
+    }
+  }, [localGridApiKey]);
+
+  // Save validation state to localStorage when it changes
+  useEffect(() => {
+    if (lastValidatedKey && tokenValid) {
+      localStorage.setItem('grid-api-key-validation', JSON.stringify({
+        validatedKey: lastValidatedKey,
+        isValid: tokenValid
+      }));
+    } else if (!tokenValid) {
+      localStorage.removeItem('grid-api-key-validation');
+    }
+  }, [lastValidatedKey, tokenValid]);
+
   // Reset validation when API key changes
   useEffect(() => {
     if (localGridApiKey !== lastValidatedKey) {
