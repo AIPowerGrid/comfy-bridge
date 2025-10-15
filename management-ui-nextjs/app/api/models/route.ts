@@ -19,6 +19,11 @@ interface ModelConfig {
 function estimateVramRequirement(modelName: string, sizeGb: number): number {
   const lowerName = modelName.toLowerCase();
   
+  // Wan2.2 video models (large disk size but moderate VRAM requirement)
+  if (lowerName.includes('wan2.2-t2v-a14b') || lowerName.includes('wan2_2_t2v_14b')) return 16;
+  if (lowerName.includes('wan2.2_ti2v_5b') || lowerName.includes('wan2_2_ti2v_5b')) return 12;
+  
+  // Other models
   if (lowerName.includes('flux')) return 12;
   if (lowerName.includes('sdxl') || lowerName.includes('xl')) return 8;
   if (lowerName.includes('sd3')) return 10;
@@ -91,12 +96,12 @@ export async function GET() {
     const enhanced: Record<string, any> = {};
     
     for (const [modelName, config] of Object.entries(configs)) {
-      const sizeGb = (config.size_mb || 0) / (1024 * 1024); // Convert MB to GB
+      const sizeGb = (config.size_mb || 0) / 1024; // Convert MB to GB
       let depSizeGb = 0;
       
       if (config.dependencies) {
         depSizeGb = config.dependencies.reduce((sum, dep) => {
-          return sum + ((dep.size_mb || 0) / (1024 * 1024)); // Convert MB to GB
+          return sum + ((dep.size_mb || 0) / 1024); // Convert MB to GB
         }, 0);
       }
       
@@ -108,7 +113,7 @@ export async function GET() {
         size_gb: Math.round(totalSizeGb * 100) / 100,
         vram_required_gb: estimateVramRequirement(modelName, totalSizeGb),
         category: categorizeModel(modelName),
-        description: generateDescription(modelName),
+        description: (config as any).description || generateDescription(modelName),
         installed: installed.includes(modelName),
         selected: selected.includes(modelName),
       };
