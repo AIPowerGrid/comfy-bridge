@@ -37,6 +37,9 @@ SETUP_NOTES.md
 *.log
 bridge_log.txt
 
+# API response cache files
+models_response.json
+
 # OS specific
 .DS_Store
 Thumbs.db 
