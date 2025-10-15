@@ -8,6 +8,7 @@ import json
 import subprocess
 import sys
 import os
+import math
 from typing import Dict, List, Any
 
 def get_nvidia_gpu_info() -> Dict[str, Any]:
@@ -32,9 +33,9 @@ def get_nvidia_gpu_info() -> Dict[str, Any]:
                         'memory_used_mb': int(parts[4]),
                         'temperature_c': int(parts[5]) if parts[5] != 'N/A' else None,
                         'utilization_percent': int(parts[6]) if parts[6] != 'N/A' else None,
-                        'memory_gb': round(int(parts[2]) / 1024, 1),
-                        'memory_free_gb': round(int(parts[3]) / 1024, 1),
-                        'memory_used_gb': round(int(parts[4]) / 1024, 1)
+                        'memory_gb': math.ceil(int(parts[2]) / 1024),  # Round UP to nearest GB
+                        'memory_free_gb': math.ceil(int(parts[3]) / 1024),  # Round UP to nearest GB
+                        'memory_used_gb': math.ceil(int(parts[4]) / 1024)  # Round UP to nearest GB
                     })
         
         return {
