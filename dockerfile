@@ -57,6 +57,7 @@ RUN pip3 install --no-cache-dir -r requirements.txt && \
 # Copy comfy-bridge code
 COPY comfy_bridge ./comfy_bridge
 COPY workflows ./workflows
+COPY tests ./tests
 COPY download_models_from_catalog.py model_manager.py model_configs.json get_gpu_info.py gpu_info_api.py catalog_sync.py start_catalog_sync.sh ./
 RUN chmod +x get_gpu_info.py download_models_from_catalog.py gpu_info_api.py catalog_sync.py start_catalog_sync.sh
 

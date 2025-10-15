@@ -25,8 +25,8 @@ services:
         volumes:
           # Share .env file for reading/writing model selections
           - ./.env:/app/comfy-bridge/.env
-          # Share model configs
-          - ./model_configs.json:/app/comfy-bridge/model_configs.json:ro
+          # Share model configs (read-write so it can be updated by catalog sync)
+          - ./model_configs.json:/app/comfy-bridge/model_configs.json
           # Share download scripts
           - ./download_models_from_catalog.py:/app/comfy-bridge/download_models_from_catalog.py:ro
           # Share utility scripts
@@ -66,7 +66,7 @@ services:
       - GRID_MAX_PIXELS=${GRID_MAX_PIXELS:-1048576}
       - WORKFLOW_FILE=${WORKFLOW_FILE:-}
       - GRID_MODEL=${GRID_MODEL:-}
-      - GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH=${GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH:-}
+      - GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH=/app/grid-image-model-reference
       - COMFYUI_EXTRA_ARGS=${COMFYUI_EXTRA_ARGS:-}
       - HUGGING_FACE_API_KEY=${HUGGING_FACE_API_KEY:-}
     
@@ -90,6 +90,10 @@ services:
       - ./workflows:/app/comfy-bridge/workflows:ro
       # Config file (optional)
       - ./.env:/app/comfy-bridge/.env:ro
+      # Model configs (shared with management-ui)
+      - ./model_configs.json:/app/comfy-bridge/model_configs.json
+      # Grid image model reference repository
+      - ../grid-image-model-reference:/app/grid-image-model-reference:ro
     
     # Restart policy
     restart: unless-stopped

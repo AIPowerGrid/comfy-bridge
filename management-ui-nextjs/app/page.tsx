@@ -18,7 +18,7 @@ export default function Home() {
   const [catalog, setCatalog] = useState<any>(null);
   const [apiKeys, setApiKeys] = useState<any>({ huggingface: '', civitai: '' });
   const [gridConfig, setGridConfig] = useState<any>({ gridApiKey: '', workerName: '', aipgWallet: '' });
-  const [filter, setFilter] = useState<'all' | 'compatible' | 'selected'>('compatible');
+  const [filter, setFilter] = useState<'all' | 'compatible' | 'installed'>('compatible');
   const [styleFilter, setStyleFilter] = useState<'all' | 'text-to-image' | 'text-to-video' | 'image-to-video' | 'image-to-image' | 'anime' | 'realistic' | 'generalist' | 'artistic' | 'video'>('all');
   const [loading, setLoading] = useState(true);
   const [statusMessage, setStatusMessage] = useState<{type: 'success' | 'error' | 'info', message: string} | null>(null);
@@ -373,7 +373,7 @@ export default function Home() {
                         `${catalog.models.filter((m: any) => {
                           const maxVram = gpuInfo?.gpus?.[0]?.vram_available_gb || gpuInfo?.total_memory_gb || 0;
                           return m.vram_required_gb <= maxVram;
-                        }).length} models compatible (${catalog.total_count || 0} models available)` :
+                        }).length} models compatible (${catalog.total_count || 0} total models)` :
                         'Select AI models for your worker'
                       }
                     </p>
@@ -421,6 +421,7 @@ export default function Home() {
                     onUnhost={handleUnhost}
                     onDownload={(modelId) => handleDownloadSingle(modelId, false)}
                     onDownloadAndHost={(modelId) => handleDownloadSingle(modelId, true)}
+                    onCatalogRefresh={loadData}
                   />
                 </div>
               </motion.div>
