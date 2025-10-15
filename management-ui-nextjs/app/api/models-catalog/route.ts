@@ -35,6 +35,7 @@ interface ModelInfo {
   homepage?: string;
   nsfw: boolean;
   download_all: boolean;
+  capability_type: string;
   requirements?: {
     min_steps?: number;
     max_steps?: number;
@@ -84,27 +85,66 @@ function getCapabilityType(model: ModelInfo): string {
   return 'Text-to-Image';
 }
 
+function determineCapabilityType(modelId: string, modelInfo: any): string {
+  const id = modelId.toLowerCase();
+  const description = (modelInfo.description || '').toLowerCase();
+  
+  // Check for video models
+  if (id.includes('video') || id.includes('t2v') || id.includes('i2v') || 
+      description.includes('video') || description.includes('text-to-video') || 
+      description.includes('image-to-video')) {
+    if (id.includes('i2v') || description.includes('image-to-video')) {
+      return 'Image-to-Video';
+    }
+    return 'Text-to-Video';
+  }
+  
+  // Check for inpainting models
+  if (id.includes('inpaint') || description.includes('inpainting')) {
+    return 'Image-to-Image';
+  }
+  
+  // Check for upscaling models
+  if (id.includes('upscale') || id.includes('esrgan') || description.includes('upscaling')) {
+    return 'Image-to-Image';
+  }
+  
+  // Default to Text-to-Image for most models
+  return 'Text-to-Image';
+}
+
 function estimateVramRequirement(model: ModelInfo): number {
   const baseline = model.baseline.toLowerCase();
   const name = model.name.toLowerCase();
   
+  // Adjust based on capability type first
+  let baseVram = 6; // Default for text-to-image
+  
+  if (model.capability_type === 'Text-to-Video') {
+    baseVram = 12; // Video models need significantly more VRAM
+  } else if (model.capability_type === 'Image-to-Video') {
+    baseVram = 10; // Image-to-video models
+  } else if (model.capability_type === 'Image-to-Image') {
+    baseVram = 6; // Image-to-image models (inpainting, upscaling)
+  }
+  
   // More accurate VRAM estimation based on model architecture
   if (baseline.includes('wan')) {
     if (name.includes('a14b')) return 96; // 14B parameter models need high-end hardware
-    if (name.includes('5b')) return 24; // 5B parameter models
-    return 32; // Default Wan models
+    if (name.includes('5b')) return Math.max(baseVram, 24); // 5B parameter models
+    return Math.max(baseVram, 32); // Default Wan models
   }
   if (baseline.includes('flux')) {
-    return 16; // Flux models are memory intensive
+    return Math.max(baseVram, 16); // Flux models are memory intensive
   }
   if (baseline.includes('stable_cascade')) {
-    return 8; // Cascade is efficient
+    return Math.max(baseVram, 8); // Cascade is efficient
   }
   if (baseline.includes('stable_diffusion_xl') || baseline.includes('sdxl')) {
-    return 8; // SDXL models
+    return Math.max(baseVram, 8); // SDXL models
   }
   
-  return 6; // Default for SD 1.x models
+  return baseVram; // Return the capability-based estimate
 }
 
 function detectDownloadSource(model: ModelInfo): { source: 'huggingface' | 'civitai' | 'other'; requiresHuggingface: boolean; requiresCivitai: boolean } {
@@ -138,10 +178,16 @@ async function getHostedModels(): Promise<Set<string>> {
   try {
     const envFilePath = process.env.ENV_FILE_PATH || '/app/comfy-bridge/.env';
     const envContent = await fs.readFile(envFilePath, 'utf-8');
-    const match = envContent.match(/^WORKFLOW_FILE=(.*)$/m);
-    if (match && match[1]) {
-      return new Set(match[1].split(',').map(s => s.trim()).filter(Boolean));
+    
+    // Check WORKFLOW_FILE for hosted models
+    const workflowMatch = envContent.match(/^WORKFLOW_FILE=(.*)$/m);
+    
+    if (workflowMatch && workflowMatch[1]) {
+      const hostedModels = workflowMatch[1].split(',').map(s => s.trim()).filter(Boolean);
+      return new Set(hostedModels);
     }
+    
+    return new Set();
   } catch (error) {
     console.error('Error reading .env for hosted models:', error);
   }
@@ -194,8 +240,17 @@ async function checkModelInstalled(modelId: string, files: ModelFile[], modelsPa
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '25');
+    const search = searchParams.get('search') || '';
+    const styleFilter = searchParams.get('styleFilter') || 'all';
+    const nsfwFilter = searchParams.get('nsfwFilter') || 'all';
+    const sortField = searchParams.get('sortField') || 'name';
+    const sortDirection = searchParams.get('sortDirection') || 'asc';
+    
     const modelsFilePath = '/app/comfy-bridge/model_configs.json';
     const comfyUIModelsPath = process.env.MODELS_PATH || '/app/ComfyUI/models';
 
@@ -241,9 +296,9 @@ export async function GET() {
           inpainting: false,
           description: modelInfo.description || '',
           version: '1.0',
-          style: 'generalist',
+          style: modelInfo.style || 'generalist',
           homepage: '',
-          nsfw: false,
+          nsfw: modelInfo.nsfw || false,
           download_all: false,
           requirements: {},
           config: {
@@ -257,14 +312,30 @@ export async function GET() {
           size_on_disk_bytes: modelInfo.size_mb ? modelInfo.size_mb * 1024 * 1024 : 0,
           display_name: modelId.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
           size_gb: modelInfo.size_mb ? Math.round((modelInfo.size_mb / 1024) * 100) / 100 : 0,
-          vram_required_gb: modelInfo.size_mb ? Math.ceil(modelInfo.size_mb / 1000) : 8,
+          vram_required_gb: estimateVramRequirement({
+            baseline: modelInfo.baseline || 'stable_diffusion',
+            name: modelId,
+            type: modelInfo.type || 'checkpoints',
+            inpainting: modelInfo.inpainting || false,
+            description: modelInfo.description || '',
+            version: modelInfo.version || '1.0',
+            style: modelInfo.style || 'generalist',
+            homepage: '',
+            nsfw: modelInfo.nsfw || false,
+            download_all: false,
+            capability_type: determineCapabilityType(modelId, modelInfo),
+            requirements: {},
+            config: { files: [], download: [] },
+            features_not_supported: [],
+            size_on_disk_bytes: modelInfo.size_mb ? modelInfo.size_mb * 1024 * 1024 : 0
+          }),
           requires_huggingface_key: modelInfo.url?.includes('huggingface.co') || false,
           requires_civitai_key: modelInfo.url?.includes('civitai.com') || false,
           download_source: modelInfo.url?.includes('huggingface.co') ? 'huggingface' : 
                           modelInfo.url?.includes('civitai.com') ? 'civitai' : 'other',
           installed: false, // Will be checked below
           hosting: hostedModels.has(modelId),
-          capability_type: 'Text-to-Image' // Default, could be enhanced based on model name
+          capability_type: determineCapabilityType(modelId, modelInfo)
         };
 
         // Check if model is installed
@@ -283,18 +354,78 @@ export async function GET() {
       }
     }
     
-    // Sort by type, then by name
-    enhancedModels.sort((a, b) => {
-      if (a.type !== b.type) {
-        return a.type.localeCompare(b.type);
+    // Apply filters
+    let filteredModels = enhancedModels;
+    
+    // Apply search filter (only on model name)
+    if (search) {
+      const searchLower = search.toLowerCase();
+      filteredModels = filteredModels.filter(model => 
+        model.name.toLowerCase().includes(searchLower)
+      );
+    }
+    
+    // Apply style filter
+    if (styleFilter !== 'all') {
+      filteredModels = filteredModels.filter(model => {
+        if (styleFilter === 'text-to-image' && model.capability_type !== 'Text-to-Image') return false;
+        if (styleFilter === 'text-to-video' && model.capability_type !== 'Text-to-Video') return false;
+        if (styleFilter === 'image-to-video' && model.capability_type !== 'Image-to-Video') return false;
+        if (styleFilter === 'image-to-image' && model.capability_type !== 'Image-to-Image') return false;
+        if (styleFilter === 'anime' && model.style !== 'anime') return false;
+        if (styleFilter === 'realistic' && model.style !== 'realistic') return false;
+        if (styleFilter === 'generalist' && model.style !== 'generalist') return false;
+        if (styleFilter === 'artistic' && model.style !== 'artistic') return false;
+        if (styleFilter === 'video' && model.style !== 'video') return false;
+        return true;
+      });
+    }
+    
+    // Apply NSFW filter
+    if (nsfwFilter !== 'all') {
+      filteredModels = filteredModels.filter(model => {
+        if (nsfwFilter === 'nsfw-only' && !model.nsfw) return false;
+        if (nsfwFilter === 'sfw-only' && model.nsfw) return false;
+        return true;
+      });
+    }
+    
+    // Sort models
+    filteredModels.sort((a: any, b: any) => {
+      let aValue = a[sortField];
+      let bValue = b[sortField];
+      
+      // Handle different data types
+      if (typeof aValue === 'string') {
+        aValue = aValue.toLowerCase();
+        bValue = bValue.toLowerCase();
       }
-      return a.name.localeCompare(b.name);
+      
+      if (sortDirection === 'asc') {
+        return aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
+      } else {
+        return aValue > bValue ? -1 : aValue < bValue ? 1 : 0;
+      }
     });
     
+    // Calculate pagination
+    const totalCount = filteredModels.length;
+    const totalPages = Math.ceil(totalCount / limit);
+    const startIndex = (page - 1) * limit;
+    const endIndex = startIndex + limit;
+    const paginatedModels = filteredModels.slice(startIndex, endIndex);
+    
     return NextResponse.json({ 
-      models: enhancedModels,
-      total_count: enhancedModels.length,
+      models: paginatedModels,
+      total_count: totalCount,
       installed_count: installedCount,
+      pagination: {
+        page,
+        limit,
+        total_pages: totalPages,
+        has_next: page < totalPages,
+        has_prev: page > 1
+      }
     });
   } catch (error: any) {
     console.error('Failed to load model catalog:', error);

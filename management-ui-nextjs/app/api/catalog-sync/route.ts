@@ -10,22 +10,23 @@ export async function POST() {
   try {
     console.log('Manual catalog sync requested');
     
-    // Run the catalog sync script
-    const { stdout, stderr } = await execAsync('python3 /app/comfy-bridge/catalog_sync.py', {
-      timeout: 60000, // 1 minute timeout
-      cwd: '/app/comfy-bridge'
+    // Trigger catalog sync by calling the comfy-bridge container's sync endpoint
+    const response = await fetch('http://comfy-bridge:8001/api/sync-catalog', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
     });
     
-    console.log('Catalog sync output:', stdout);
-    if (stderr) {
-      console.log('Catalog sync stderr:', stderr);
+    if (!response.ok) {
+      throw new Error(`Sync request failed: ${response.status}`);
     }
+    
+    const result = await response.json();
     
     return NextResponse.json({ 
       success: true,
       message: 'Catalog sync completed successfully',
-      output: stdout,
-      error: stderr || null
+      output: result.output || '',
+      error: result.error || null
     });
     
   } catch (error: any) {
@@ -50,9 +51,9 @@ export async function GET() {
     let syncLog = '';
     
     try {
-      const { execAsync } = await import('util');
+      const { promisify } = await import('util');
       const { exec } = await import('child_process');
-      const execAsyncPromisified = execAsync;
+      const execAsyncPromisified = promisify(exec);
       
       // Get last sync time
       try {

@@ -1,21 +1,22 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface ModelDetailViewProps {
   catalog: any;
   diskSpace: any;
-  filter: 'all' | 'compatible' | 'selected';
+  filter: 'all' | 'compatible' | 'installed';
   styleFilter: 'all' | 'text-to-image' | 'text-to-video' | 'image-to-video' | 'image-to-image' | 'anime' | 'realistic' | 'generalist' | 'artistic' | 'video';
   gpuInfo: any;
-  onFilterChange: (filter: 'all' | 'compatible' | 'selected') => void;
+  onFilterChange: (filter: 'all' | 'compatible' | 'installed') => void;
   onStyleFilterChange: (styleFilter: 'all' | 'text-to-image' | 'text-to-video' | 'image-to-video' | 'image-to-image' | 'anime' | 'realistic' | 'generalist' | 'artistic' | 'video') => void;
   onUninstall: (modelId: string) => void;
   onHost: (modelId: string) => void;
   onUnhost: (modelId: string) => void;
   onDownload: (modelId: string) => void;
   onDownloadAndHost: (modelId: string) => void;
+  onCatalogRefresh: () => void;
 }
 
 interface ConfirmationModalProps {
@@ -35,10 +36,27 @@ function ConfirmationModal({ isOpen, onConfirm, onCancel, modelName }: Confirmat
         animate={{ opacity: 1, scale: 1 }}
         className="bg-gray-900 rounded-xl p-6 border border-gray-700 max-w-md w-full mx-4"
       >
-        <h3 className="text-xl font-bold text-white mb-4">Confirm Uninstall</h3>
+        <h3 className="text-xl font-bold text-white mb-4">
+          {modelName.includes(',') ? 'Confirm Bulk Uninstall' : 'Confirm Uninstall'}
+        </h3>
         <p className="text-gray-300 mb-6">
-          Are you sure you want to uninstall <span className="font-semibold text-aipg-orange">{modelName}</span>? 
-          This will delete all associated files and cannot be undone.
+          {modelName.includes(',') ? (
+            <>
+              Are you sure you want to uninstall the following models? This will delete all associated files and cannot be undone.
+              <div className="mt-3 p-3 bg-gray-800 rounded-lg">
+                <div className="text-sm text-gray-400 max-h-32 overflow-y-auto">
+                  {modelName.split(', ').map((name, index) => (
+                    <div key={index} className="font-semibold text-aipg-orange">• {name}</div>
+                  ))}
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              Are you sure you want to uninstall <span className="font-semibold text-aipg-orange">{modelName}</span>? 
+              This will delete all associated files and cannot be undone.
+            </>
+          )}
         </p>
         <div className="flex gap-3">
           <button
@@ -72,13 +90,58 @@ export default function ModelDetailView({
   onUnhost,
   onDownload,
   onDownloadAndHost,
+  onCatalogRefresh,
 }: ModelDetailViewProps) {
   const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; modelName: string }>({ isOpen: false, modelName: '' });
   const [downloadingModels, setDownloadingModels] = useState<Set<string>>(new Set());
   const [downloadProgress, setDownloadProgress] = useState<{ [key: string]: { progress: number; message: string; speed?: string; eta?: string } }>({});
+  const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
+  const [localCatalog, setLocalCatalog] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [nsfwFilter, setNsfwFilter] = useState<'all' | 'nsfw-only' | 'sfw-only'>('all');
+  const [sortField, setSortField] = useState<string>('name');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [selectedModels, setSelectedModels] = useState<Set<string>>(new Set());
 
-  const models = catalog?.models || [];
+  // Fetch catalog data with pagination and search
+  useEffect(() => {
+    const fetchCatalog = async () => {
+      setLoading(true);
+      try {
+        const params = new URLSearchParams({
+          page: currentPage.toString(),
+          limit: itemsPerPage.toString(),
+          ...(searchTerm && { search: searchTerm }),
+          ...(styleFilter !== 'all' && { styleFilter }),
+          ...(nsfwFilter !== 'all' && { nsfwFilter }),
+          sortField,
+          sortDirection
+        });
+        
+        const response = await fetch(`/api/models-catalog?${params}`);
+        const data = await response.json();
+        setLocalCatalog(data);
+      } catch (error) {
+        console.error('Failed to fetch catalog:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCatalog();
+  }, [currentPage, itemsPerPage, searchTerm, styleFilter, nsfwFilter, sortField, sortDirection]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, styleFilter, nsfwFilter]);
+
+  const models = localCatalog?.models || catalog?.models || [];
+  const pagination = localCatalog?.pagination || null;
   
+  // Apply client-side filters (compatibility and installed status)
   const filteredModels = models.filter((model: any) => {
     // Apply capability filter
     if (filter === 'compatible') {
@@ -86,17 +149,9 @@ export default function ModelDetailView({
       return model.vram_required_gb <= maxVram;
     }
     
-    // Apply style filter
-    if (styleFilter !== 'all') {
-      if (styleFilter === 'text-to-image' && model.capability_type !== 'Text-to-Image') return false;
-      if (styleFilter === 'text-to-video' && model.capability_type !== 'Text-to-Video') return false;
-      if (styleFilter === 'image-to-video' && model.capability_type !== 'Image-to-Video') return false;
-      if (styleFilter === 'image-to-image' && model.capability_type !== 'Image-to-Image') return false;
-      if (styleFilter === 'anime' && model.style !== 'anime') return false;
-      if (styleFilter === 'realistic' && model.style !== 'realistic') return false;
-      if (styleFilter === 'generalist' && model.style !== 'generalist') return false;
-      if (styleFilter === 'artistic' && model.style !== 'artistic') return false;
-      if (styleFilter === 'video' && model.style !== 'video') return false;
+    // Apply installed filter
+    if (filter === 'installed') {
+      return model.installed === true;
     }
     
     return true;
@@ -107,7 +162,15 @@ export default function ModelDetailView({
   };
 
   const confirmUninstall = () => {
-    onUninstall(confirmModal.modelName);
+    if (confirmModal.modelName.includes(',')) {
+      // Bulk uninstall
+      const modelIds = confirmModal.modelName.split(', ');
+      modelIds.forEach(modelId => onUninstall(modelId.trim()));
+      setSelectedModels(new Set());
+    } else {
+      // Single uninstall
+      onUninstall(confirmModal.modelName);
+    }
     setConfirmModal({ isOpen: false, modelName: '' });
   };
 
@@ -231,6 +294,7 @@ export default function ModelDetailView({
         {[
           { key: 'compatible', label: 'Supported', icon: '✅' },
           { key: 'all', label: 'All Models', icon: '🎯' },
+          { key: 'installed', label: 'Installed', icon: '📦' },
         ].map(({ key, label, icon }) => (
           <button
             key={key}
@@ -274,15 +338,181 @@ export default function ModelDetailView({
         </div>
       </div>
 
+      {/* NSFW Filter */}
+      <div className="mb-4">
+        <h3 className="text-sm font-semibold text-gray-400 mb-3">Filter by Content:</h3>
+        <div className="flex gap-2 flex-wrap">
+          {[
+            { key: 'all', label: 'All Content', icon: '🌐' },
+            { key: 'sfw-only', label: 'SFW Only', icon: '✅' },
+            { key: 'nsfw-only', label: 'NSFW Only', icon: '🔞' },
+          ].map(({ key, label, icon }) => (
+            <button
+              key={key}
+              onClick={() => setNsfwFilter(key as any)}
+              className={`flex items-center gap-2 px-3 py-2 rounded-full text-sm font-medium transition-all ${
+                nsfwFilter === key
+                  ? 'bg-aipg-orange text-white shadow-lg shadow-aipg-orange/30'
+                  : 'bg-gray-800 text-gray-300 hover:text-white border border-gray-600 hover:border-aipg-orange/50'
+              }`}
+            >
+              <span>{icon}</span>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Search and Pagination Controls */}
+      <div className="mb-6 flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+        {/* Search */}
+        <div className="flex-1 max-w-md">
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="Search by model name..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full px-4 py-2 pl-10 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-aipg-orange focus:ring-1 focus:ring-aipg-orange"
+            />
+            <svg className="absolute left-3 top-2.5 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+        </div>
+
+        {/* Items per page */}
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-400">Show:</span>
+          <select
+            value={itemsPerPage}
+            onChange={(e) => {
+              setItemsPerPage(parseInt(e.target.value));
+              setCurrentPage(1);
+            }}
+            className="px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:border-aipg-orange"
+          >
+            <option value={10}>10</option>
+            <option value={25}>25</option>
+            <option value={50}>50</option>
+            <option value={100}>100</option>
+          </select>
+          <span className="text-sm text-gray-400">per page</span>
+        </div>
+      </div>
+
+      {/* Bulk Actions */}
+      {selectedModels.size > 0 && (
+        <div className="mb-4 p-4 bg-gray-800 rounded-lg border border-gray-600">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-gray-300">
+              {selectedModels.size} model{selectedModels.size !== 1 ? 's' : ''} selected
+            </span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  // Bulk host action
+                  selectedModels.forEach(modelId => {
+                    if (!downloadingModels.has(modelId)) {
+                      onHost(modelId);
+                    }
+                  });
+                  setSelectedModels(new Set());
+                }}
+                className="px-3 py-1 text-xs font-medium bg-green-600 hover:bg-green-700 text-white rounded transition-all"
+              >
+                Start Earning All
+              </button>
+              <button
+                onClick={() => {
+                  // Bulk uninstall action
+                  setConfirmModal({ 
+                    isOpen: true, 
+                    modelName: Array.from(selectedModels).join(', ') 
+                  });
+                }}
+                className="px-3 py-1 text-xs font-medium bg-red-600 hover:bg-red-700 text-white rounded transition-all"
+              >
+                Uninstall All
+              </button>
+              <button
+                onClick={() => setSelectedModels(new Set())}
+                className="px-3 py-1 text-xs font-medium bg-gray-600 hover:bg-gray-700 text-white rounded transition-all"
+              >
+                Clear Selection
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Loading indicator */}
+      {loading && (
+        <div className="flex items-center justify-center py-8">
+          <div className="w-8 h-8 border-4 border-aipg-orange border-t-transparent rounded-full animate-spin"></div>
+          <span className="ml-3 text-gray-400">Loading models...</span>
+        </div>
+      )}
+
         {/* Windows Explorer Style Table */}
         <div className="bg-gray-900 rounded-lg border border-gray-700 overflow-hidden">
           {/* Table Header */}
           <div className="bg-gray-800 px-4 py-3 border-b border-gray-700">
-            <div className="grid grid-cols-12 gap-2 text-sm font-semibold text-gray-300">
-              <div className="col-span-4">Name</div>
-              <div className="col-span-2">Type</div>
-              <div className="col-span-1">Size</div>
-              <div className="col-span-1">VRAM</div>
+            <div className="grid grid-cols-12 gap-1 text-sm font-semibold text-gray-300">
+              <div className="col-span-1 flex items-center justify-center">
+                <input
+                  type="checkbox"
+                  checked={selectedModels.size === filteredModels.length && filteredModels.length > 0}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedModels(new Set(filteredModels.map((m: any) => m.id)));
+                    } else {
+                      setSelectedModels(new Set());
+                    }
+                  }}
+                  className="w-4 h-4 text-aipg-orange bg-gray-700 border-gray-600 rounded focus:ring-aipg-orange focus:ring-2"
+                />
+              </div>
+              <div className="col-span-3 cursor-pointer" onClick={() => {
+                if (sortField === 'name') {
+                  setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                } else {
+                  setSortField('name');
+                  setSortDirection('asc');
+                }
+              }}>
+                Name {sortField === 'name' && (sortDirection === 'asc' ? '↑' : '↓')}
+              </div>
+              <div className="col-span-2 cursor-pointer" onClick={() => {
+                if (sortField === 'style') {
+                  setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                } else {
+                  setSortField('style');
+                  setSortDirection('asc');
+                }
+              }}>
+                Style {sortField === 'style' && (sortDirection === 'asc' ? '↑' : '↓')}
+              </div>
+              <div className="col-span-1 cursor-pointer" onClick={() => {
+                if (sortField === 'size_gb') {
+                  setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                } else {
+                  setSortField('size_gb');
+                  setSortDirection('asc');
+                }
+              }}>
+                Size {sortField === 'size_gb' && (sortDirection === 'asc' ? '↑' : '↓')}
+              </div>
+              <div className="col-span-1 cursor-pointer" onClick={() => {
+                if (sortField === 'vram_required_gb') {
+                  setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                } else {
+                  setSortField('vram_required_gb');
+                  setSortDirection('asc');
+                }
+              }}>
+                VRAM {sortField === 'vram_required_gb' && (sortDirection === 'asc' ? '↑' : '↓')}
+              </div>
               <div className="col-span-2">Status</div>
               <div className="col-span-2">Actions</div>
             </div>
@@ -304,11 +534,34 @@ export default function ModelDetailView({
                 transition={{ delay: index * 0.05 }}
                 className="px-4 py-3 hover:bg-gray-800/50 transition-colors"
               >
-                <div className="grid grid-cols-12 gap-2 items-center text-sm">
+                <div className="grid grid-cols-12 gap-1 items-center text-sm">
+                  {/* Checkbox */}
+                  <div className="col-span-1 flex items-center justify-center">
+                    <input
+                      type="checkbox"
+                      checked={selectedModels.has(model.id)}
+                      onChange={(e) => {
+                        const newSelected = new Set(selectedModels);
+                        if (e.target.checked) {
+                          newSelected.add(model.id);
+                        } else {
+                          newSelected.delete(model.id);
+                        }
+                        setSelectedModels(newSelected);
+                      }}
+                      className="w-4 h-4 text-aipg-orange bg-gray-700 border-gray-600 rounded focus:ring-aipg-orange focus:ring-2"
+                    />
+                  </div>
+
                   {/* Name */}
-                  <div className="col-span-4">
+                  <div className="col-span-3">
                     <div className="font-medium text-white">{model.display_name}</div>
-                    <div className="text-xs text-gray-400 line-clamp-1">{model.description}</div>
+                    <div 
+                      className="text-xs text-gray-400 line-clamp-1 cursor-help" 
+                      title={model.description}
+                    >
+                      {model.description}
+                    </div>
                   </div>
 
                   {/* Type */}
@@ -427,13 +680,79 @@ export default function ModelDetailView({
           })}
         </div>
 
-        {filteredModels.length === 0 && (
+        {filteredModels.length === 0 && !loading && (
           <div className="text-center py-12 text-gray-500">
             <p className="text-xl mb-2">No models found</p>
-            <p>Try changing the filter</p>
+            <p>Try changing the filter or search term</p>
           </div>
         )}
       </div>
+
+      {/* Pagination Controls */}
+      {pagination && !loading && (
+        <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+          {/* Results info */}
+          <div className="text-sm text-gray-400">
+            Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.total_count)} of {pagination.total_count} models
+          </div>
+
+          {/* Pagination buttons */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCurrentPage(1)}
+              disabled={!pagination.has_prev}
+              className="px-3 py-2 text-sm bg-gray-800 border border-gray-600 rounded-lg text-gray-300 hover:text-white hover:border-aipg-orange disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            >
+              First
+            </button>
+            <button
+              onClick={() => setCurrentPage(currentPage - 1)}
+              disabled={!pagination.has_prev}
+              className="px-3 py-2 text-sm bg-gray-800 border border-gray-600 rounded-lg text-gray-300 hover:text-white hover:border-aipg-orange disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            >
+              Previous
+            </button>
+            
+            {/* Page numbers */}
+            <div className="flex items-center gap-1">
+              {Array.from({ length: Math.min(5, pagination.total_pages) }, (_, i) => {
+                const startPage = Math.max(1, pagination.page - 2);
+                const pageNum = startPage + i;
+                if (pageNum > pagination.total_pages) return null;
+                
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => setCurrentPage(pageNum)}
+                    className={`px-3 py-2 text-sm rounded-lg transition-all ${
+                      pageNum === pagination.page
+                        ? 'bg-aipg-orange text-white'
+                        : 'bg-gray-800 border border-gray-600 text-gray-300 hover:text-white hover:border-aipg-orange'
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              })}
+            </div>
+
+            <button
+              onClick={() => setCurrentPage(currentPage + 1)}
+              disabled={!pagination.has_next}
+              className="px-3 py-2 text-sm bg-gray-800 border border-gray-600 rounded-lg text-gray-300 hover:text-white hover:border-aipg-orange disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            >
+              Next
+            </button>
+            <button
+              onClick={() => setCurrentPage(pagination.total_pages)}
+              disabled={!pagination.has_next}
+              className="px-3 py-2 text-sm bg-gray-800 border border-gray-600 rounded-lg text-gray-300 hover:text-white hover:border-aipg-orange disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            >
+              Last
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Confirmation Modal */}
       <ConfirmationModal

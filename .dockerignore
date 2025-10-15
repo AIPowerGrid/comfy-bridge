@@ -34,8 +34,8 @@ Thumbs.db
 Dockerfile
 docker-compose*.yml
 
-# Test files
-tests/
+# Test files (allow tests/ for testing in container)
+# tests/
 *.test.py
 .pytest_cache/
 
