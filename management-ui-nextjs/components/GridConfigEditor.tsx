@@ -8,20 +8,24 @@ interface GridConfigEditorProps {
   workerName: string;
   aipgWallet: string;
   onSave: (config: { gridApiKey: string; workerName: string; aipgWallet: string }) => Promise<void>;
+  isCollapsed?: boolean;
+  onToggleCollapsed?: () => void;
 }
 
 export default function GridConfigEditor({ 
   gridApiKey, 
   workerName, 
   aipgWallet, 
-  onSave 
+  onSave,
+  isCollapsed = false,
+  onToggleCollapsed
 }: GridConfigEditorProps) {
   const [localGridApiKey, setLocalGridApiKey] = useState(gridApiKey);
   const [localWorkerName, setLocalWorkerName] = useState(workerName);
   const [localAipgWallet, setLocalAipgWallet] = useState(aipgWallet);
   const [saving, setSaving] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [internalCollapsed, setInternalCollapsed] = useState(false);
   const [testingToken, setTestingToken] = useState(false);
   const [tokenValid, setTokenValid] = useState(false);
   const [lastValidatedKey, setLastValidatedKey] = useState('');
@@ -32,6 +36,17 @@ export default function GridConfigEditor({
     localAipgWallet !== aipgWallet;
 
   const isComplete = localGridApiKey && localWorkerName && localAipgWallet;
+  
+  // Use external collapsed state if provided, otherwise use internal state
+  const collapsed = onToggleCollapsed ? isCollapsed : internalCollapsed;
+  const toggleCollapsed = onToggleCollapsed || (() => setInternalCollapsed(!internalCollapsed));
+
+  // Sync local state with props when they change
+  useEffect(() => {
+    setLocalGridApiKey(gridApiKey);
+    setLocalWorkerName(workerName);
+    setLocalAipgWallet(aipgWallet);
+  }, [gridApiKey, workerName, aipgWallet]);
 
   // Load validation state from localStorage on mount and when API key changes
   useEffect(() => {
@@ -137,7 +152,7 @@ export default function GridConfigEditor({
       {/* Collapsible Header */}
       <div 
         className="flex items-center justify-between p-6 cursor-pointer hover:bg-gray-800/30 transition-colors"
-        onClick={() => setIsCollapsed(!isCollapsed)}
+                onClick={toggleCollapsed}
       >
         <div className="flex items-center gap-3">
           <svg className="w-8 h-8 text-aipg-orange" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -157,7 +172,7 @@ export default function GridConfigEditor({
             </span>
           )}
           <svg 
-            className={`w-5 h-5 text-gray-400 transition-transform ${isCollapsed ? 'rotate-180' : ''}`}
+            className={`w-5 h-5 text-gray-400 transition-transform ${collapsed ? 'rotate-180' : ''}`}
             fill="none" 
             stroke="currentColor" 
             viewBox="0 0 24 24"
@@ -170,7 +185,7 @@ export default function GridConfigEditor({
       {/* Collapsible Content */}
       <motion.div
         initial={false}
-        animate={{ height: isCollapsed ? 0 : 'auto' }}
+        animate={{ height: collapsed ? 0 : 'auto' }}
         transition={{ duration: 0.3 }}
         className="overflow-hidden"
       >

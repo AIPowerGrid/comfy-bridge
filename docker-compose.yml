@@ -69,6 +69,7 @@ services:
       - GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH=/app/grid-image-model-reference
       - COMFYUI_EXTRA_ARGS=${COMFYUI_EXTRA_ARGS:-}
       - HUGGING_FACE_API_KEY=${HUGGING_FACE_API_KEY:-}
+      - CIVITAI_API_KEY=${CIVITAI_API_KEY:-}
     
     # Ports
     ports:

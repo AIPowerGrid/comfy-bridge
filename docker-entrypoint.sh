@@ -19,7 +19,7 @@ download_models() {
     
     echo "ðŸ“¦ Downloading configured models..."
     # Run the model download script
-    if python3 download_models.py; then
+    if python3 download_models_from_catalog.py --models $GRID_MODEL --config model_configs.json; then
         echo "âœ… Model download completed successfully"
     else
         echo "âš ï¸  Model download had issues, but continuing..."

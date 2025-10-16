@@ -8,6 +8,7 @@ interface ModelConfig {
   type: string;
   size_mb?: number;
   sha256?: string | null;
+  inpainting?: boolean;
   dependencies?: Array<{
     type: string;
     filename: string;
@@ -20,7 +21,7 @@ function estimateVramRequirement(modelName: string, sizeGb: number): number {
   const lowerName = modelName.toLowerCase();
   
   // Wan2.2 video models (large disk size but moderate VRAM requirement)
-  if (lowerName.includes('wan2.2-t2v-a14b') || lowerName.includes('wan2_2_t2v_14b')) return 16;
+  if (lowerName.includes('wan2.2-t2v-a14b') || lowerName.includes('wan2_2_t2v_14b')) return 24;
   if (lowerName.includes('wan2.2_ti2v_5b') || lowerName.includes('wan2_2_ti2v_5b')) return 12;
   
   // Other models
@@ -40,6 +41,31 @@ function categorizeModel(modelName: string): string {
   if (lowerName.includes('sd3')) return 'Stable Diffusion 3';
   if (lowerName.includes('turbo')) return 'Turbo';
   return 'Stable Diffusion';
+}
+
+function getCapabilityType(modelName: string, config: ModelConfig): string {
+  const lowerName = modelName.toLowerCase();
+  
+  // Video models
+  if (lowerName.includes('wan2.2_ti2v_5b') || lowerName.includes('wan2_2_ti2v_5b')) {
+    return 'Text-to-Video, Image-to-Video'; // Supports both
+  }
+  if (lowerName.includes('wan2.2-t2v-a14b') || lowerName.includes('wan2_2_t2v_14b')) {
+    return 'Text-to-Video';
+  }
+  if (lowerName.includes('ti2v') || lowerName.includes('image-to-video')) {
+    return 'Image-to-Video';
+  }
+  if (lowerName.includes('t2v') || lowerName.includes('text-to-video')) {
+    return 'Text-to-Video';
+  }
+  
+  // Image models
+  if (lowerName.includes('inpainting') || config.inpainting) {
+    return 'Image-to-Image';
+  }
+  
+  return 'Text-to-Image';
 }
 
 function generateDescription(modelName: string): string {
@@ -113,6 +139,7 @@ export async function GET() {
         size_gb: Math.round(totalSizeGb * 100) / 100,
         vram_required_gb: estimateVramRequirement(modelName, totalSizeGb),
         category: categorizeModel(modelName),
+        capability_type: getCapabilityType(modelName, config),
         description: (config as any).description || generateDescription(modelName),
         installed: installed.includes(modelName),
         selected: selected.includes(modelName),
