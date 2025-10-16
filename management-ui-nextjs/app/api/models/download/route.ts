@@ -34,7 +34,8 @@ export async function POST(request: Request): Promise<Response> {
             const child = spawn('python3', [
               '/app/comfy-bridge/download_models_from_catalog.py',
               '--models', modelsList,
-              '--models-path', '/app/ComfyUI/models'
+              '--models-path', '/app/ComfyUI/models',
+              '--config', '/app/comfy-bridge/model_configs.json'
             ], {
               cwd: bridgePath,
               env: env,
