@@ -94,7 +94,14 @@ def download_file(url: str, filepath: Path, headers: Optional[Dict[str, str]] = 
                     
                     if total_size > 0:
                         progress = (downloaded / total_size) * 100
-                        print(f"\rProgress: {progress:.1f}% ({downloaded}/{total_size} bytes)", end='', flush=True)
+                        downloaded_gb = downloaded / (1024**3)
+                        total_gb = total_size / (1024**3)
+                        speed_mb = len(chunk) / (1024**2) if chunk else 0
+                        eta_seconds = (total_size - downloaded) / (speed_mb * 1024**2) if speed_mb > 0 else 0
+                        eta_minutes = int(eta_seconds // 60)
+                        eta_seconds = int(eta_seconds % 60)
+                        eta_str = f"{eta_minutes}m{eta_seconds:02d}s" if eta_minutes > 0 else f"{eta_seconds}s"
+                        print(f"\r[ {progress:5.1f}%] {downloaded_gb:.1f} GB/{total_gb:.1f} GB ({speed_mb:.1f} MB/s) ETA: {eta_str}", end='', flush=True)
         
         print()  # New line after progress
         print(f"Downloaded: {filepath}")
