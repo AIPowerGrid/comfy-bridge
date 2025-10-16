@@ -49,7 +49,7 @@ services:
   comfy-bridge:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: dockerfile
     container_name: comfy-bridge
     
     # GPU support for NVIDIA GPUs (including Blackwell Pro)
