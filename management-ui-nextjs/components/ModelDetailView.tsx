@@ -212,7 +212,8 @@ export default function ModelDetailView({
               
               if (data.type === 'progress') {
                 // Parse progress from message like "[ 12.5%] 2.8 GB/22.2 GB (43.7 MB/s) ETA: 7m34s"
-                const progressMatch = data.message.match(/\[\s*(\d+\.?\d*)%\]/);
+                // or "Progress: 1.3% (377708544/28577792224 bytes)"
+                const progressMatch = data.message.match(/\[\s*(\d+\.?\d*)%\]/) || data.message.match(/Progress:\s*(\d+\.?\d*)%/);
                 const speedMatch = data.message.match(/\(([^)]+)\/s\)/);
                 const etaMatch = data.message.match(/ETA:\s*([^)]+)/);
                 
