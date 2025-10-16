@@ -33,23 +33,40 @@ export default function Home() {
   useEffect(() => {
     loadData();
     
-    // Poll download status every 2 seconds
-    const interval = setInterval(async () => {
+    // Set up SSE connection for real-time download updates
+    const eventSource = new EventSource('/api/models/download/stream');
+    
+    eventSource.onmessage = (event) => {
       try {
-        const response = await fetch('/api/models/download/status');
-        const status = await response.json();
-        setDownloadStatus(status);
-        
-        // Show warning if download is in progress but UI doesn't show it
-        if (status.is_downloading && !status.current_model) {
-          showStatus('info', 'A download is in progress. Please wait for it to complete or cancel it.');
+        const data = JSON.parse(event.data);
+        if (data.type === 'status') {
+          setDownloadStatus(data);
         }
       } catch (error) {
-        console.error('Failed to fetch download status:', error);
+        console.error('Error parsing SSE data:', error);
       }
-    }, 2000);
+    };
     
-    return () => clearInterval(interval);
+    eventSource.onerror = (error) => {
+      console.error('SSE connection error:', error);
+      // Fallback to polling if SSE fails
+      const fallbackInterval = setInterval(async () => {
+        try {
+          const response = await fetch('/api/models/download/status');
+          const status = await response.json();
+          setDownloadStatus(status);
+        } catch (error) {
+          console.error('Fallback polling error:', error);
+        }
+      }, 3000); // Poll every 3 seconds as fallback
+      
+      // Clean up fallback after 5 minutes
+      setTimeout(() => clearInterval(fallbackInterval), 300000);
+    };
+    
+    return () => {
+      eventSource.close();
+    };
   }, []);
 
   const loadData = async () => {
@@ -202,9 +219,9 @@ export default function Home() {
         return;
       }
       
-      showStatus('info', `Downloading ${modelId}... This may take several minutes.`);
+      showStatus('info', `Starting download of ${modelId}...`);
 
-      // Trigger download
+      // Start download - SSE will handle progress updates automatically
       const downloadRes = await fetch('/api/models/download', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -213,20 +230,33 @@ export default function Home() {
         }),
       });
 
-      const result = await downloadRes.json();
-
-      if (result.success) {
-        if (autoHost) {
-          showStatus('success', `${modelId} installed successfully! You're now earning money!`);
-          // Automatically start hosting after download
-          await handleHost(modelId);
-        } else {
-          showStatus('success', `${modelId} installed successfully! Click "Start Earning" to begin making money.`);
-        }
-        await loadData(); // Reload to update installed status
-      } else {
-        showStatus('error', 'Download failed: ' + (result.error || 'Unknown error'));
+      if (!downloadRes.ok) {
+        throw new Error(`Download failed: ${downloadRes.status}`);
       }
+
+      // Set up completion handler
+      const checkCompletion = () => {
+        const interval = setInterval(async () => {
+          const statusRes = await fetch('/api/models/download/status');
+          const status = await statusRes.json();
+          
+          if (!status.is_downloading) {
+            clearInterval(interval);
+            if (autoHost) {
+              showStatus('success', `${modelId} installed successfully! You're now earning money!`);
+              await handleHost(modelId);
+            } else {
+              showStatus('success', `${modelId} installed successfully! Click "Start Earning" to begin making money.`);
+            }
+            await loadData();
+          }
+        }, 2000); // Check every 2 seconds for completion
+        
+        // Stop checking after 10 minutes
+        setTimeout(() => clearInterval(interval), 600000);
+      };
+
+      checkCompletion();
     } catch (error: any) {
       showStatus('error', 'Error: ' + error.message);
     }
