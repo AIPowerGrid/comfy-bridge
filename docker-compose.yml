@@ -20,7 +20,7 @@ services:
           - HUGGING_FACE_API_KEY=${HUGGING_FACE_API_KEY:-}
         
         ports:
-          - "5000:5000"  # Management UI
+          - "3000:5000"  # Management UI
         
         volumes:
           # Share .env file for reading/writing model selections
