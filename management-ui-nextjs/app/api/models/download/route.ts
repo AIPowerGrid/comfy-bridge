@@ -67,6 +67,8 @@ export async function POST(request: Request): Promise<Response> {
                           updateProgress(data.progress, data.speed, data.eta);
                         } else if (data.type === 'complete') {
                           completeDownload();
+                        } else if (data.type === 'start') {
+                          startDownload(data.model || models[0]);
                         }
                         
                         controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
