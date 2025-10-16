@@ -76,6 +76,8 @@ def download_file(url: str, filepath: Path, headers: Optional[Dict[str, str]] = 
         # Add API keys if available
         if 'huggingface.co' in url and os.environ.get('HUGGING_FACE_API_KEY'):
             request_headers['Authorization'] = f"Bearer {os.environ['HUGGING_FACE_API_KEY']}"
+        elif 'civitai.com' in url and os.environ.get('CIVITAI_API_KEY'):
+            request_headers['Authorization'] = f"Bearer {os.environ['CIVITAI_API_KEY']}"
         
         # Download with progress
         response = requests.get(url, headers=request_headers, stream=True)

@@ -27,6 +27,7 @@ export default function Home() {
   const [isApiKeysCollapsed, setIsApiKeysCollapsed] = useState(false);
   const [isGpuInfoCollapsed, setIsGpuInfoCollapsed] = useState(false);
   const [isDiskSpaceCollapsed, setIsDiskSpaceCollapsed] = useState(false);
+  const [isGridConfigCollapsed, setIsGridConfigCollapsed] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -73,11 +74,12 @@ export default function Home() {
   };
 
   const toggleAllCollapsed = () => {
-    const allCollapsed = isModelsCollapsed && isApiKeysCollapsed && isGpuInfoCollapsed && isDiskSpaceCollapsed;
+    const allCollapsed = isModelsCollapsed && isApiKeysCollapsed && isGpuInfoCollapsed && isDiskSpaceCollapsed && isGridConfigCollapsed;
     setIsModelsCollapsed(!allCollapsed);
     setIsApiKeysCollapsed(!allCollapsed);
     setIsGpuInfoCollapsed(!allCollapsed);
     setIsDiskSpaceCollapsed(!allCollapsed);
+    setIsGridConfigCollapsed(!allCollapsed);
   };
 
 
@@ -322,6 +324,8 @@ export default function Home() {
               workerName={gridConfig.workerName || ''}
               aipgWallet={gridConfig.aipgWallet || ''}
               onSave={handleSaveGridConfig}
+              isCollapsed={isGridConfigCollapsed}
+              onToggleCollapsed={() => setIsGridConfigCollapsed(!isGridConfigCollapsed)}
             />
             
             {/* API Keys Section */}

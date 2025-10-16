@@ -54,10 +54,10 @@ export default function ModelGrid({
       
       // Apply style filter
       if (styleFilter !== 'all') {
-        if (styleFilter === 'text-to-image' && model.capability_type !== 'Text-to-Image') return false;
-        if (styleFilter === 'text-to-video' && model.capability_type !== 'Text-to-Video') return false;
-        if (styleFilter === 'image-to-video' && model.capability_type !== 'Image-to-Video') return false;
-        if (styleFilter === 'image-to-image' && model.capability_type !== 'Image-to-Image') return false;
+        if (styleFilter === 'text-to-image' && !model.capability_type?.includes('Text-to-Image')) return false;
+        if (styleFilter === 'text-to-video' && !model.capability_type?.includes('Text-to-Video')) return false;
+        if (styleFilter === 'image-to-video' && !model.capability_type?.includes('Image-to-Video')) return false;
+        if (styleFilter === 'image-to-image' && !model.capability_type?.includes('Image-to-Image')) return false;
         if (styleFilter === 'anime' && model.style !== 'anime') return false;
         if (styleFilter === 'realistic' && model.style !== 'realistic') return false;
         if (styleFilter === 'generalist' && model.style !== 'generalist') return false;
