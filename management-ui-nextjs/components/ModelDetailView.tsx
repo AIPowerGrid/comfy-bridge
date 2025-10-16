@@ -9,6 +9,7 @@ interface ModelDetailViewProps {
   filter: 'all' | 'compatible' | 'installed';
   styleFilter: 'all' | 'text-to-image' | 'text-to-video' | 'image-to-video' | 'image-to-image' | 'anime' | 'realistic' | 'generalist' | 'artistic' | 'video';
   gpuInfo: any;
+  downloadStatus: any;
   onFilterChange: (filter: 'all' | 'compatible' | 'installed') => void;
   onStyleFilterChange: (styleFilter: 'all' | 'text-to-image' | 'text-to-video' | 'image-to-video' | 'image-to-image' | 'anime' | 'realistic' | 'generalist' | 'artistic' | 'video') => void;
   onUninstall: (modelId: string) => void;
@@ -16,6 +17,7 @@ interface ModelDetailViewProps {
   onUnhost: (modelId: string) => void;
   onDownload: (modelId: string) => void;
   onDownloadAndHost: (modelId: string) => void;
+  onCancelDownload: () => void;
   onCatalogRefresh: () => void;
 }
 
@@ -83,6 +85,7 @@ export default function ModelDetailView({
   filter,
   styleFilter,
   gpuInfo,
+  downloadStatus,
   onFilterChange,
   onStyleFilterChange,
   onUninstall,
@@ -90,6 +93,7 @@ export default function ModelDetailView({
   onUnhost,
   onDownload,
   onDownloadAndHost,
+  onCancelDownload,
   onCatalogRefresh,
 }: ModelDetailViewProps) {
   const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; modelName: string }>({ isOpen: false, modelName: '' });
@@ -525,7 +529,8 @@ export default function ModelDetailView({
             const maxVram = gpuInfo?.gpus?.[0]?.vram_available_gb || gpuInfo?.total_memory_gb || 0;
             const isCompatible = model.vram_required_gb <= maxVram;
             const isHosting = model.hosting || false;
-            const isDownloading = downloadingModels.has(model.id);
+            const isDownloading = downloadStatus?.is_downloading && downloadStatus?.current_model === model.id;
+            const downloadProgress = downloadStatus?.progress || 0;
 
             return (
               <motion.div
@@ -635,17 +640,27 @@ export default function ModelDetailView({
                             Uninstall
                           </button>
                         </>
+                      ) : isDownloading ? (
+                        <button
+                          onClick={() => onCancelDownload()}
+                          className="px-3 py-1 text-xs font-medium bg-red-600 hover:bg-red-700 text-white rounded transition-all flex items-center gap-1"
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                          Cancel
+                        </button>
                       ) : (
                         <button
                           onClick={() => handleDownload(model.id)}
-                          disabled={!isCompatible || isDownloading}
+                          disabled={!isCompatible}
                           className={`px-3 py-1 text-xs font-medium rounded transition-all ${
-                            isCompatible && !isDownloading
+                            isCompatible
                               ? 'bg-aipg-orange hover:bg-orange-600 text-white'
                               : 'bg-gray-600 text-gray-400 cursor-not-allowed'
                           }`}
                         >
-                          {isDownloading ? 'Downloading...' : 'Start Earning'}
+                          Start Earning
                         </button>
                       )}
                     </div>
@@ -655,22 +670,24 @@ export default function ModelDetailView({
                 {/* Download Progress Bar */}
                 {isDownloading && (
                   <div className="mt-2">
+                    <div className="flex justify-between text-xs text-gray-400 mb-1">
+                      <span>Downloading...</span>
+                      <span>{downloadProgress.toFixed(1)}%</span>
+                    </div>
                     <div className="w-full bg-gray-700 rounded-full h-2">
                       <div 
-                        className="bg-aipg-orange h-2 rounded-full transition-all duration-300" 
-                        style={{ width: `${downloadProgress[model.id]?.progress || 0}%` }}
+                        className="bg-gradient-to-r from-aipg-orange to-aipg-gold h-2 rounded-full transition-all duration-300" 
+                        style={{ width: `${downloadProgress}%` }}
                       ></div>
                     </div>
-                    {downloadProgress[model.id] && (
+                    {downloadStatus?.speed && (
                       <div className="mt-1 text-xs text-gray-400">
                         <div className="flex justify-between">
-                          <span>{downloadProgress[model.id].progress.toFixed(1)}% complete</span>
-                          {downloadProgress[model.id].speed && (
-                            <span>{downloadProgress[model.id].speed}/s</span>
-                          )}
+                          <span>{downloadProgress.toFixed(1)}% complete</span>
+                          <span>{downloadStatus.speed} MB/s</span>
                         </div>
-                        {downloadProgress[model.id].eta && (
-                          <div className="text-gray-500">{downloadProgress[model.id].eta}</div>
+                        {downloadStatus.eta && (
+                          <div className="text-gray-500">ETA: {downloadStatus.eta}</div>
                         )}
                       </div>
                     )}

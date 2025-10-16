@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { spawn } from 'child_process';
+import { startDownload, updateProgress, completeDownload } from '@/lib/downloadState';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,100 +18,79 @@ export async function POST(request: Request): Promise<Response> {
     
     console.log('Starting download for models:', models);
     
-        // Run the download script in the comfy-bridge container which has correct permissions
-        const modelsList = models.join(',');
-        const env = {
-          ...process.env,
-          HUGGING_FACE_API_KEY: process.env.HUGGING_FACE_API_KEY || '',
-          CIVITAI_API_KEY: process.env.CIVITAI_API_KEY || '',
-          GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH: process.env.GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH || '/app/grid-image-model-reference'
-        };
-        
-        // Stream download progress using Server-Sent Events
-        const encoder = new TextEncoder();
-        
+    // Start download state tracking
+    startDownload(models[0]); // Track first model
+    
+        // Call the comfy-bridge API to download models
         const stream = new ReadableStream({
           start(controller) {
-            const child = spawn('python3', [
-              '/app/comfy-bridge/download_models_from_catalog.py',
-              '--models', modelsList,
-              '--models-path', '/app/ComfyUI/models',
-              '--config', '/app/comfy-bridge/model_configs.json'
-            ], {
-              cwd: bridgePath,
-              env: env,
-              stdio: ['pipe', 'pipe', 'pipe']
-            });
-
-            let stdout = '';
-            let stderr = '';
-
-            child.stdout.on('data', (data) => {
-              const chunk = data.toString();
-              stdout += chunk;
-              console.log('Download progress:', chunk.trim());
+            const encoder = new TextEncoder();
+            
+            // Make request to comfy-bridge API
+            fetch('http://comfy-bridge:8001/api/download-models', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ models })
+            }).then(response => {
+              if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+              }
               
-              // Send progress update to client
-              const progressData = JSON.stringify({
-                type: 'progress',
-                message: chunk.trim(),
-                timestamp: new Date().toISOString()
-              });
-              controller.enqueue(encoder.encode(`data: ${progressData}\n\n`));
-            });
-
-            child.stderr.on('data', (data) => {
-              const chunk = data.toString();
-              stderr += chunk;
-              console.log('Download stderr:', chunk.trim());
+              const reader = response.body?.getReader();
+              if (!reader) {
+                throw new Error('No response body');
+              }
               
-              // Send error update to client
+              const decoder = new TextDecoder();
+              let buffer = '';
+              
+              function pump(): Promise<void> {
+                return reader!.read().then(({ done, value }) => {
+                  if (done) {
+                    controller.close();
+                    return;
+                  }
+                  
+                  buffer += decoder.decode(value, { stream: true });
+                  const lines = buffer.split('\n');
+                  buffer = lines.pop() || '';
+                  
+                  for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                      try {
+                        const data = JSON.parse(line.slice(6));
+                        
+                        // Update progress if it's a progress update
+                        if (data.type === 'progress' && data.progress !== undefined) {
+                          updateProgress(data.progress, data.speed, data.eta);
+                        } else if (data.type === 'complete') {
+                          completeDownload();
+                        }
+                        
+                        controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+                      } catch (e) {
+                        console.error('Error parsing SSE data:', e);
+                      }
+                    }
+                  }
+                  
+                  return pump();
+                });
+              }
+              
+              return pump();
+            }).catch(error => {
+              console.error('Download API error:', error);
               const errorData = JSON.stringify({
                 type: 'error',
-                message: chunk.trim(),
+                message: `Download API error: ${error.message}`,
                 timestamp: new Date().toISOString()
               });
               controller.enqueue(encoder.encode(`data: ${errorData}\n\n`));
-            });
-
-            child.on('close', (code) => {
-              console.log('Download completed with code:', code);
-              
-              const resultData = JSON.stringify({
-                type: 'complete',
-                success: code === 0,
-                message: code === 0 ? `Downloaded ${models.length} models successfully` : `Download failed with exit code ${code}`,
-                models: models,
-                output: stdout,
-                error: stderr || null,
-                timestamp: new Date().toISOString()
-              });
-              controller.enqueue(encoder.encode(`data: ${resultData}\n\n`));
               controller.close();
             });
-
-            child.on('error', (error) => {
-              console.error('Download spawn error:', error);
-              const errorData = JSON.stringify({
-                type: 'error',
-                message: `Download spawn error: ${error.message}`,
-                timestamp: new Date().toISOString()
-              });
-              controller.enqueue(encoder.encode(`data: ${errorData}\n\n`));
-              controller.close();
-            });
-
-            // Set timeout
-            setTimeout(() => {
-              child.kill();
-              const timeoutData = JSON.stringify({
-                type: 'error',
-                message: 'Download timed out after 1 hour',
-                timestamp: new Date().toISOString()
-              });
-              controller.enqueue(encoder.encode(`data: ${timeoutData}\n\n`));
-              controller.close();
-            }, 3600000);
           }
         });
 

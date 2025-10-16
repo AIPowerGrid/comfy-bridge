@@ -47,6 +47,8 @@ class GPUInfoHandler(BaseHTTPRequestHandler):
         
         if parsed_path.path == '/api/sync-catalog':
             self.handle_sync_catalog()
+        elif parsed_path.path == '/api/download-models':
+            self.handle_download_models()
         else:
             self.send_error(404, "Not Found")
     
@@ -124,6 +126,100 @@ class GPUInfoHandler(BaseHTTPRequestHandler):
             
             self.wfile.write(json.dumps(result).encode())
     
+    def handle_download_models(self):
+        """Handle model download requests"""
+        try:
+            # Get the request body
+            content_length = int(self.headers['Content-Length'])
+            post_data = self.rfile.read(content_length)
+            request_data = json.loads(post_data.decode('utf-8'))
+            
+            models = request_data.get('models', [])
+            if not models:
+                self.send_error(400, "No models specified")
+                return
+            
+            # Import the download function
+            import subprocess
+            import sys
+            
+            # Run the download script
+            models_list = ','.join(models)
+            cmd = [
+                'python3', '/app/comfy-bridge/download_models_from_catalog.py',
+                '--models', models_list,
+                '--models-path', '/app/ComfyUI/models',
+                '--config', '/app/comfy-bridge/model_configs.json'
+            ]
+            
+            # Start the process
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1,
+                universal_newlines=True
+            )
+            
+            # Set up streaming response
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/event-stream')
+            self.send_header('Cache-Control', 'no-cache')
+            self.send_header('Connection', 'keep-alive')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            
+            # Stream output
+            while True:
+                output = process.stdout.readline()
+                if output == '' and process.poll() is not None:
+                    break
+                if output:
+                    # Send progress update
+                    progress_data = {
+                        'type': 'progress',
+                        'message': output.strip(),
+                        'timestamp': time.time()
+                    }
+                    try:
+                        self.wfile.write(f"data: {json.dumps(progress_data)}\n\n".encode())
+                        self.wfile.flush()
+                    except BrokenPipeError:
+                        # Client disconnected, stop streaming
+                        break
+            
+            # Wait for process to complete
+            return_code = process.wait()
+            
+            # Send completion message
+            result_data = {
+                'type': 'complete',
+                'success': return_code == 0,
+                'message': f"Download {'completed' if return_code == 0 else 'failed'}",
+                'models': models,
+                'timestamp': time.time()
+            }
+            try:
+                self.wfile.write(f"data: {json.dumps(result_data)}\n\n".encode())
+            except BrokenPipeError:
+                # Client disconnected, but download completed successfully
+                pass
+            
+        except Exception as e:
+            self.send_response(500)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            
+            result = {
+                'success': False,
+                'message': 'Download error',
+                'error': str(e)
+            }
+            
+            self.wfile.write(json.dumps(result).encode())
+    
     def log_message(self, format, *args):
         """Override to reduce log noise"""
         pass
@@ -143,6 +239,7 @@ def run_server(port=8001):
     print(f"  GET /gpu-info - Get GPU information")
     print(f"  GET /health - Health check")
     print(f"  POST /api/sync-catalog - Sync model catalog")
+    print(f"  POST /api/download-models - Download models")
     
     try:
         httpd.serve_forever()
