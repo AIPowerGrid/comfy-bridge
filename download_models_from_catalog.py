@@ -10,11 +10,55 @@ import sys
 import argparse
 import requests
 import subprocess
+import time
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 from urllib.parse import urlparse
 import hashlib
-import time
+import signal
+import threading
+import uuid
+
+# Global cancellation flag
+cancelled = threading.Event()
+
+def signal_handler(signum, frame):
+    """Handle cancellation signals"""
+    print("\nReceived cancellation signal, stopping download...")
+    cancelled.set()
+
+# Set up signal handlers
+signal.signal(signal.SIGTERM, signal_handler)
+signal.signal(signal.SIGINT, signal_handler)
+
+def update_download_progress(model_id, progress, speed=None, eta=None):
+    """Update download progress in persistent state file"""
+    try:
+        import json
+        import os
+        
+        state_file = os.path.join(os.getenv('COMFY_BRIDGE_PATH', '/app/comfy-bridge'), '.download_state.json')
+        
+        # Load existing state
+        state = {}
+        if os.path.exists(state_file):
+            with open(state_file, 'r') as f:
+                state = json.load(f)
+        
+        # Update progress
+        state['current_model'] = model_id
+        state['progress'] = progress
+        if speed is not None:
+            state['speed'] = speed
+        if eta is not None:
+            state['eta'] = eta
+        
+        # Save updated state
+        with open(state_file, 'w') as f:
+            json.dump(state, f)
+            
+    except Exception as e:
+        print(f"Error updating download progress: {e}", file=sys.stderr)
 
 def load_model_configs(config_path: str = 'model_configs.json') -> Dict[str, Any]:
     """Load model configurations from JSON file"""
@@ -67,6 +111,11 @@ def download_file(url: str, filepath: Path, headers: Optional[Dict[str, str]] = 
     try:
         print(f"Downloading {url} to {filepath}")
         
+        # Check if already cancelled
+        if cancelled.is_set():
+            print("Download cancelled before starting")
+            return False
+        
         # Create directory if it doesn't exist
         filepath.parent.mkdir(parents=True, exist_ok=True)
         
@@ -85,23 +134,66 @@ def download_file(url: str, filepath: Path, headers: Optional[Dict[str, str]] = 
         
         total_size = int(response.headers.get('content-length', 0))
         downloaded = 0
+        start_time = time.time()
+        last_update_time = start_time
+        last_downloaded = 0
         
         with open(filepath, 'wb') as f:
             for chunk in response.iter_content(chunk_size=8192):
+                # Check for cancellation
+                if cancelled.is_set():
+                    print(f"\nDownload cancelled. Removing partial file: {filepath}")
+                    f.close()
+                    if filepath.exists():
+                        filepath.unlink()
+                    return False
+                
                 if chunk:
                     f.write(chunk)
                     downloaded += len(chunk)
                     
                     if total_size > 0:
+                        current_time = time.time()
                         progress = (downloaded / total_size) * 100
                         downloaded_gb = downloaded / (1024**3)
                         total_gb = total_size / (1024**3)
-                        speed_mb = len(chunk) / (1024**2) if chunk else 0
-                        eta_seconds = (total_size - downloaded) / (speed_mb * 1024**2) if speed_mb > 0 else 0
-                        eta_minutes = int(eta_seconds // 60)
-                        eta_seconds = int(eta_seconds % 60)
-                        eta_str = f"{eta_minutes}m{eta_seconds:02d}s" if eta_minutes > 0 else f"{eta_seconds}s"
-                        print(f"\r[ {progress:5.1f}%] {downloaded_gb:.1f} GB/{total_gb:.1f} GB ({speed_mb:.1f} MB/s) ETA: {eta_str}", end='', flush=True)
+                        
+                        # Calculate speed based on time elapsed since last update
+                        time_elapsed = current_time - last_update_time
+                        if time_elapsed >= 1.0:  # Update every second
+                            bytes_per_second = (downloaded - last_downloaded) / time_elapsed
+                            speed_mb = bytes_per_second / (1024**2)
+                            
+                            # Calculate ETA
+                            remaining_bytes = total_size - downloaded
+                            if speed_mb > 0:
+                                eta_seconds = remaining_bytes / (speed_mb * 1024**2)
+                                eta_hours = int(eta_seconds // 3600)
+                                eta_minutes = int((eta_seconds % 3600) // 60)
+                                eta_seconds = int(eta_seconds % 60)
+                                
+                                if eta_hours > 0:
+                                    eta_str = f"{eta_hours}h{eta_minutes:02d}m{eta_seconds:02d}s"
+                                elif eta_minutes > 0:
+                                    eta_str = f"{eta_minutes}m{eta_seconds:02d}s"
+                                else:
+                                    eta_str = f"{eta_seconds}s"
+                            else:
+                                eta_str = "∞"
+                            
+                            print(f"\r[ {progress:5.1f}%] {downloaded_gb:.1f} GB/{total_gb:.1f} GB ({speed_mb:.1f} MB/s) ETA: {eta_str}", end='', flush=True)
+                            
+                            # Update persistent progress state
+                            try:
+                                # Extract model ID from filepath for progress tracking
+                                model_id = filepath.stem
+                                update_download_progress(model_id, progress, speed_mb, eta_str)
+                            except:
+                                pass  # Don't fail download if progress update fails
+                            
+                            # Reset for next update
+                            last_update_time = current_time
+                            last_downloaded = downloaded
         
         print()  # New line after progress
         print(f"Downloaded: {filepath}")
@@ -135,6 +227,14 @@ def download_model(model_id: str, model_config: Dict[str, Any], models_path: str
     """Download a single model"""
     print(f"\n=== Downloading {model_id} ===")
     
+    # Update progress to show we're starting this model
+    update_download_progress(model_id, 0)
+    
+    # Check for cancellation
+    if cancelled.is_set():
+        print(f"Download cancelled before starting {model_id}")
+        return False
+    
     # Get download URL
     url = get_download_url(model_config)
     if not url:
@@ -157,12 +257,21 @@ def download_model(model_id: str, model_config: Dict[str, Any], models_path: str
     if not download_file(url, filepath):
         return False
     
+    # Check for cancellation after download
+    if cancelled.is_set():
+        print(f"Download cancelled after downloading {model_id}")
+        if filepath.exists():
+            filepath.unlink()
+        return False
+    
     # Verify the download
     if not verify_model(model_config, filepath):
         filepath.unlink()  # Remove corrupted file
         return False
     
     print(f"Successfully downloaded {model_id}")
+    # Mark this model as complete
+    update_download_progress(model_id, 100)
     return True
 
 def download_models(model_ids: List[str], models_path: str, config_path: str = 'model_configs.json') -> bool:
@@ -173,6 +282,11 @@ def download_models(model_ids: List[str], models_path: str, config_path: str = '
     total_count = len(model_ids)
     
     for model_id in model_ids:
+        # Check for cancellation before each model
+        if cancelled.is_set():
+            print(f"\nDownload cancelled. Downloaded {success_count}/{total_count} models")
+            return False
+        
         if model_id not in configs:
             print(f"Model {model_id} not found in catalog")
             continue
@@ -181,11 +295,17 @@ def download_models(model_ids: List[str], models_path: str, config_path: str = '
             success_count += 1
         else:
             print(f"Failed to download {model_id}")
+            # Continue with other models unless cancelled
+            if cancelled.is_set():
+                break
     
     print(f"\n=== Download Summary ===")
-    print(f"Successfully downloaded: {success_count}/{total_count} models")
-    
-    return success_count == total_count
+    if cancelled.is_set():
+        print(f"Download cancelled. Successfully downloaded: {success_count}/{total_count} models")
+        return False
+    else:
+        print(f"Successfully downloaded: {success_count}/{total_count} models")
+        return success_count == total_count
 
 def main():
     """Main CLI interface"""

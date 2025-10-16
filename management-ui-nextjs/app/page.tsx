@@ -22,6 +22,7 @@ export default function Home() {
   const [styleFilter, setStyleFilter] = useState<'all' | 'text-to-image' | 'text-to-video' | 'image-to-video' | 'image-to-image' | 'anime' | 'realistic' | 'generalist' | 'artistic' | 'video'>('all');
   const [loading, setLoading] = useState(true);
   const [statusMessage, setStatusMessage] = useState<{type: 'success' | 'error' | 'info', message: string} | null>(null);
+  const [downloadStatus, setDownloadStatus] = useState<any>(null);
   const [showGettingStarted, setShowGettingStarted] = useState(false);
   const [isModelsCollapsed, setIsModelsCollapsed] = useState(false);
   const [isApiKeysCollapsed, setIsApiKeysCollapsed] = useState(false);
@@ -31,6 +32,24 @@ export default function Home() {
 
   useEffect(() => {
     loadData();
+    
+    // Poll download status every 2 seconds
+    const interval = setInterval(async () => {
+      try {
+        const response = await fetch('/api/models/download/status');
+        const status = await response.json();
+        setDownloadStatus(status);
+        
+        // Show warning if download is in progress but UI doesn't show it
+        if (status.is_downloading && !status.current_model) {
+          showStatus('info', 'A download is in progress. Please wait for it to complete or cancel it.');
+        }
+      } catch (error) {
+        console.error('Failed to fetch download status:', error);
+      }
+    }, 2000);
+    
+    return () => clearInterval(interval);
   }, []);
 
   const loadData = async () => {
@@ -213,6 +232,26 @@ export default function Home() {
     }
   };
 
+  const handleCancelDownload = async () => {
+    try {
+      const response = await fetch('/api/models/download/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        showStatus('info', 'Download cancelled successfully');
+        loadData(); // Reload to update status
+      } else {
+        showStatus('error', `Failed to cancel download: ${result.error || 'Unknown error'}`);
+      }
+    } catch (error: any) {
+      showStatus('error', `Error cancelling download: ${error.message}`);
+    }
+  };
+
   const handleUninstall = async (modelId: string) => {
     if (!confirm(`Are you sure you want to remove ${modelId}? This will delete all associated files.`)) {
       return;
@@ -283,6 +322,63 @@ export default function Home() {
         
         {statusMessage && (
           <StatusMessage type={statusMessage.type} message={statusMessage.message} />
+        )}
+
+        {/* Global Download Status Banner */}
+        {downloadStatus?.is_downloading && (
+          <motion.div
+            initial={{ opacity: 0, y: -50 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-gradient-to-r from-yellow-600/20 to-orange-600/20 border border-yellow-500/50 rounded-xl p-4 mb-6"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-3 h-3 bg-yellow-500 rounded-full animate-pulse"></div>
+                <div>
+                  <h3 className="font-semibold text-yellow-400">Download in Progress</h3>
+                  <p className="text-sm text-gray-400">
+                    {downloadStatus.current_model ? 
+                      `Downloading ${downloadStatus.current_model}...` : 
+                      'Download in progress...'
+                    }
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
+                {downloadStatus.progress > 0 && (
+                  <div className="text-right">
+                    <div className="text-sm font-semibold text-yellow-400">
+                      {downloadStatus.progress.toFixed(1)}%
+                    </div>
+                    {downloadStatus.speed && (
+                      <div className="text-xs text-gray-400">
+                        {downloadStatus.speed} MB/s
+                      </div>
+                    )}
+                  </div>
+                )}
+                <button
+                  onClick={handleCancelDownload}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-all flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  Cancel
+                </button>
+              </div>
+            </div>
+            {downloadStatus.progress > 0 && (
+              <div className="mt-3">
+                <div className="w-full bg-gray-700 rounded-full h-2">
+                  <div 
+                    className="bg-gradient-to-r from-yellow-500 to-orange-500 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${downloadStatus.progress}%` }}
+                  ></div>
+                </div>
+              </div>
+            )}
+          </motion.div>
         )}
 
         {/* Expand/Collapse All Button */}
@@ -449,6 +545,7 @@ export default function Home() {
                     filter={filter}
                     styleFilter={styleFilter}
                     gpuInfo={gpuInfo}
+                    downloadStatus={downloadStatus}
                     onFilterChange={setFilter}
                     onStyleFilterChange={setStyleFilter}
                     onUninstall={handleUninstall}
@@ -456,6 +553,7 @@ export default function Home() {
                     onUnhost={handleUnhost}
                     onDownload={(modelId) => handleDownloadSingle(modelId, false)}
                     onDownloadAndHost={(modelId) => handleDownloadSingle(modelId, true)}
+                    onCancelDownload={handleCancelDownload}
                     onCatalogRefresh={loadData}
                   />
                 </div>

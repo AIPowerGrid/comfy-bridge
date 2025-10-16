@@ -8,12 +8,15 @@ interface ModelCardProps {
   isSelected: boolean;
   isCompatible: boolean;
   isHosting: boolean;
+  isDownloading?: boolean;
+  downloadProgress?: number;
   onToggle: () => void;
   onUninstall?: () => void;
   onHost?: () => void;
   onUnhost?: () => void;
   onDownload?: () => void;
   onDownloadAndHost?: () => void;
+  onCancelDownload?: () => void;
   index: number;
 }
 
@@ -23,12 +26,15 @@ export default function ModelCard({
   isSelected,
   isCompatible,
   isHosting,
+  isDownloading = false,
+  downloadProgress = 0,
   onToggle,
   onUninstall,
   onHost,
   onUnhost,
   onDownload,
   onDownloadAndHost,
+  onCancelDownload,
   index,
 }: ModelCardProps) {
   const handleClick = (e: React.MouseEvent) => {
@@ -88,7 +94,12 @@ export default function ModelCard({
                 💰 Earning
               </span>
             )}
-                {!isCompatible && !model.installed && (
+            {isDownloading && (
+              <span className="flex-shrink-0 px-2 py-1 text-xs font-semibold bg-yellow-500/20 text-yellow-400 rounded-full border border-yellow-500/50">
+                ⬇️ Downloading...
+              </span>
+            )}
+                {!isCompatible && !model.installed && !isDownloading && (
                   <span className="flex-shrink-0 px-2 py-1 text-xs font-semibold bg-red-500/20 text-red-400 rounded-full border border-red-500/50">
                     Incompatible
                   </span>
@@ -125,6 +136,22 @@ export default function ModelCard({
               {model.description}
             </p>
 
+            {/* Download Progress Bar */}
+            {isDownloading && (
+              <div className="mb-4">
+                <div className="flex justify-between text-xs text-gray-400 mb-1">
+                  <span>Downloading...</span>
+                  <span>{downloadProgress.toFixed(1)}%</span>
+                </div>
+                <div className="w-full bg-gray-700 rounded-full h-2">
+                  <div 
+                    className="bg-gradient-to-r from-aipg-orange to-aipg-gold h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${downloadProgress}%` }}
+                  ></div>
+                </div>
+              </div>
+            )}
+
             {/* Model Stats - Fixed to bottom with same padding as buttons */}
             <div className="flex justify-between pt-4 border-t border-white/10">
               <div className="text-center">
@@ -159,7 +186,21 @@ export default function ModelCard({
 
         {/* Action Buttons - Always at bottom */}
         <div className="flex gap-2 pt-4 border-t border-white/10">
-          {model.installed ? (
+          {isDownloading ? (
+            /* Downloading: Show cancel button */
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onCancelDownload?.();
+              }}
+              className="flex-1 px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-bold rounded-lg transition-all transform hover:scale-[1.02] flex items-center justify-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              Cancel Download
+            </button>
+          ) : model.installed ? (
             /* Downloaded models: Start/Stop Hosting + Remove */
             <>
               <button
