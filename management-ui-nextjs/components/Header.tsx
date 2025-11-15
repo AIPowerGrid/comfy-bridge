@@ -1,8 +1,101 @@
 'use client';
 
 import { motion } from 'framer-motion';
+import { useState, useEffect } from 'react';
 
 export default function Header() {
+  const [isEarning, setIsEarning] = useState(false);
+  const [workerStatus, setWorkerStatus] = useState('unknown');
+
+  useEffect(() => {
+    // Check worker status periodically
+    const checkStatus = async () => {
+      try {
+        const response = await fetch('/api/grid-config');
+        const config = await response.json();
+        if (config.gridApiKey && config.workerName) {
+          // TODO: Check actual worker status from grid API
+          setWorkerStatus('configured');
+        } else {
+          setWorkerStatus('not_configured');
+        }
+      } catch (error) {
+        setWorkerStatus('error');
+      }
+    };
+
+    checkStatus();
+    const interval = setInterval(checkStatus, 30000); // Check every 30 seconds
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleStartEarning = async () => {
+    try {
+      setIsEarning(true);
+      console.log('Starting earning...');
+      
+      const response = await fetch('/api/earning/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      
+      const result = await response.json();
+      
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to start earning');
+      }
+      
+      console.log('Earning started successfully');
+    } catch (error: any) {
+      console.error('Failed to start earning:', error);
+      setIsEarning(false);
+      // Show error toast
+      if (typeof window !== 'undefined') {
+        // Trigger a custom event for toast notification
+        window.dispatchEvent(new CustomEvent('showToast', {
+          detail: {
+            type: 'error',
+            title: 'Start Earning Failed',
+            message: error.message || 'Failed to start earning'
+          }
+        }));
+      }
+    }
+  };
+
+  const handleStopEarning = async () => {
+    try {
+      setIsEarning(false);
+      console.log('Stopping earning...');
+      
+      const response = await fetch('/api/earning/stop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      
+      const result = await response.json();
+      
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to stop earning');
+      }
+      
+      console.log('Earning stopped successfully');
+    } catch (error: any) {
+      console.error('Failed to stop earning:', error);
+      setIsEarning(true);
+      // Show error toast
+      if (typeof window !== 'undefined') {
+        // Trigger a custom event for toast notification
+        window.dispatchEvent(new CustomEvent('showToast', {
+          detail: {
+            type: 'error',
+            title: 'Stop Earning Failed',
+            message: error.message || 'Failed to stop earning'
+          }
+        }));
+      }
+    }
+  };
   return (
     <motion.header
       initial={{ opacity: 0, y: -20 }}
@@ -39,10 +132,50 @@ export default function Header() {
           <span className="text-aipg-gold font-semibold"> Set it up once, earn forever.</span>
         </p>
         <div className="flex items-center justify-center gap-4">
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-green-900/30 rounded-full border border-green-700">
-            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-            <span className="text-sm text-green-300 font-medium">Ready to Earn</span>
-          </div>
+          {workerStatus === 'configured' ? (
+            <div className="flex items-center gap-4">
+              {isEarning ? (
+                <div className="inline-flex items-center gap-2 px-4 py-2 bg-green-900/30 rounded-full border border-green-700">
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                  <span className="text-sm text-green-300 font-medium">Earning Active</span>
+                </div>
+              ) : (
+                <div className="inline-flex items-center gap-2 px-4 py-2 bg-yellow-900/30 rounded-full border border-yellow-700">
+                  <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                  <span className="text-sm text-yellow-300 font-medium">Ready to Earn</span>
+                </div>
+              )}
+              <div className="flex gap-2">
+                {!isEarning ? (
+                  <button
+                    onClick={handleStartEarning}
+                    className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-all flex items-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Start Earning
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleStopEarning}
+                    className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-all flex items-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 10h6v4H9z" />
+                    </svg>
+                    Stop Earning
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-gray-900/30 rounded-full border border-gray-700">
+              <div className="w-2 h-2 bg-gray-500 rounded-full"></div>
+              <span className="text-sm text-gray-300 font-medium">Configure Connection</span>
+            </div>
+          )}
           <div className="text-sm text-gray-500">
             <span className="font-semibold text-aipg-gold">Step 1:</span> Configure your connection below
           </div>

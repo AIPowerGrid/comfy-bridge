@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server';
 import * as fs from 'fs/promises';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic';
@@ -65,7 +69,35 @@ export async function POST(request: Request) {
     // Write back to file
     await fs.writeFile(envPath, lines.join('\n'), 'utf-8');
     
-    return NextResponse.json({ success: true });
+    // Restart containers to apply environment changes
+    try {
+      console.log('Restarting containers to apply API key changes...');
+      
+      // Restart containers using docker compose (newer syntax)
+      const restartCommand = 'docker compose restart';
+      const { stdout, stderr } = await execAsync(restartCommand);
+      
+      console.log('Container restart output:', stdout);
+      if (stderr) {
+        console.warn('Container restart warnings:', stderr);
+      }
+      
+      return NextResponse.json({ 
+        success: true,
+        message: 'API keys saved and containers restarted successfully',
+        restartOutput: stdout,
+      });
+    } catch (restartError: any) {
+      console.error('Failed to restart containers:', restartError);
+      
+      // Still return success for the API key save, but warn about restart failure
+      return NextResponse.json({
+        success: true,
+        message: 'API keys saved, but container restart failed. Please restart manually.',
+        restartError: restartError.message,
+        warning: 'Please restart containers manually to apply changes',
+      });
+    }
   } catch (error: any) {
     console.error('Error saving API keys:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });

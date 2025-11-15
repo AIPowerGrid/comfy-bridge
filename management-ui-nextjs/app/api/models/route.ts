@@ -110,6 +110,22 @@ async function getSelectedModels(): Promise<string[]> {
   return [];
 }
 
+async function getAvailableWorkflows(): Promise<string[]> {
+  try {
+    const workflowsPath = process.env.COMFY_BRIDGE_PATH 
+      ? path.join(process.env.COMFY_BRIDGE_PATH, 'workflows')
+      : '/app/comfy-bridge/workflows';
+    
+    const files = await fs.readdir(workflowsPath);
+    return files
+      .filter(file => file.endsWith('.json'))
+      .map(file => path.basename(file, '.json'));
+  } catch (error) {
+    console.error('Error reading workflows:', error);
+    return [];
+  }
+}
+
 export async function GET() {
   try {
     const configPath = process.env.MODEL_CONFIGS_PATH || '/app/comfy-bridge/model_configs.json';
@@ -118,10 +134,15 @@ export async function GET() {
     
     const installed = await getInstalledModels();
     const selected = await getSelectedModels();
+    const availableWorkflows = await getAvailableWorkflows();
     
     const enhanced: Record<string, any> = {};
     
     for (const [modelName, config] of Object.entries(configs)) {
+      // Only include models that have corresponding workflow files
+      if (!availableWorkflows.includes(modelName)) {
+        continue;
+      }
       const sizeGb = (config.size_mb || 0) / 1024; // Convert MB to GB
       let depSizeGb = 0;
       
