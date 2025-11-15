@@ -43,10 +43,10 @@ def estimateVramRequirement(model):
     
     if baseline == 'wan':
         if 'a14b' in name:
-            return 96
+            return 32
         if '5b' in name:
-            return 24
-        return 32
+            return 16
+        return 24
     
     if baseline == 'flux':
         return 16
@@ -157,7 +157,7 @@ class TestModelCatalogAPI:
         }
         
         result = estimateVramRequirement(model)
-        assert result == 96  # Should be exactly 96GB for A14B models
+        assert result == 32  # Should be exactly 32GB for A14B models
 
     def test_estimate_vram_requirement_wan_5b(self):
         """Test VRAM estimation for Wan 5B models."""
@@ -171,7 +171,7 @@ class TestModelCatalogAPI:
         }
         
         result = estimateVramRequirement(model)
-        assert result == 24  # Should be exactly 24GB for 5B models
+        assert result == 16  # Should be exactly 16GB for 5B models
 
     def test_estimate_vram_requirement_flux(self):
         """Test VRAM estimation for Flux models."""

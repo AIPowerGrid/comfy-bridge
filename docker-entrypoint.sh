@@ -49,12 +49,25 @@ wait_for_comfyui() {
     return 1
 }
 
+# Use preinstalled PyTorch; just print version for visibility
+echo "🔧 Using preinstalled PyTorch (no runtime reinstall)"
+python3 -c "import torch; print(f'✅ PyTorch {torch.__version__} with CUDA {torch.version.cuda} ready')" 2>/dev/null || true
+
+# Create VAE symlink for ComfyUI compatibility (wan_2.1_vae.safetensors -> wan2.2_vae.safetensors)
+if [ -f "/app/ComfyUI/models/vae/wan2.2_vae.safetensors" ] && [ ! -f "/app/ComfyUI/models/vae/wan_2.1_vae.safetensors" ]; then
+    echo "🔗 Creating VAE symlink: wan_2.1_vae.safetensors -> wan2.2_vae.safetensors"
+    ln -sf /app/ComfyUI/models/vae/wan2.2_vae.safetensors /app/ComfyUI/models/vae/wan_2.1_vae.safetensors
+fi
+
 # Download required models
 download_models
 
 # Start catalog sync service in background
 echo "🔄 Starting catalog sync service..."
 /app/comfy-bridge/start_catalog_sync.sh
+
+# Ensure cache directory exists for downloads API locks
+mkdir -p /app/comfy-bridge/.cache || true
 
 # Start GPU info API in background
 echo "🖥️ Starting GPU info API..."
@@ -66,6 +79,13 @@ if ! ps -p $GPU_API_PID > /dev/null 2>&1; then
     echo "⚠️  GPU API failed to start, check /tmp/gpu_api.log"
     cat /tmp/gpu_api.log
 fi
+
+# Start Downloads API in background
+echo "📦 Starting Downloads API..."
+python3 /app/comfy-bridge/downloads_api.py > /tmp/downloads_api.log 2>&1 &
+DOWNLOADS_API_PID=$!
+echo "Downloads API started with PID: $DOWNLOADS_API_PID"
+sleep 1
 
 # Function to detect GPU availability
 detect_gpu() {

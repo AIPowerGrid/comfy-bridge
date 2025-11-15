@@ -11,6 +11,11 @@ import APIKeyEditor from '@/components/APIKeyEditor';
 import APIKeyStatus from '@/components/APIKeyStatus';
 import GettingStartedGuide from '@/components/GettingStartedGuide';
 import GridConfigEditor from '@/components/GridConfigEditor';
+import RestartCountdown from '@/components/RestartCountdown';
+import RemovalSummaryDialog from '@/components/RemovalSummaryDialog';
+import RebuildingPage from '@/components/RebuildingPage';
+import { ToastContainer } from '@/components/Toast';
+import { useToast } from '@/lib/useToast';
 
 export default function Home() {
   const [gpuInfo, setGpuInfo] = useState<any>(null);
@@ -29,9 +34,38 @@ export default function Home() {
   const [isGpuInfoCollapsed, setIsGpuInfoCollapsed] = useState(false);
   const [isDiskSpaceCollapsed, setIsDiskSpaceCollapsed] = useState(false);
   const [isGridConfigCollapsed, setIsGridConfigCollapsed] = useState(false);
+  const [isRestarting, setIsRestarting] = useState(false);
+  const [showRestartCountdown, setShowRestartCountdown] = useState(false);
+  const [showRebuildingPage, setShowRebuildingPage] = useState(false);
+  const [restartMessage, setRestartMessage] = useState('Containers will restart');
+  const [showRemovalDialog, setShowRemovalDialog] = useState(false);
+  const [removalItems, setRemovalItems] = useState<any[]>([]);
+  const [pendingRestartAction, setPendingRestartAction] = useState<(() => void) | null>(null);
+  
+  // Toast notifications
+  const { toasts, removeToast, showSuccess, showError, showInfo, showWarning } = useToast();
 
   useEffect(() => {
     loadData();
+    
+    // Disabled: Run startup cleanup to remove orphaned WORKFLOW_FILE entries
+    // runStartupCleanup();
+    
+    // Set up custom event listener for toast notifications from Header component
+    const handleToastEvent = (event: CustomEvent) => {
+      const { type, title, message } = event.detail;
+      if (type === 'error') {
+        showError(title, message);
+      } else if (type === 'success') {
+        showSuccess(title, message);
+      } else if (type === 'warning') {
+        showWarning(title, message);
+      } else {
+        showInfo(title, message);
+      }
+    };
+    
+    window.addEventListener('showToast', handleToastEvent as EventListener);
     
     // Set up SSE connection for real-time download updates
     const eventSource = new EventSource('/api/models/download/stream');
@@ -49,6 +83,8 @@ export default function Home() {
     
     eventSource.onerror = (error) => {
       console.error('SSE connection error:', error);
+      showError('Connection Error', 'Failed to connect to download status stream. Using fallback polling.');
+      
       // Fallback to polling if SSE fails
       const fallbackInterval = setInterval(async () => {
         try {
@@ -66,9 +102,24 @@ export default function Home() {
     
     return () => {
       eventSource.close();
+      window.removeEventListener('showToast', handleToastEvent as EventListener);
     };
   }, []);
 
+  const runStartupCleanup = async () => {
+    try {
+      const response = await fetch('/api/startup-cleanup');
+      const result = await response.json();
+      
+      if (result.success && result.requires_restart) {
+        console.log('Orphaned workflow entries found and cleaned. Restart needed.');
+        // Don't automatically restart on startup, just log
+      }
+    } catch (error) {
+      console.error('Startup cleanup failed:', error);
+    }
+  };
+  
   const loadData = async () => {
     try {
       // Load GPU info
@@ -100,6 +151,7 @@ export default function Home() {
     } catch (error) {
       console.error('Failed to load data:', error);
       showStatus('error', 'Failed to load data');
+      showError('Data Loading Error', 'Failed to load application data. Please refresh the page.');
       setLoading(false);
     }
   };
@@ -121,36 +173,60 @@ export default function Home() {
 
   const handleSaveAPIKeys = async (keys: { huggingface: string; civitai: string }) => {
     try {
+      showStatus('info', 'Saving API keys and restarting containers...');
+      
       const res = await fetch('/api/api-keys', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(keys),
       });
       
-      if (!res.ok) throw new Error('Failed to save API keys');
+      const result = await res.json();
+      
+      if (!res.ok) throw new Error(result.error || 'Failed to save API keys');
       
       setApiKeys(keys);
-      showStatus('success', 'API keys saved successfully!');
+      
+      if (result.warning) {
+        showStatus('error', result.message + ' ' + result.warning);
+        showWarning('Container Restart Failed', result.warning);
+      } else {
+        showStatus('success', result.message);
+        showSuccess('API Keys Saved', 'API keys saved and containers restarted successfully!');
+      }
     } catch (error: any) {
       showStatus('error', 'Failed to save API keys: ' + error.message);
+      showError('Save Failed', 'Failed to save API keys: ' + error.message);
       throw error;
     }
   };
 
   const handleSaveGridConfig = async (config: { gridApiKey: string; workerName: string; aipgWallet: string }) => {
     try {
+      showStatus('info', 'Saving configuration and restarting containers...');
+      
       const res = await fetch('/api/grid-config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(config),
       });
       
-      if (!res.ok) throw new Error('Failed to save grid configuration');
+      const result = await res.json();
+      
+      if (!res.ok) throw new Error(result.error || 'Failed to save grid configuration');
       
       setGridConfig(config);
-      showStatus('success', 'Grid configuration saved successfully!');
+      
+      if (result.warning) {
+        showStatus('error', result.message + ' ' + result.warning);
+        showWarning('Container Restart Failed', result.warning);
+      } else {
+        showStatus('success', result.message);
+        showSuccess('Configuration Saved', 'Grid configuration saved and containers restarted successfully!');
+      }
     } catch (error: any) {
       showStatus('error', 'Failed to save grid configuration: ' + error.message);
+      showError('Save Failed', 'Failed to save grid configuration: ' + error.message);
       throw error;
     }
   };
@@ -158,6 +234,7 @@ export default function Home() {
   const handleHost = async (modelId: string) => {
     try {
       showStatus('info', `Starting to host ${modelId}...`);
+      
       const res = await fetch('/api/models/host', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -167,13 +244,22 @@ export default function Home() {
       const result = await res.json();
       
       if (result.success) {
-        showStatus('success', `Now hosting ${modelId}! Restart the worker for changes to take effect.`);
-        await loadData(); // Reload to update hosting status
+        if (result.requires_restart) {
+          // Show countdown for rebuild
+          setRestartMessage(`${modelId} is now hosted! Containers will rebuild to start earning`);
+          setShowRestartCountdown(true);
+        } else {
+          showStatus('success', `Now hosting ${modelId}!`);
+          showSuccess('Model Hosting Started', `${modelId} is already being hosted!`);
+          await loadData();
+        }
       } else {
         showStatus('error', 'Failed to start hosting: ' + (result.error || 'Unknown error'));
+        showError('Hosting Failed', 'Failed to start hosting: ' + (result.error || 'Unknown error'));
       }
     } catch (error: any) {
       showStatus('error', 'Error: ' + error.message);
+      showError('Hosting Error', 'Error: ' + error.message);
     }
   };
 
@@ -188,14 +274,21 @@ export default function Home() {
       
       const result = await res.json();
       
-      if (result.success) {
-        showStatus('success', `Stopped hosting ${modelId}! Restart the worker for changes to take effect.`);
-        await loadData(); // Reload to update hosting status
+      if (result.success && result.restarted) {
+        // Show countdown for restart
+        setRestartMessage(`Stopped hosting ${modelId}. Containers will restart`);
+        setShowRestartCountdown(true);
+      } else if (result.success) {
+        showStatus('success', `Stopped hosting ${modelId}!`);
+        showSuccess('Model Hosting Stopped', result.message);
+        await loadData();
       } else {
         showStatus('error', 'Failed to stop hosting: ' + (result.error || 'Unknown error'));
+        showError('Stop Hosting Failed', 'Failed to stop hosting: ' + (result.error || 'Unknown error'));
       }
     } catch (error: any) {
       showStatus('error', 'Error: ' + error.message);
+      showError('Stop Hosting Error', 'Error: ' + error.message);
     }
   };
 
@@ -209,19 +302,28 @@ export default function Home() {
         return;
       }
       
+      // Check if model has a download URL
+      if (!model.config?.download_url && !model.config?.files?.[0]?.path) {
+        showStatus('error', `Model ${modelId} is not downloadable - no download URL available`);
+        showError('Download Not Available', `Model ${modelId} is not downloadable. This model may require manual installation or is not yet available for download.`);
+        return;
+      }
+      
       if (model.requires_huggingface_key && !apiKeys.huggingface) {
         showStatus('error', 'HuggingFace API key required for this model. Please configure it first.');
+        showError('API Key Required', 'HuggingFace API key required for this model. Please configure it first.');
         return;
       }
       
       if (model.requires_civitai_key && !apiKeys.civitai) {
         showStatus('error', 'Civitai API key required for this model. Please configure it first.');
+        showError('API Key Required', 'Civitai API key required for this model. Please configure it first.');
         return;
       }
       
       showStatus('info', `Starting download of ${modelId}...`);
 
-      // Start download - SSE will handle progress updates automatically
+      // Start download - read SSE stream for progress
       const downloadRes = await fetch('/api/models/download', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -234,61 +336,89 @@ export default function Home() {
         throw new Error(`Download failed: ${downloadRes.status}`);
       }
 
-      // Set up completion handler
-      const checkCompletion = () => {
-        const interval = setInterval(async () => {
-          const statusRes = await fetch('/api/models/download/status');
-          const status = await statusRes.json();
-          
-          if (!status.is_downloading) {
-            clearInterval(interval);
-            if (autoHost) {
-              showStatus('success', `${modelId} installed successfully! You're now earning money!`);
-              await handleHost(modelId);
-            } else {
-              showStatus('success', `${modelId} installed successfully! Click "Start Earning" to begin making money.`);
-            }
-            await loadData();
-          }
-        }, 2000); // Check every 2 seconds for completion
+      // Read the SSE stream for completion
+      const reader = downloadRes.body?.getReader();
+      if (reader) {
+        const decoder = new TextDecoder();
+        let buffer = '';
         
-        // Stop checking after 10 minutes
-        setTimeout(() => clearInterval(interval), 600000);
-      };
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
 
-      checkCompletion();
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                try {
+                  const data = JSON.parse(line.slice(6));
+                  const targetModel = data.model || modelId;
+                  
+                  if (data.type === 'complete') {
+                    if (autoHost) {
+                      showStatus('success', `${targetModel} installed successfully! Starting hosting...`);
+                      showSuccess('Download Complete', `${targetModel} installed successfully! Preparing to start earning...`);
+                      // handleHost will show the countdown modal
+                      await handleHost(targetModel);
+                    } else {
+                      showStatus('success', `${targetModel} installed successfully! Click "Start Earning" to begin making money.`);
+                      showSuccess('Download Complete', `${targetModel} installed successfully! Click "Start Earning" to begin making money.`);
+                      await loadData();
+                    }
+                  } else if (data.type === 'error') {
+                    throw new Error(data.message);
+                  }
+                } catch (e) {
+                  console.error('Error parsing SSE:', e);
+                }
+              }
+            }
+          }
+        } catch (readError) {
+          console.error('Error reading stream:', readError);
+        }
+      }
     } catch (error: any) {
       showStatus('error', 'Error: ' + error.message);
+      showError('Download Error', 'Error: ' + error.message);
     }
   };
 
-  const handleCancelDownload = async () => {
+  const handleCancelDownload = async (modelId?: string) => {
     try {
+      if (!modelId) {
+        showStatus('error', 'No model specified for cancellation');
+        return;
+      }
+      
       const response = await fetch('/api/models/download/cancel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model_id: modelId }),
       });
       
       const result = await response.json();
       
       if (result.success) {
         showStatus('info', 'Download cancelled successfully');
+        showSuccess('Download Cancelled', `Stopped download for ${modelId}`);
         loadData(); // Reload to update status
       } else {
         showStatus('error', `Failed to cancel download: ${result.error || 'Unknown error'}`);
+        showError('Cancel Failed', result.error || 'Unknown error');
       }
     } catch (error: any) {
       showStatus('error', `Error cancelling download: ${error.message}`);
+      showError('Cancel Error', error.message);
     }
   };
 
   const handleUninstall = async (modelId: string) => {
-    if (!confirm(`Are you sure you want to remove ${modelId}? This will delete all associated files.`)) {
-      return;
-    }
-    
     try {
-      showStatus('info', 'Removing ' + modelId + '...');
+      showStatus('info', 'Preparing to uninstall ' + modelId + '...');
       
       const res = await fetch('/api/models/uninstall', {
         method: 'POST',
@@ -299,14 +429,72 @@ export default function Home() {
       const result = await res.json();
       
       if (result.success) {
-        showStatus('success', 'Model removed successfully!');
-        await loadData(); // Reload to update installed status
+        if (result.removed_items && result.removed_items.length > 0) {
+          // Show removal summary dialog if files were deleted
+          const items = (result.removed_items || []).map((item: any) => ({
+            name: item.name,
+            type: item.type,
+            size: item.size ? `${(item.size / 1024 / 1024 / 1024).toFixed(2)} GB` : undefined
+          }));
+          
+          setRemovalItems(items);
+          setShowRemovalDialog(true);
+          
+          // Set up the restart action
+          setPendingRestartAction(() => async () => {
+            setShowRemovalDialog(false);
+            setRestartMessage(`${modelId} uninstalled. Containers will rebuild`);
+            setShowRestartCountdown(true);
+          });
+        } else if (result.requires_restart) {
+          // No files removed but configuration changed, go straight to countdown
+          showSuccess('Configuration Cleaned', `Removed ${modelId} from hosting configuration.`);
+          setRestartMessage(`${modelId} removed from configuration. Containers will rebuild`);
+          setShowRestartCountdown(true);
+        } else {
+          // Nothing to do
+          showInfo('No Action Needed', result.message);
+          await loadData();
+        }
       } else {
         showStatus('error', 'Removal failed: ' + (result.error || 'Unknown error'));
+        showError('Removal Failed', result.error);
       }
     } catch (error: any) {
       showStatus('error', 'Error: ' + error.message);
+      showError('Uninstall Error', error.message);
     }
+  };
+  
+  const handleRestartComplete = async () => {
+    try {
+      setShowRestartCountdown(false);
+      setShowRebuildingPage(true);
+      
+      // Call the restart API with rebuild flag
+      const res = await fetch('/api/containers/restart', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rebuild: true }),
+      });
+      
+      if (!res.ok) {
+        const result = await res.json();
+        showError('Rebuild Failed', result.error || 'Failed to rebuild containers');
+        setShowRebuildingPage(false);
+      }
+      // If successful, the RebuildingPage component will handle the rest
+    } catch (error: any) {
+      showError('Rebuild Error', error.message);
+      setShowRebuildingPage(false);
+    }
+  };
+  
+  const handleRebuildComplete = () => {
+    // Called when RebuildingPage detects containers are back up
+    setTimeout(() => {
+      window.location.reload();
+    }, 500);
   };
 
   if (loading) {
@@ -327,8 +515,36 @@ export default function Home() {
     civitai: catalog?.models?.filter((m: any) => m.requires_civitai_key).length || 0,
   };
 
+  // Show rebuilding page if containers are rebuilding
+  if (showRebuildingPage) {
+    return (
+      <RebuildingPage 
+        message="Rebuilding and restarting containers"
+        onComplete={handleRebuildComplete}
+      />
+    );
+  }
+  
   return (
     <div className="min-h-screen bg-black text-white">
+      {/* Toast Notifications */}
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
+      
+      {/* Restart Indicator Overlay */}
+      {isRestarting && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center">
+          <div className="bg-gray-900 rounded-xl border border-gray-700 p-8 max-w-md">
+            <div className="flex flex-col items-center gap-4">
+              <div className="w-16 h-16 border-4 border-aipg-orange border-t-transparent rounded-full animate-spin"></div>
+              <h3 className="text-2xl font-bold text-white">Restarting Containers</h3>
+              <p className="text-gray-400 text-center">
+                Containers are restarting to apply your changes. This may take a few moments...
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* Getting Started Guide Modal */}
       {showGettingStarted && (
         <GettingStartedGuide onClose={() => setShowGettingStarted(false)} />
@@ -388,7 +604,7 @@ export default function Home() {
                   </div>
                 )}
                 <button
-                  onClick={handleCancelDownload}
+                  onClick={() => handleCancelDownload(downloadStatus?.model)}
                   className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-all flex items-center gap-2"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -592,6 +808,35 @@ export default function Home() {
           </div>
         </div>
       </div>
+      
+      {/* Restart Countdown Modal */}
+      <RestartCountdown
+        isVisible={showRestartCountdown}
+        onComplete={handleRestartComplete}
+        message={restartMessage}
+        countdown={5}
+      />
+      
+      {/* Removal Summary Dialog */}
+      <RemovalSummaryDialog
+        isOpen={showRemovalDialog}
+        items={removalItems}
+        onConfirm={() => {
+          if (pendingRestartAction) {
+            pendingRestartAction();
+          }
+        }}
+        onCancel={() => {
+          setShowRemovalDialog(false);
+          setRemovalItems([]);
+          setPendingRestartAction(null);
+        }}
+        title="Uninstall Complete"
+        confirmText="OK, Restart Containers"
+      />
+      
+      {/* Toast Container */}
+      <ToastContainer toasts={toasts} onDismiss={removeToast} />
     </div>
   );
 }

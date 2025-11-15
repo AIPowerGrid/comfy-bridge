@@ -8,114 +8,192 @@ const execAsync = promisify(exec);
 
 export const dynamic = 'force-dynamic';
 
+interface RemovalItem {
+  name: string;
+  type: 'model' | 'dependency' | 'file';
+  path: string;
+  size?: number;
+}
+
 export async function POST(request: Request) {
   try {
     const { model_id } = await request.json();
     const modelsPath = process.env.MODELS_PATH || '/app/ComfyUI/models';
     const catalogPath = process.env.MODEL_CONFIGS_PATH || '/app/comfy-bridge/model_configs.json';
+    const stableDiffusionPath = process.env.GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH 
+      ? `${process.env.GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH}/stable_diffusion.json`
+      : '/app/grid-image-model-reference/stable_diffusion.json';
     const bridgePath = process.env.COMFY_BRIDGE_PATH || '/app/comfy-bridge';
     
     console.log('Uninstalling model:', model_id);
     
-    // First, stop hosting the model if it's currently being hosted
+    // Load comprehensive catalog from stable_diffusion.json
+    let modelInfo: any = null;
     try {
-      const envFilePath = process.env.ENV_FILE_PATH || '/app/comfy-bridge/.env';
-      let envContent = await fs.readFile(envFilePath, 'utf-8');
-      
-      // Check if model is currently being hosted
-      const match = envContent.match(/^WORKFLOW_FILE=(.*)$/m);
-      let currentModels: string[] = [];
-      
-      if (match && match[1]) {
-        currentModels = match[1].split(',').map(s => s.trim()).filter(Boolean);
-      }
-      
-      // If model is being hosted, stop hosting it first
-      if (currentModels.includes(model_id)) {
-        console.log(`Stopping hosting for model: ${model_id}`);
-        currentModels = currentModels.filter(m => m !== model_id);
-        const newModelsValue = currentModels.join(',');
-        
-        // Update WORKFLOW_FILE
-        if (match) {
-          envContent = envContent.replace(/^WORKFLOW_FILE=.*$/m, `WORKFLOW_FILE=${newModelsValue}`);
-        }
-        
-        await fs.writeFile(envFilePath, envContent, 'utf-8');
-        console.log(`Model ${model_id} is no longer being hosted`);
-      }
-    } catch (hostingError) {
-      console.warn('Failed to stop hosting model:', hostingError);
-      // Continue with uninstall even if hosting stop fails
+      const sdContent = await fs.readFile(stableDiffusionPath, 'utf-8');
+      const sdCatalog = JSON.parse(sdContent);
+      modelInfo = sdCatalog[model_id];
+    } catch (error) {
+      console.warn('Could not load stable_diffusion.json:', error);
     }
     
-    // Load model info from catalog
-    const catalogContent = await fs.readFile(catalogPath, 'utf-8');
-    const catalog = JSON.parse(catalogContent);
+    // Fallback to model_configs.json
+    if (!modelInfo) {
+      const catalogContent = await fs.readFile(catalogPath, 'utf-8');
+      const catalog = JSON.parse(catalogContent);
+      modelInfo = catalog[model_id];
+    }
     
-    const modelInfo = catalog[model_id];
     if (!modelInfo) {
       return NextResponse.json({ error: 'Model not found in catalog' }, { status: 404 });
     }
     
-    const deletedFiles: string[] = [];
+    const removedItems: RemovalItem[] = [];
     
-    // Delete main model file
-    const filename = modelInfo.filename;
-    const fileType = modelInfo.type || 'checkpoints';
+    // Get all files to delete from config.download[], files[], or simple format
+    let filesToDelete: Array<{name: string; folder: string}> = [];
     
-    // Map file types to directories
-    const typeToDir: { [key: string]: string } = {
-      'checkpoints': 'checkpoints',
-      'vae': 'vae',
-      'clip': 'clip',
-      'loras': 'loras',
-      'unet': 'unet',
-      'diffusion_models': 'diffusion_models',
-      'text_encoders': 'text_encoders',
-    };
-    
-    const targetDir = typeToDir[fileType] || 'checkpoints';
-    const filePath = path.join(modelsPath, targetDir, filename);
-    
-    try {
-      await fs.access(filePath);
-      await fs.unlink(filePath);
-      deletedFiles.push(filePath);
-      console.log(`Deleted: ${filePath}`);
-    } catch (err) {
-      console.log(`File not found: ${filePath}`);
+    // Check for files[] array (model_configs.json format)
+    if (modelInfo.files && Array.isArray(modelInfo.files)) {
+      console.log(`Found ${modelInfo.files.length} files in model_configs.json format`);
+      for (const file of modelInfo.files) {
+        const fileName = file.path || file.file_name;
+        const folder = file.file_type || 'checkpoints';
+        if (fileName) {
+          filesToDelete.push({ name: fileName, folder });
+        }
+      }
+    }
+    // Check for config.download[] (stable_diffusion.json format)
+    else if (modelInfo.config && modelInfo.config.download && Array.isArray(modelInfo.config.download)) {
+      console.log(`Found ${modelInfo.config.download.length} files in stable_diffusion.json format`);
+      for (const download of modelInfo.config.download) {
+        const fileName = download.file_name;
+        const fileUrl = download.file_url;
+        
+        // Determine folder from URL
+        let folder = 'checkpoints';
+        if (fileUrl.includes('/vae/')) folder = 'vae';
+        else if (fileUrl.includes('/loras/') || fileUrl.includes('/lora/')) folder = 'loras';
+        else if (fileUrl.includes('/text_encoders/') || fileUrl.includes('/clip/')) folder = 'text_encoders';
+        else if (fileUrl.includes('/diffusion_models/') || fileUrl.includes('/unet/')) folder = 'diffusion_models';
+        
+        filesToDelete.push({ name: fileName, folder });
+      }
+    }
+    // Fallback to simple format
+    else if (modelInfo.filename) {
+      console.log('Found filename in simple format');
+      const fileType = modelInfo.type || 'checkpoints';
+      filesToDelete.push({ name: modelInfo.filename, folder: fileType });
     }
     
-    // Delete dependency files
-    for (const dep of modelInfo.dependencies || []) {
-      const depFilename = dep.filename;
-      const depType = dep.type || 'checkpoints';
-      const depTargetDir = typeToDir[depType] || 'checkpoints';
-      const depFilePath = path.join(modelsPath, depTargetDir, depFilename);
+    console.log(`Total files to delete: ${filesToDelete.length}`);
+    
+    // Delete all files
+    for (const file of filesToDelete) {
+      const filePath = path.join(modelsPath, file.folder, file.name);
       
       try {
-        await fs.access(depFilePath);
-        await fs.unlink(depFilePath);
-        deletedFiles.push(depFilePath);
-        console.log(`Deleted dependency: ${depFilePath}`);
-      } catch (err) {
-        console.log(`Dependency file not found: ${depFilePath}`);
+        const stats = await fs.stat(filePath);
+        await fs.unlink(filePath);
+        
+        removedItems.push({
+          name: file.name,
+          type: 'file',
+          path: `${file.folder}/${file.name}`,
+          size: stats.size
+        });
+        
+        console.log(`Deleted: ${filePath}`);
+      } catch (err: any) {
+        if (err.code !== 'ENOENT') {
+          console.error(`Failed to delete file: ${filePath}`, err);
+        }
       }
     }
     
-    if (deletedFiles.length === 0) {
+    // Get dependencies from model info
+    const dependencies = modelInfo.dependencies || [];
+    
+    // Delete dependency files if they exist
+    for (const dep of dependencies) {
+      if (typeof dep === 'string') {
+        // Dependency is just a model ID - would need to look it up
+        // For now, skip
+        console.log(`Skipping dependency (ID only): ${dep}`);
+      } else if (dep.filename) {
+        const depType = dep.type || 'checkpoints';
+        const depPath = path.join(modelsPath, depType, dep.filename);
+        
+        try {
+          const stats = await fs.stat(depPath);
+          await fs.unlink(depPath);
+          
+          removedItems.push({
+            name: dep.filename,
+            type: 'dependency',
+            path: `${depType}/${dep.filename}`,
+            size: stats.size
+          });
+          
+          console.log(`Deleted dependency: ${depPath}`);
+        } catch (err: any) {
+          if (err.code !== 'ENOENT') {
+            console.error(`Failed to delete dependency: ${depPath}`, err);
+          }
+        }
+      }
+    }
+    
+    // Always check and remove from WORKFLOW_FILE, even if no files were deleted
+    let removedFromWorkflow = false;
+    try {
+      const envFilePath = process.env.ENV_FILE_PATH || '/app/comfy-bridge/.env';
+      let envContent = await fs.readFile(envFilePath, 'utf-8');
+      
+      const match = envContent.match(/^WORKFLOW_FILE=(.*)$/m);
+      if (match && match[1]) {
+        const currentModels = match[1].split(',')
+          .map(s => {
+            const trimmed = s.trim();
+            return trimmed.endsWith('.json') ? trimmed.slice(0, -5) : trimmed;
+          })
+          .filter(Boolean);
+        
+        const modelIdWithoutJson = model_id.endsWith('.json') ? model_id.slice(0, -5) : model_id;
+        const filtered = currentModels.filter(m => m !== modelIdWithoutJson);
+        
+        if (filtered.length !== currentModels.length) {
+          envContent = envContent.replace(/^WORKFLOW_FILE=.*$/m, `WORKFLOW_FILE=${filtered.join(',')}`);
+          await fs.writeFile(envFilePath, envContent, 'utf-8');
+          console.log(`Removed ${model_id} from WORKFLOW_FILE`);
+          removedFromWorkflow = true;
+        }
+      }
+    } catch (error) {
+      console.error('Failed to update WORKFLOW_FILE:', error);
+    }
+    
+    // If no files were deleted but model was in WORKFLOW_FILE, still consider it a success
+    if (removedItems.length === 0 && !removedFromWorkflow) {
       return NextResponse.json({ 
-        error: 'Model files not found',
+        error: 'Model not found. No files to delete and not in WORKFLOW_FILE.',
         success: false,
       }, { status: 404 });
     }
     
+    // Return summary of removed items (UI will show dialog if files were removed, then trigger restart)
+    const message = removedItems.length > 0 
+      ? `Successfully uninstalled ${model_id}. ${removedItems.length} item(s) removed.`
+      : `Removed ${model_id} from configuration.`;
+    
     return NextResponse.json({ 
       success: true,
-      deleted_files: deletedFiles,
+      removed_items: removedItems,
       model_id,
-      message: `Successfully uninstalled ${model_id}`,
+      message,
+      requires_restart: removedFromWorkflow || removedItems.length > 0,
     });
   } catch (error: any) {
     console.error('Uninstall error:', error);

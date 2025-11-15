@@ -117,12 +117,63 @@ def convert_comprehensive_catalog(repo_path: str) -> bool:
                         'inpainting': model_info.get('inpainting', False)
                     }
                     
-                    # Extract download URL
-                    if 'config' in model_info and 'download' in model_info['config']:
-                        downloads = model_info['config']['download']
-                        if downloads and len(downloads) > 0:
-                            simple_model['url'] = downloads[0]['file_url']
-                            simple_model['filename'] = downloads[0]['file_name']
+                    # Extract download URL and ALL files - handle multiple formats
+                    download_url = None
+                    filename = None
+                    files_list = []
+                    
+                    if 'config' in model_info:
+                        config = model_info['config']
+                        
+                        # Extract ALL files from config['download'] array (for multi-file models)
+                        if 'download' in config and isinstance(config['download'], list):
+                            for download_entry in config['download']:
+                                file_url = download_entry.get('file_url')
+                                file_name = download_entry.get('file_name')
+                                file_path = download_entry.get('file_path', '')
+                                
+                                if file_name:
+                                    # Determine file type from URL or path
+                                    file_type = 'checkpoints'
+                                    if '/vae/' in file_url:
+                                        file_type = 'vae'
+                                    elif '/loras/' in file_url or '/lora/' in file_url:
+                                        file_type = 'loras'
+                                    elif '/text_encoders/' in file_url or '/clip/' in file_url:
+                                        file_type = 'text_encoders'
+                                    elif '/diffusion_models/' in file_url or '/unet/' in file_url:
+                                        file_type = 'diffusion_models'
+                                    
+                                    files_list.append({
+                                        'path': file_name,
+                                        'file_type': file_type
+                                    })
+                            
+                            # Use first download entry for primary URL (backwards compatibility)
+                            if len(config['download']) > 0:
+                                download_url = config['download'][0].get('file_url')
+                                filename = config['download'][0].get('file_name')
+                        
+                        # Try config['download_url'] or config['file_url'] (for single-file format)
+                        if not download_url:
+                            download_url = config.get('download_url') or config.get('file_url')
+                        
+                        # Try config['file_name'] for filename
+                        if not filename:
+                            filename = config.get('file_name')
+                    
+                    # Fallback to top-level URL fields
+                    if not download_url:
+                        download_url = model_info.get('download_url') or model_info.get('url')
+                    
+                    if download_url:
+                        simple_model['url'] = download_url
+                    if filename:
+                        simple_model['filename'] = filename
+                    
+                    # Add files list if we have any
+                    if files_list:
+                        simple_model['files'] = files_list
                     
                     # Add to simple catalog
                     simple_catalog[model_id] = simple_model

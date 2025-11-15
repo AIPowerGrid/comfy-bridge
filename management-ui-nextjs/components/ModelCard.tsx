@@ -175,7 +175,7 @@ export default function ModelCard({
                 </div>
               </div>
               <div className="text-center">
-                <div className="text-xs text-gray-500 uppercase mb-1">Memory</div>
+                <div className="text-xs text-gray-500 uppercase mb-1">VRAM Requirement</div>
                 <div className="text-sm font-bold text-aipg-gold">{model.vram_required_gb} GB</div>
               </div>
               <div className="text-center">

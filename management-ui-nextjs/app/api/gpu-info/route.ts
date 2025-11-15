@@ -14,8 +14,13 @@ export async function GET() {
     const gpuInfo = await response.json();
     
     // Get installed models to calculate VRAM usage
-    const modelsResponse = await fetch('http://localhost:5000/api/models');
-    const modelsData = await modelsResponse.json();
+    let modelsData = { models: {} };
+    try {
+      const modelsResponse = await fetch('http://localhost:5000/api/models');
+      modelsData = await modelsResponse.json();
+    } catch (error) {
+      console.warn('Could not fetch models data:', error);
+    }
     
     // Calculate VRAM used by installed models
     let vramUsedGb = 0;
