@@ -261,6 +261,7 @@ export async function GET(request: Request) {
     const search = searchParams.get('search') || '';
     const styleFilter = searchParams.get('styleFilter') || 'all';
     const nsfwFilter = searchParams.get('nsfwFilter') || 'all';
+    const filter = searchParams.get('filter') || 'all';
     const sortField = searchParams.get('sortField') || 'name';
     const sortDirection = searchParams.get('sortDirection') || 'asc';
     
@@ -406,6 +407,21 @@ export async function GET(request: Request) {
         if (nsfwFilter === 'sfw-only' && model.nsfw) return false;
         return true;
       });
+    }
+    
+    if (filter !== 'all') {
+      if (filter === 'installed') {
+        filteredModels = filteredModels.filter(model => model.installed === true);
+      } else if (filter === 'compatible') {
+        try {
+          const gpuInfoResponse = await fetch('http://comfy-bridge:8001/gpu-info');
+          const gpuInfo = await gpuInfoResponse.json();
+          const maxVram = gpuInfo?.gpus?.[0]?.memory_gb || gpuInfo?.total_memory_gb || 0;
+          filteredModels = filteredModels.filter(model => model.vram_required_gb <= maxVram);
+        } catch (error) {
+          console.error('Failed to get GPU info for compatibility filter:', error);
+        }
+      }
     }
     
     // Sort models
