@@ -144,8 +144,7 @@ async def process_workflow(
     payload_cfg = payload.get("cfg_scale") or payload.get("cfg") or payload.get("guidance")
     payload_sampler_raw = payload.get("sampler_name") or payload.get("sampler")
     payload_sampler = map_sampler_name(payload_sampler_raw) if payload_sampler_raw else None
-    if payload_sampler_raw:
-        logger.info(f"Sampler mapping: {payload_sampler_raw} -> {payload_sampler}")
+    logger.warning(f"SAMPLER MAPPING: raw='{payload_sampler_raw}', mapped='{payload_sampler}'")
     payload_scheduler = payload.get("scheduler")
     if not payload_scheduler and payload.get("karras") is not None:
         payload_scheduler = "karras" if payload.get("karras") else "normal"
