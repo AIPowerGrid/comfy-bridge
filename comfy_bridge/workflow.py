@@ -3,12 +3,35 @@ import os
 import httpx
 import uuid
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from .utils import generate_seed
 from .model_mapper import get_workflow_file
 from .config import Settings
 
 logger = logging.getLogger(__name__)
+
+
+def map_sampler_name(api_sampler: Optional[str]) -> Optional[str]:
+    """
+    Map API sampler names (with k_ prefix) to ComfyUI sampler names (without prefix).
+    
+    Common mappings:
+    - k_euler -> euler
+    - k_dpm_2 -> dpm_2
+    - k_dpmpp_2 -> dpmpp_2
+    - etc.
+    
+    If the sampler name doesn't start with 'k_', return it as-is.
+    """
+    if not api_sampler:
+        return api_sampler
+    
+    # Remove 'k_' prefix if present
+    if api_sampler.startswith('k_'):
+        return api_sampler[2:]
+    
+    # Return as-is if no prefix
+    return api_sampler
 
 
 async def download_image(url: str, filename: str) -> str:
@@ -134,7 +157,8 @@ async def process_workflow(
     # Pre-calculate commonly reused payload fields
     payload_steps = payload.get("ddim_steps") or payload.get("steps")
     payload_cfg = payload.get("cfg_scale") or payload.get("cfg") or payload.get("guidance")
-    payload_sampler = payload.get("sampler_name") or payload.get("sampler")
+    payload_sampler_raw = payload.get("sampler_name") or payload.get("sampler")
+    payload_sampler = map_sampler_name(payload_sampler_raw) if payload_sampler_raw else None
     payload_scheduler = payload.get("scheduler")
     if not payload_scheduler and payload.get("karras") is not None:
         payload_scheduler = "karras" if payload.get("karras") else "normal"
