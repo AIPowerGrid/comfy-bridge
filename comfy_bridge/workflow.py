@@ -330,11 +330,13 @@ async def process_workflow(
 
             # Handle KSampler nodes - only update seed, preserve all other settings
             elif class_type in ["KSampler", "KSamplerAdvanced"]:
+                logger.info(f"Processing KSampler node {node_id}, current sampler_name: {inputs.get('sampler_name')}")
                 if "seed" in inputs:
                     inputs["seed"] = seed
                 if "noise_seed" in inputs:
                     inputs["noise_seed"] = seed
                 inputs = _apply_ksampler_dict(inputs)
+                logger.info(f"After _apply_ksampler_dict, sampler_name: {inputs.get('sampler_name')}")
                 node_data["inputs"] = inputs
 
             # Handle text encoding nodes - properly handle positive vs negative prompts
