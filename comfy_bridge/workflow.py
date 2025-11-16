@@ -12,25 +12,10 @@ logger = logging.getLogger(__name__)
 
 
 def map_sampler_name(api_sampler: Optional[str]) -> Optional[str]:
-    """
-    Map API sampler names (with k_ prefix) to ComfyUI sampler names (without prefix).
-    
-    Common mappings:
-    - k_euler -> euler
-    - k_dpm_2 -> dpm_2
-    - k_dpmpp_2 -> dpmpp_2
-    - etc.
-    
-    If the sampler name doesn't start with 'k_', return it as-is.
-    """
     if not api_sampler:
         return api_sampler
-    
-    # Remove 'k_' prefix if present
     if api_sampler.startswith('k_'):
         return api_sampler[2:]
-    
-    # Return as-is if no prefix
     return api_sampler
 
 
