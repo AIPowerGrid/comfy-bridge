@@ -103,6 +103,7 @@ def _validate_workflow_model_names(workflow: Dict[str, Any], filename: str) -> N
 async def process_workflow(
     workflow: Dict[str, Any], job: Dict[str, Any]
 ) -> Dict[str, Any]:
+    logger.warning("PROCESS_WORKFLOW CALLED - NEW CODE VERSION")
     payload = job.get("payload", {})
     seed = generate_seed(payload.get("seed"))
     
