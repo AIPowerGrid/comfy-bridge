@@ -55,9 +55,71 @@ def load_workflow_file(workflow_filename: str) -> Dict[str, Any]:
             raise FileNotFoundError(f"Workflow file not found: {workflow_path}")
 
     with open(workflow_path, "r") as f:
-        # Return a deep copy so callers can safely mutate without caching stale fields
         data = json.load(f)
-        return json.loads(json.dumps(data))
+        
+    # Validate workflow has actual model file names, not placeholders
+    _validate_workflow_model_names(data, workflow_filename)
+    
+    # Return a deep copy so callers can safely mutate without caching stale fields
+    return json.loads(json.dumps(data))
+
+
+def _validate_workflow_model_names(workflow: Dict[str, Any], filename: str) -> None:
+    """Validate that workflow references actual model files, not placeholders."""
+    placeholders = [
+        "checkpoint_name.safetensors",
+        "model.safetensors",
+        "checkpoint.safetensors",
+    ]
+    
+    # Handle ComfyUI format (nodes array)
+    if isinstance(workflow, dict) and "nodes" in workflow:
+        nodes = workflow.get("nodes", [])
+        for node in nodes:
+            if not isinstance(node, dict):
+                continue
+            _check_node_for_placeholders(node, filename, placeholders, node.get("id", "unknown"))
+    # Handle simple format (direct node objects)
+    else:
+        for node_id, node_data in workflow.items():
+            if not isinstance(node_data, dict):
+                continue
+            _check_node_for_placeholders(node_data, filename, placeholders, node_id)
+
+
+def _check_node_for_placeholders(node: Dict[str, Any], filename: str, placeholders: list, node_id: str) -> None:
+    """Check a single node for placeholder model names."""
+    inputs = node.get("inputs", {})
+    class_type = node.get("class_type") or node.get("type", "")
+    
+    if class_type == "CheckpointLoaderSimple":
+        ckpt_name = inputs.get("ckpt_name", "")
+        if ckpt_name in placeholders:
+            logger.warning(
+                f"Workflow {filename} node {node_id} has placeholder model name '{ckpt_name}'. "
+                f"Workflows must be exported from ComfyUI with actual model file names."
+            )
+    elif class_type == "UNETLoader":
+        unet_name = inputs.get("unet_name", "")
+        if unet_name in placeholders:
+            logger.warning(
+                f"Workflow {filename} node {node_id} has placeholder UNET name '{unet_name}'. "
+                f"Workflows must be exported from ComfyUI with actual model file names."
+            )
+    elif class_type == "CLIPLoader":
+        clip_name = inputs.get("clip_name", "")
+        if clip_name in placeholders:
+            logger.warning(
+                f"Workflow {filename} node {node_id} has placeholder CLIP name '{clip_name}'. "
+                f"Workflows must be exported from ComfyUI with actual model file names."
+            )
+    elif class_type == "VAELoader":
+        vae_name = inputs.get("vae_name", "")
+        if vae_name in placeholders:
+            logger.warning(
+                f"Workflow {filename} node {node_id} has placeholder VAE name '{vae_name}'. "
+                f"Workflows must be exported from ComfyUI with actual model file names."
+            )
 
 
 async def process_workflow(
