@@ -162,8 +162,7 @@ async def process_workflow(
         if payload_sampler:
             old_sampler = inputs.get("sampler_name")
             inputs["sampler_name"] = payload_sampler
-            if old_sampler != payload_sampler:
-                logger.info(f"Updated sampler_name from {old_sampler} to {payload_sampler}")
+            logger.warning(f"KSAMPLER UPDATE: node sampler_name changed from '{old_sampler}' to '{payload_sampler}' (payload_sampler_raw was '{payload_sampler_raw}')")
         if payload_scheduler and "scheduler" in inputs:
             inputs["scheduler"] = payload_scheduler
         if payload_denoise is not None and "denoise" in inputs:
