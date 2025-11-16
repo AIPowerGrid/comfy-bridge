@@ -144,8 +144,8 @@ async def process_workflow(
     payload_cfg = payload.get("cfg_scale") or payload.get("cfg") or payload.get("guidance")
     payload_sampler_raw = payload.get("sampler_name") or payload.get("sampler")
     payload_sampler = map_sampler_name(payload_sampler_raw) if payload_sampler_raw else None
-    if payload_sampler_raw and payload_sampler != payload_sampler_raw:
-        logger.debug(f"Mapped sampler name: {payload_sampler_raw} -> {payload_sampler}")
+    if payload_sampler_raw:
+        logger.info(f"Sampler mapping: {payload_sampler_raw} -> {payload_sampler}")
     payload_scheduler = payload.get("scheduler")
     if not payload_scheduler and payload.get("karras") is not None:
         payload_scheduler = "karras" if payload.get("karras") else "normal"
@@ -160,7 +160,10 @@ async def process_workflow(
             elif "cfg_scale" in inputs:
                 inputs["cfg_scale"] = payload_cfg
         if payload_sampler:
+            old_sampler = inputs.get("sampler_name")
             inputs["sampler_name"] = payload_sampler
+            if old_sampler != payload_sampler:
+                logger.info(f"Updated sampler_name from {old_sampler} to {payload_sampler}")
         if payload_scheduler and "scheduler" in inputs:
             inputs["scheduler"] = payload_scheduler
         if payload_denoise is not None and "denoise" in inputs:
