@@ -14,15 +14,6 @@ def generate_seed(provided: Any) -> int:
 
 
 def encode_media(data: Union[str, bytes, Path], media_type: str = "media") -> str:
-    """Encode image/video file or bytes to base64 string
-    
-    Args:
-        data: Either a file path or raw bytes to encode
-        media_type: Type of media for error messages (e.g., "image", "video")
-        
-    Returns:
-        Base64 encoded string representation of the data
-    """
     if isinstance(data, (bytes, bytearray)):
         raw = data
     else:
@@ -36,12 +27,9 @@ def encode_media(data: Union[str, bytes, Path], media_type: str = "media") -> st
     return base64.b64encode(raw).decode()
 
 
-# Legacy functions for backward compatibility
 def encode_image(data: Union[str, bytes]) -> str:
-    """Encode image file or bytes to base64 string (uses encode_media)"""
     return encode_media(data, "image")
 
 
 def encode_video(data: Union[str, bytes]) -> str:
-    """Encode video file or bytes to base64 string (uses encode_media)"""
     return encode_media(data, "video")
