@@ -12,7 +12,6 @@ logger = logging.getLogger(__name__)
 
 
 async def download_image(url: str, filename: str) -> str:
-    """Download image from URL and upload it to ComfyUI via API"""
     # Download the image to a temporary file
     temp_dir = "/tmp/comfyui_inputs"
     os.makedirs(temp_dir, exist_ok=True)
@@ -38,7 +37,6 @@ async def download_image(url: str, filename: str) -> str:
 
 
 def load_workflow_file(workflow_filename: str) -> Dict[str, Any]:
-    """Load a workflow JSON file from the workflows directory"""
     workflow_path = os.path.join(Settings.WORKFLOW_DIR, workflow_filename)
 
     if not os.path.exists(workflow_path):
@@ -65,67 +63,38 @@ def load_workflow_file(workflow_filename: str) -> Dict[str, Any]:
 
 
 def _validate_workflow_model_names(workflow: Dict[str, Any], filename: str) -> None:
-    """Validate that workflow references actual model files, not placeholders."""
-    placeholders = [
-        "checkpoint_name.safetensors",
-        "model.safetensors",
-        "checkpoint.safetensors",
-    ]
+    placeholders = ["checkpoint_name.safetensors", "model.safetensors", "checkpoint.safetensors"]
+    model_fields = {
+        "CheckpointLoaderSimple": "ckpt_name",
+        "UNETLoader": "unet_name",
+        "CLIPLoader": "clip_name",
+        "VAELoader": "vae_name"
+    }
     
-    # Handle ComfyUI format (nodes array)
     if isinstance(workflow, dict) and "nodes" in workflow:
         nodes = workflow.get("nodes", [])
         for node in nodes:
             if not isinstance(node, dict):
                 continue
-            _check_node_for_placeholders(node, filename, placeholders, node.get("id", "unknown"))
-    # Handle simple format (direct node objects)
+            class_type = node.get("type", "")
+            if class_type in model_fields:
+                model_name = node.get("inputs", {}).get(model_fields[class_type], "")
+                if model_name in placeholders:
+                    logger.warning(f"Workflow {filename} has placeholder '{model_name}' - export from ComfyUI with actual model files")
     else:
         for node_id, node_data in workflow.items():
             if not isinstance(node_data, dict):
                 continue
-            _check_node_for_placeholders(node_data, filename, placeholders, node_id)
-
-
-def _check_node_for_placeholders(node: Dict[str, Any], filename: str, placeholders: list, node_id: str) -> None:
-    """Check a single node for placeholder model names."""
-    inputs = node.get("inputs", {})
-    class_type = node.get("class_type") or node.get("type", "")
-    
-    if class_type == "CheckpointLoaderSimple":
-        ckpt_name = inputs.get("ckpt_name", "")
-        if ckpt_name in placeholders:
-            logger.warning(
-                f"Workflow {filename} node {node_id} has placeholder model name '{ckpt_name}'. "
-                f"Workflows must be exported from ComfyUI with actual model file names."
-            )
-    elif class_type == "UNETLoader":
-        unet_name = inputs.get("unet_name", "")
-        if unet_name in placeholders:
-            logger.warning(
-                f"Workflow {filename} node {node_id} has placeholder UNET name '{unet_name}'. "
-                f"Workflows must be exported from ComfyUI with actual model file names."
-            )
-    elif class_type == "CLIPLoader":
-        clip_name = inputs.get("clip_name", "")
-        if clip_name in placeholders:
-            logger.warning(
-                f"Workflow {filename} node {node_id} has placeholder CLIP name '{clip_name}'. "
-                f"Workflows must be exported from ComfyUI with actual model file names."
-            )
-    elif class_type == "VAELoader":
-        vae_name = inputs.get("vae_name", "")
-        if vae_name in placeholders:
-            logger.warning(
-                f"Workflow {filename} node {node_id} has placeholder VAE name '{vae_name}'. "
-                f"Workflows must be exported from ComfyUI with actual model file names."
-            )
+            class_type = node_data.get("class_type", "")
+            if class_type in model_fields:
+                model_name = node_data.get("inputs", {}).get(model_fields[class_type], "")
+                if model_name in placeholders:
+                    logger.warning(f"Workflow {filename} node {node_id} has placeholder '{model_name}' - export from ComfyUI with actual model files")
 
 
 async def process_workflow(
     workflow: Dict[str, Any], job: Dict[str, Any]
 ) -> Dict[str, Any]:
-    """Process a workflow by replacing only prompt, seed, and resolution"""
     payload = job.get("payload", {})
     seed = generate_seed(payload.get("seed"))
     
@@ -172,7 +141,6 @@ async def process_workflow(
     payload_denoise = payload.get("denoising_strength") or payload.get("denoise")
 
     def _apply_ksampler_dict(inputs: Dict[str, Any]) -> Dict[str, Any]:
-        """Apply payload overrides to a KSampler node inputs dict."""
         if payload_steps is not None and "steps" in inputs:
             inputs["steps"] = payload_steps
         if payload_cfg is not None:
@@ -191,10 +159,6 @@ async def process_workflow(
         return inputs
 
     def _apply_ksampler_widgets(widgets: list) -> list:
-        """
-        Apply payload overrides to widgets_values in Comfy native format.
-        Expected ordering (seed, steps, cfg, sampler, scheduler, denoise, ...).
-        """
         if not isinstance(widgets, list):
             return widgets
         # seed is handled elsewhere; respect only advanced params here
@@ -472,7 +436,6 @@ async def process_workflow(
 
 
 async def build_workflow(job: Dict[str, Any]) -> Dict[str, Any]:
-    """Build a workflow by loading the appropriate external workflow file"""
     model_name = job.get("model", "")
     source_processing = job.get("source_processing", "txt2img")
 
@@ -498,7 +461,6 @@ async def build_workflow(job: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def convert_to_img2img(workflow: Dict[str, Any], source_image_filename: str) -> Dict[str, Any]:
-    """Convert a text-to-image workflow to img2img by replacing EmptySD3LatentImage with LoadImage + VAEEncode"""
     # Find the next available node ID
     max_node_id = max(int(k) for k in workflow.keys() if k.isdigit())
     
@@ -559,7 +521,6 @@ def convert_to_img2img(workflow: Dict[str, Any], source_image_filename: str) -> 
 
 
 def update_loadimageoutput_nodes(workflow: Dict[str, Any], source_image_filename: str) -> Dict[str, Any]:
-    """Update LoadImageOutput nodes in ComfyUI format workflows to reference the source image"""
     # Handle ComfyUI format (nodes array)
     if isinstance(workflow, dict) and "nodes" in workflow:
         nodes = workflow.get("nodes", [])

@@ -242,14 +242,6 @@ class ModelMapper:
         return resolved_paths
 
     def _extract_model_files_from_workflow(self, workflow_path: str) -> List[str]:
-        """Extract model file names from a workflow JSON file.
-
-        Supports both simple format (direct node objects) and ComfyUI format (nodes array).
-        - CheckpointLoaderSimple.ckpt_name (SD/SDXL ckpt)
-        - UNETLoader.unet_name (e.g., Flux-style UNET weights)
-        - CLIPLoader.clip_name (e.g., WAN2 clip models)
-        - VAELoader.vae_name (e.g., WAN2 VAE)
-        """
         try:
             with open(workflow_path, "r", encoding="utf-8") as f:
                 wf = json.load(f)
