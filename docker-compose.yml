@@ -6,8 +6,13 @@ services:
           dockerfile: Dockerfile
         container_name: comfy-bridge-ui
         
-        # GPU access for detection
-        runtime: nvidia
+        deploy:
+          resources:
+            reservations:
+              devices:
+                - driver: nvidia
+                  count: all
+                  capabilities: [gpu]
         environment:
           - NVIDIA_VISIBLE_DEVICES=all
           - NVIDIA_DRIVER_CAPABILITIES=utility
@@ -58,8 +63,13 @@ services:
       dockerfile: dockerfile
     container_name: comfy-bridge
     
-    # GPU support for NVIDIA GPUs (including Blackwell Pro)
-    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
