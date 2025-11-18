@@ -103,7 +103,6 @@ def _validate_workflow_model_names(workflow: Dict[str, Any], filename: str) -> N
 async def process_workflow(
     workflow: Dict[str, Any], job: Dict[str, Any]
 ) -> Dict[str, Any]:
-    logger.warning("PROCESS_WORKFLOW CALLED - NEW CODE VERSION")
     payload = job.get("payload", {})
     seed = generate_seed(payload.get("seed"))
     
@@ -145,7 +144,6 @@ async def process_workflow(
     payload_cfg = payload.get("cfg_scale") or payload.get("cfg") or payload.get("guidance")
     payload_sampler_raw = payload.get("sampler_name") or payload.get("sampler")
     payload_sampler = map_sampler_name(payload_sampler_raw) if payload_sampler_raw else None
-    logger.warning(f"SAMPLER MAPPING: raw='{payload_sampler_raw}', mapped='{payload_sampler}'")
     payload_scheduler = payload.get("scheduler")
     if not payload_scheduler and payload.get("karras") is not None:
         payload_scheduler = "karras" if payload.get("karras") else "normal"
@@ -160,9 +158,7 @@ async def process_workflow(
             elif "cfg_scale" in inputs:
                 inputs["cfg_scale"] = payload_cfg
         if payload_sampler:
-            old_sampler = inputs.get("sampler_name")
             inputs["sampler_name"] = payload_sampler
-            logger.warning(f"KSAMPLER UPDATE: node sampler_name changed from '{old_sampler}' to '{payload_sampler}' (payload_sampler_raw was '{payload_sampler_raw}')")
         if payload_scheduler and "scheduler" in inputs:
             inputs["scheduler"] = payload_scheduler
         if payload_denoise is not None and "denoise" in inputs:
@@ -329,13 +325,11 @@ async def process_workflow(
 
             # Handle KSampler nodes - only update seed, preserve all other settings
             elif class_type in ["KSampler", "KSamplerAdvanced"]:
-                logger.info(f"Processing KSampler node {node_id}, current sampler_name: {inputs.get('sampler_name')}")
                 if "seed" in inputs:
                     inputs["seed"] = seed
                 if "noise_seed" in inputs:
                     inputs["noise_seed"] = seed
                 inputs = _apply_ksampler_dict(inputs)
-                logger.info(f"After _apply_ksampler_dict, sampler_name: {inputs.get('sampler_name')}")
                 node_data["inputs"] = inputs
 
             # Handle text encoding nodes - properly handle positive vs negative prompts
