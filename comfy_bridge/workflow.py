@@ -11,6 +11,112 @@ from .config import Settings
 logger = logging.getLogger(__name__)
 
 
+async def validate_and_fix_model_filenames(
+    workflow: Dict[str, Any], 
+    available_models: Dict[str, Any]
+) -> Dict[str, Any]:
+    """Validate and fix model filenames in workflow to match available models"""
+    fixed_workflow = json.loads(json.dumps(workflow))  # Deep copy
+    fixes_applied = []
+    
+    for node_id, node_data in fixed_workflow.items():
+        if not isinstance(node_data, dict):
+            continue
+            
+        class_type = node_data.get("class_type", "")
+        inputs = node_data.get("inputs", {})
+        
+        # Fix DualCLIPLoader
+        if class_type == "DualCLIPLoader":
+            dual_clip_models = available_models.get("DualCLIPLoader", {})
+            clip1_options = dual_clip_models.get("clip_name1", [])
+            clip2_options = dual_clip_models.get("clip_name2", [])
+            
+            if clip1_options and "clip_name1" in inputs:
+                current_clip1 = inputs.get("clip_name1")
+                if current_clip1 not in clip1_options:
+                    if not clip1_options:
+                        logger.error(
+                            f"Node {node_id}: No CLIP models available for DualCLIPLoader clip_name1. "
+                            f"Workflow requires '{current_clip1}' but no models are installed."
+                        )
+                    else:
+                        # Try to find a matching model or use first available
+                        new_clip1 = clip1_options[0]
+                        logger.warning(
+                            f"Node {node_id}: Replacing DualCLIPLoader clip_name1 '{current_clip1}' "
+                            f"with '{new_clip1}' (not in available models: {clip1_options})"
+                        )
+                        inputs["clip_name1"] = new_clip1
+                        fixes_applied.append(f"Node {node_id} clip_name1: {current_clip1} -> {new_clip1}")
+            
+            if clip2_options and "clip_name2" in inputs:
+                current_clip2 = inputs.get("clip_name2")
+                if current_clip2 not in clip2_options:
+                    if not clip2_options:
+                        logger.error(
+                            f"Node {node_id}: No CLIP models available for DualCLIPLoader clip_name2. "
+                            f"Workflow requires '{current_clip2}' but no models are installed."
+                        )
+                    else:
+                        new_clip2 = clip2_options[0]
+                        logger.warning(
+                            f"Node {node_id}: Replacing DualCLIPLoader clip_name2 '{current_clip2}' "
+                            f"with '{new_clip2}' (not in available models: {clip2_options})"
+                        )
+                        inputs["clip_name2"] = new_clip2
+                        fixes_applied.append(f"Node {node_id} clip_name2: {current_clip2} -> {new_clip2}")
+        
+        # Fix UNETLoader
+        elif class_type == "UNETLoader":
+            unet_options = available_models.get("UNETLoader", [])
+            if "unet_name" in inputs:
+                current_unet = inputs.get("unet_name")
+                if current_unet not in unet_options:
+                    if not unet_options:
+                        logger.error(
+                            f"Node {node_id}: No UNET models available. "
+                            f"Workflow requires '{current_unet}' but no models are installed."
+                        )
+                    else:
+                        new_unet = unet_options[0]
+                        logger.warning(
+                            f"Node {node_id}: Replacing UNETLoader unet_name '{current_unet}' "
+                            f"with '{new_unet}' (not in available models: {unet_options})"
+                        )
+                        inputs["unet_name"] = new_unet
+                        fixes_applied.append(f"Node {node_id} unet_name: {current_unet} -> {new_unet}")
+        
+        # Fix VAELoader
+        elif class_type == "VAELoader":
+            vae_options = available_models.get("VAELoader", [])
+            if "vae_name" in inputs:
+                current_vae = inputs.get("vae_name")
+                if current_vae not in vae_options:
+                    if not vae_options:
+                        logger.error(
+                            f"Node {node_id}: No VAE models available. "
+                            f"Workflow requires '{current_vae}' but no models are installed."
+                        )
+                    else:
+                        new_vae = vae_options[0]
+                        logger.warning(
+                            f"Node {node_id}: Replacing VAELoader vae_name '{current_vae}' "
+                            f"with '{new_vae}' (not in available models: {vae_options})"
+                        )
+                        inputs["vae_name"] = new_vae
+                        fixes_applied.append(f"Node {node_id} vae_name: {current_vae} -> {new_vae}")
+    
+    if fixes_applied:
+        logger.info(f"Applied {len(fixes_applied)} model filename fixes:")
+        for fix in fixes_applied:
+            logger.info(f"  - {fix}")
+    else:
+        logger.debug("All model filenames validated - no fixes needed")
+    
+    return fixed_workflow
+
+
 def map_sampler_name(api_sampler: Optional[str]) -> Optional[str]:
     if not api_sampler:
         return api_sampler
