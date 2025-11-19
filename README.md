@@ -99,11 +99,41 @@ docker-compose down
 # Pull latest code
 git pull origin main
 
-# Rebuild with latest changes
-docker-compose build --no-cache
+# Rebuild with latest changes (uses cached downloads for faster rebuilds)
+docker-compose build
 
 # Start with existing data intact
 docker-compose up -d
+```
+
+### ⚡ Build Optimization (Faster Rebuilds)
+
+The Dockerfile uses **BuildKit cache mounts** to persist downloaded files between rebuilds:
+
+- **Pip packages** (~2GB): Cached in Docker's build cache
+- **PyTorch wheels** (~900MB): Persisted across rebuilds
+- **ComfyUI git repository**: Shallow clone with layer caching
+
+**Benefits:**
+- First build: Downloads everything (~30-60 minutes)
+- Subsequent rebuilds: Only downloads changed packages (~2-5 minutes)
+- **90%+ faster rebuilds** after the first build
+
+**Version Management:**
+- **Python packages**: Automatically checked via `requirements.txt`
+- **ComfyUI version**: Set via `COMFYUI_VERSION` build arg (defaults to `main`)
+- **PyTorch version**: Hardcoded in Dockerfile (update manually if needed)
+
+**Force Clean Rebuild:**
+```bash
+# Clear all caches and rebuild from scratch
+docker-compose build --no-cache
+```
+
+**Build with Specific ComfyUI Version:**
+```bash
+# Use a specific ComfyUI commit or branch
+docker-compose build --build-arg COMFYUI_VERSION=v1.0.0 comfy-bridge
 ```
 
 ### Checking Update Status 📊

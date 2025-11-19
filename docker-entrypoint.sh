@@ -37,15 +37,16 @@ wait_for_comfyui() {
     
     while [ $attempt -lt $max_attempts ]; do
         if curl -s http://localhost:8188/system_stats > /dev/null 2>&1; then
-            echo "✅ ComfyUI is ready!"
+            attempt=$((attempt + 1))
+            echo "✅ ComfyUI is ready! (checked $attempt/$max_attempts)"
             return 0
         fi
         attempt=$((attempt + 1))
-        echo "  Waiting for ComfyUI... ($attempt/$max_attempts)"
+        echo "  Waiting for ComfyUI... ($attempt/$max_attempts)" >&2
         sleep 2
     done
     
-    echo "❌ ComfyUI failed to start within expected time"
+    echo "❌ ComfyUI failed to start within expected time" >&2
     return 1
 }
 

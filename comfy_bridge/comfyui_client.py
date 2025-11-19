@@ -16,7 +16,18 @@ class ComfyUIClient:
         logger.debug(f"Submitting workflow to ComfyUI ({len(workflow)} nodes)")
         
         resp = await self.client.post("/prompt", json={"prompt": workflow})
-        resp.raise_for_status()
+        if resp.status_code != 200:
+            error_text = resp.text
+            logger.error(f"ComfyUI error response (status {resp.status_code}): {error_text}")
+            try:
+                error_json = resp.json()
+                logger.error(f"ComfyUI error JSON: {error_json}")
+                # Log node errors if present
+                if "node_errors" in error_json:
+                    logger.error(f"Node errors: {error_json['node_errors']}")
+            except Exception as e:
+                logger.error(f"Failed to parse error JSON: {e}")
+            resp.raise_for_status()
         response_data = resp.json()
         
         prompt_id = response_data.get("prompt_id")
