@@ -22,65 +22,80 @@
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 [![Status](https://img.shields.io/badge/Status-Active-success?style=for-the-badge)](https://dashboard.aipowergrid.io)
 
-**Generate AI art and videos while earning AIPG tokens**
+**🎨 Generate AI art and videos while earning AIPG tokens!**
 
 ---
 
 </div>
 
-## Quick Start
+## 🚀 Quick Start
 
-1. Get your API key from [dashboard.aipowergrid.io](https://dashboard.aipowergrid.io)
-2. Copy `env.example` to `.env` and add your API key
-3. Run the start script:
+**Get up and running in under 2 minutes:**
+
+1. 🔑 Get your API key from [dashboard.aipowergrid.io](https://dashboard.aipowergrid.io)
+2. ⚙️ Copy `env.example` to `.env` and add your API key
+3. ▶️ Run the start script:
    - **Windows**: Double-click `start-worker.bat`
    - **Mac/Linux**: Run `./start-worker.sh`
-4. Open http://localhost:5000 and select models
-5. Click "Start Hosting" to begin earning
+4. 🎨 Open http://localhost:5000 and select models
+5. 💰 Click "Start Hosting" → You're earning!
+
+> ⚡ **Pro Tip:** The script automatically checks all requirements and guides you through setup!
 
 ---
 
-## Why Run This Worker?
+## 💰 Why Run This Worker?
 
-- **Earn AIPG tokens** for every AI generation your GPU processes
-- **Runs 24/7** - earn while your computer is idle
-- **Simple setup** - one script to start, web UI to manage
-- **Help power** the decentralized AI network
+### Turn Idle Time Into Income 💵
+Your GPU sits idle most of the time. Why not put it to work? Every AI generation you process earns you AIPG tokens - even while you sleep!
 
----
+### Simple Setup, Zero Hassle ⚡
+- **One-click start** - no complex configuration needed
+- **Web UI** - manage everything from your browser
+- **Automatic updates** - always running the latest version
+- **24/7 operation** - set it and forget it
 
-## What You Get
-
-- **Earn tokens** for every AI generation
-- **Access to AI models** at no cost
-- **Secure** - API keys stay private
-- **Dashboard** to track earnings
+### Power the Future of AI 🌐
+Join thousands of GPU owners helping build a decentralized AI network. Make AI generation accessible to everyone while earning rewards.
 
 ---
 
-## Requirements
+## 🎁 What You Get
 
-The start scripts check these automatically:
-
-- Docker Desktop installed and running
-- 50GB+ free disk space
-- NVIDIA GPU with 6GB+ VRAM (or AMD GPU with ROCm)
-- 8GB+ RAM recommended
-
-Scripts will guide you through installation if anything is missing.
+| Benefit | What It Means |
+|---------|---------------|
+| 💵 **Earn Tokens** | Get paid in AIPG for every image/video generation |
+| 🎨 **Free AI Access** | Use powerful AI models without paying |
+| 🔒 **Secure** | Your API keys stay private, never shared |
+| 📊 **Real-time Dashboard** | Track earnings and performance live |
+| 🌐 **Decentralized** | Support the open AI network |
+| ⚡ **Easy Management** | Web UI makes everything simple |
 
 ---
 
-## Detailed Setup
+## 📋 Requirements
 
-### Step 1: Get Your API Key
+The start scripts **automatically check** these for you:
+
+- ✅ **Docker Desktop** installed and running
+- ✅ **50GB+ free disk space** (for models and Docker images)
+- ✅ **NVIDIA GPU** with 6GB+ VRAM (or AMD GPU with ROCm)
+- ✅ **8GB+ RAM** recommended
+
+> 💡 **Don't worry!** If anything is missing, the scripts guide you through installation step-by-step.
+
+---
+
+## 📖 Detailed Setup Guide
+
+### Step 1: Get Your API Key 🔑
 
 1. Visit [dashboard.aipowergrid.io](https://dashboard.aipowergrid.io)
 2. Sign up (it's free!)
-3. Go to "API Keys" → Generate new key
+3. Go to **"API Keys"** → Generate new key
 4. Copy the key (starts with `aipg_`)
 
-### Step 2: Configure
+### Step 2: Configure ⚙️
 
 **Windows:**
 ```bash
@@ -94,16 +109,16 @@ cp env.example .env
 nano .env
 ```
 
-Add these lines (replace with your values):
+Add these two lines (replace with your actual values):
 ```bash
 GRID_API_KEY=aipg_your_key_here
 GRID_WORKER_NAME=YourName.YourWalletAddress
 ```
 
-Worker name format: `YourName.YourWalletAddress`  
-Example: `JohnDoe.0x1234567890abcdef1234567890abcdef12345678`
+> 📝 **Worker Name Format**: `YourName.YourWalletAddress`  
+> Example: `JohnDoe.0x1234567890abcdef1234567890abcdef12345678`
 
-### Step 3: Start the Worker
+### Step 3: Start the Worker ▶️
 
 **Windows:**
 - Double-click `start-worker.bat`
@@ -112,67 +127,96 @@ Example: `JohnDoe.0x1234567890abcdef1234567890abcdef12345678`
 - Run: `./start-worker.sh`
 - Or: `chmod +x start-worker.sh && ./start-worker.sh`
 
-The script checks disk space, Docker installation, and configuration.
+The script automatically:
+- ✅ Checks disk space (50GB minimum)
+- ✅ Verifies Docker is installed
+- ✅ Ensures Docker is running
+- ✅ Validates your configuration
 
-### Step 4: Select Models
+### Step 4: Select Models 🎨
 
-1. Open http://localhost:5000 in your browser
-2. Browse models (filter by your GPU's VRAM)
-3. Click Download for models you want to host
+1. Open **http://localhost:5000** in your browser
+2. Browse available models (filter by your GPU's VRAM)
+3. Click **Download** for models you want to host
 4. Wait for downloads to complete
-5. Click "Start Hosting" to begin earning
+5. Click **"Start Hosting"** → You're earning! 🎉
 
 ---
 
-## Monitor Earnings
+## 📊 Monitor Your Earnings
 
-- Dashboard: [dashboard.aipowergrid.io](https://dashboard.aipowergrid.io)
-- Local UI: http://localhost:5000
-- View logs: `docker-compose logs -f`
+Track your progress in real-time:
+
+- **🌐 Dashboard**: [dashboard.aipowergrid.io](https://dashboard.aipowergrid.io) - View earnings, stats, and history
+- **💻 Local UI**: http://localhost:5000 - Manage models and monitor jobs
+- **📝 View Logs**: `docker-compose logs -f` - See detailed activity
 
 ---
 
-## Troubleshooting
+## 🛠️ Troubleshooting
 
-**Worker won't start:**
-- Ensure Docker Desktop is running
-- Verify `.env` file exists with your API key
-- Check logs: `docker-compose logs`
+### Worker Won't Start ❌
 
-**Not receiving jobs:**
-- Models must show "Hosting" status (green) in UI
-- Verify API key at dashboard.aipowergrid.io
-- Check worker name format: `Name.WalletAddress`
+**Check these first:**
+- ✅ Docker Desktop is running (look for whale icon in system tray)
+- ✅ `.env` file exists with your API key
+- ✅ Check logs: `docker-compose logs` for specific errors
 
-**GPU not detected:**
-- Install [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)
-- Run `nvidia-smi` to verify GPU detection
+**Common fixes:**
 - Restart Docker Desktop
+- Verify port 5000 or 8188 isn't already in use
+- Ensure you have enough disk space (50GB+)
 
-**More help:**
-- Logs: `docker-compose logs -f`
-- [Discord](https://discord.gg/aipowergrid)
-- [Documentation](https://aipowergrid.io)
+### Not Receiving Jobs? 🔍
+
+**Verify these:**
+- ✅ Models show **"Hosting"** status (green) in the UI
+- ✅ API key is valid at dashboard.aipowergrid.io
+- ✅ Worker name format is correct: `Name.WalletAddress`
+- ✅ Worker is online (check dashboard)
+
+**Still not working?**
+- Check logs: `docker-compose logs -f`
+- Verify your GPU meets model requirements
+- Ensure models finished downloading completely
+
+### GPU Not Detected? 🎮
+
+**For NVIDIA GPUs:**
+1. Install [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)
+2. Run `nvidia-smi` to verify GPU is detected
+3. Restart Docker Desktop
+4. Check logs: `docker-compose logs -f`
+
+**For AMD GPUs:**
+- Ensure ROCm is properly installed
+- Check Docker supports your GPU model
+
+### Need More Help? 💬
+
+- 📝 **Logs**: `docker-compose logs -f` - See what's happening
+- 💬 [Discord](https://discord.gg/aipowergrid) - Get help from the community
+- 📚 [Documentation](https://aipowergrid.io) - Full technical docs
 
 ---
 
-## GPU Requirements
+## 🎮 GPU Requirements
 
-| Model Type | VRAM Needed |
-|------------|-------------|
-| SD 1.5 | 6GB |
-| SDXL | 8GB |
-| Flux | 12GB |
-| Video (5B) | 16GB |
-| Video (14B) | 32GB |
+| Model Type | VRAM Needed | What It Does |
+|------------|-------------|--------------|
+| **SD 1.5** | 6GB | General images, fastest |
+| **SDXL** | 8GB | High-resolution images |
+| **Flux** | 12GB | Advanced, high-quality images |
+| **Video (5B)** | 16GB | Short videos (5-10 seconds) |
+| **Video (14B)** | 32GB | High-quality videos |
 
-Start with SD 1.5 models if you have limited VRAM.
+> 💡 **New to GPU hosting?** Start with SD 1.5 models - they're the most popular and work great on entry-level GPUs!
 
 ---
 
-## Commands
+## 🔄 Common Commands
 
-**Update:**
+**Update to latest version:**
 ```bash
 git pull
 docker-compose down
@@ -180,41 +224,167 @@ docker-compose build
 docker-compose up -d
 ```
 
-**Stop:** `docker-compose down`  
-**Start:** `docker-compose up -d`  
-**Logs:** `docker-compose logs -f`
+**Stop the worker:**
+```bash
+docker-compose down
+```
+
+**Start the worker:**
+```bash
+docker-compose up -d
+```
+
+**View live logs:**
+```bash
+docker-compose logs -f
+```
+
+**Restart after changes:**
+```bash
+docker-compose restart
+```
 
 ---
 
-## Advanced Configuration
+## ⚙️ Advanced Configuration
 
-**Faster downloads** - Add to `.env`:
+### Faster Model Downloads 🚀
+
+Add these to your `.env` for faster downloads:
 ```bash
 HUGGING_FACE_API_KEY=your_hf_token
 CIVITAI_API_KEY=your_civitai_token
 ```
 
-**Custom ports** - Edit `docker-compose.yml` if needed.
+> 💡 These API keys are optional but can significantly speed up model downloads from Hugging Face and Civitai.
+
+### Custom Ports 🔌
+
+Edit `docker-compose.yml` to change ports if needed:
+- Default: Management UI on port `5000`, ComfyUI on port `8188`
+- Change if these ports conflict with other services
 
 ---
 
-## Architecture
+## 🏗️ How It Works
 
-Runs ComfyUI and connects to the AI Power Grid network. When someone requests a generation, your GPU processes it and you get paid.
+This worker runs **ComfyUI** (powerful AI generation engine) and connects it to the **AI Power Grid** network. When someone requests an AI generation, your GPU processes it and you get paid in AIPG tokens!
 
 **Components:**
-- ComfyUI: AI generation engine
-- Bridge: Connects to AI Power Grid network
-- Management UI: Web interface for management
+- 🎨 **ComfyUI** - The AI generation engine that does the heavy lifting
+- 🌉 **Bridge** - Connects your worker to the AI Power Grid network
+- 💻 **Management UI** - Web interface for easy model and job management
+
+**The Flow:**
+1. Job request comes in from the network
+2. Your worker picks it up
+3. ComfyUI processes it on your GPU
+4. Result is uploaded and you get paid! 💰
 
 ---
 
-## Resources
+## 📚 Additional Resources
 
-- [Documentation](https://aipowergrid.io)
-- [Discord](https://discord.gg/aipowergrid)
-- [Dashboard](https://dashboard.aipowergrid.io)
-- [GitHub Issues](https://github.com/AIPowerGrid/comfy-bridge/issues)
+- 📖 [Full Documentation](https://aipowergrid.io) - Complete technical docs
+- 💬 [Discord Community](https://discord.gg/aipowergrid) - Get help, share tips
+- 📊 [Dashboard](https://dashboard.aipowergrid.io) - Track earnings and manage account
+- 🐛 [Report Issues](https://github.com/AIPowerGrid/comfy-bridge/issues) - Found a bug?
+
+---
+
+## ❓ Frequently Asked Questions
+
+### 💰 Earning & Payments
+
+**Q: How much can I earn?**  
+A: Earnings depend on your GPU, models hosted, and network demand. Higher-end GPUs hosting popular models typically earn more. Check the dashboard for current rates.
+
+**Q: How do I get paid?**  
+A: You earn AIPG tokens automatically for each completed generation. View your balance and earnings on the dashboard.
+
+**Q: When do I get paid?**  
+A: Payments are processed automatically after each job completes. Check your dashboard for real-time earnings.
+
+**Q: Can I run this on multiple GPUs?**  
+A: Yes! Each GPU can run its own worker instance. Just use different worker names and ensure each has enough resources.
+
+### 🎮 GPU & Hardware
+
+**Q: Do I need a high-end GPU?**  
+A: No! Entry-level GPUs (6GB VRAM) can run SD 1.5 models. Higher-end GPUs can run more advanced models and earn more.
+
+**Q: Can I use my GPU while the worker runs?**  
+A: Yes, but it may slow down both. The worker uses GPU resources, so gaming or other GPU-intensive tasks may impact performance.
+
+**Q: Will this damage my GPU?**  
+A: No. The worker runs at normal operating temperatures. Modern GPUs are designed for 24/7 operation. Monitor temperatures if concerned.
+
+**Q: Can I use an AMD GPU?**  
+A: Yes! AMD GPUs with ROCm support work. Setup may differ slightly - check the documentation for AMD-specific instructions.
+
+### ⚙️ Setup & Configuration
+
+**Q: Do I need technical knowledge?**  
+A: No! The one-click scripts handle everything. Basic computer skills are enough.
+
+**Q: How long does setup take?**  
+A: About 2-5 minutes for initial setup, plus model download time (varies by model size and internet speed).
+
+**Q: Can I change models later?**  
+A: Yes! Use the web UI at http://localhost:5000 to download new models or stop hosting current ones anytime.
+
+**Q: Do I need to keep my computer on?**  
+A: Yes, the worker needs your computer running. Many users run it 24/7 on dedicated machines or when idle.
+
+### 🔒 Security & Privacy
+
+**Q: Is my API key safe?**  
+A: Yes! Your API key stays on your machine and is never shared. Only you have access to it.
+
+**Q: Can others access my GPU?**  
+A: No. Only jobs from the AI Power Grid network are processed. You control which models to host.
+
+**Q: What data is collected?**  
+A: Only job processing metrics (for payments) and worker status. No personal data or generated content is stored.
+
+### 🐛 Troubleshooting
+
+**Q: Worker won't start**  
+A: Check Docker is running, `.env` file exists, and you have enough disk space. Run `docker-compose logs` for details.
+
+**Q: Not receiving jobs**  
+A: Verify models show "Hosting" status (green), API key is valid, and worker name format is correct.
+
+**Q: Jobs failing**  
+A: Check GPU has enough VRAM for the model, logs for errors, and ensure models downloaded completely.
+
+**Q: Slow performance**  
+A: Ensure no other GPU-intensive apps are running, check GPU temperatures aren't throttling, and verify Docker has GPU access.
+
+### 🌐 Network & Connectivity
+
+**Q: Do I need fast internet?**  
+A: Moderate speed is fine. Faster internet helps with model downloads and uploading results faster.
+
+**Q: Can I run this offline?**  
+A: No, you need internet to receive jobs and upload results. The worker connects to the AI Power Grid network.
+
+**Q: What ports are used?**  
+A: Port 5000 (Management UI) and 8188 (ComfyUI). These can be changed in `docker-compose.yml` if needed.
+
+### 📊 Models & Performance
+
+**Q: Which models should I host?**  
+A: Start with SD 1.5 (most popular). Then try SDXL or Flux if your GPU supports it. Video models require more VRAM.
+
+**Q: How many models can I host?**  
+A: As many as your disk space allows. Each model needs to be downloaded and stored. Start with 2-3 popular models.
+
+**Q: Can I test models before hosting?**  
+A: Yes! Use the ComfyUI interface at http://localhost:8188 to test models before enabling hosting.
+
+**Q: Why are some models not available?**  
+A: Models may require more VRAM than your GPU has, or may not be supported yet. Check GPU requirements table above.
 
 ---
 
@@ -224,6 +394,8 @@ Runs ComfyUI and connects to the AI Power Grid network. When someone requests a 
 
 [![Get Started](https://img.shields.io/badge/Get%20Started-Dashboard%20AIPG-blue?style=for-the-badge&logo=rocket)](https://dashboard.aipowergrid.io)
 
-[Discord](https://discord.gg/aipowergrid) | [Documentation](https://aipowergrid.io)
+[💬 Discord](https://discord.gg/aipowergrid) | [📚 Documentation](https://aipowergrid.io)
+
+**Ready to turn your GPU into a money-making machine?** 🚀
 
 </div>
