@@ -47,7 +47,7 @@
 ## 💰 Why Run This Worker?
 
 ### Turn Idle Time Into Income 💵
-Your GPU sits idle most of the time. Why not put it to work? Every AI generation you process earns you AIPG tokens - even while you sleep!
+Your GPU sits idle most of the time. Why not put it to work? You earn AIPG tokens just by having the worker running - even while you sleep!
 
 ### Simple Setup, Zero Hassle ⚡
 - **One-click start** - no complex configuration needed
@@ -64,7 +64,7 @@ Join thousands of GPU owners helping build a decentralized AI network. Make AI g
 
 | Benefit | What It Means |
 |---------|---------------|
-| 💵 **Earn Tokens** | Get paid in AIPG for every image/video generation |
+| 💵 **Earn Tokens** | Get paid in AIPG just for running the worker |
 | 🎨 **Free AI Access** | Use powerful AI models without paying |
 | 🔒 **Secure** | Your API keys stay private, never shared |
 | 📊 **Real-time Dashboard** | Track earnings and performance live |
@@ -268,18 +268,18 @@ Edit `docker-compose.yml` to change ports if needed:
 
 ## 🏗️ How It Works
 
-This worker runs **ComfyUI** (powerful AI generation engine) and connects it to the **AI Power Grid** network. When someone requests an AI generation, your GPU processes it and you get paid in AIPG tokens!
+This worker runs **ComfyUI** (powerful AI generation engine) and connects it to the **AI Power Grid** network. You earn AIPG tokens just by keeping the worker running and hosting models!
 
 **Components:**
-- 🎨 **ComfyUI** - The AI generation engine that does the heavy lifting
+- 🎨 **ComfyUI** - The AI generation engine that processes jobs
 - 🌉 **Bridge** - Connects your worker to the AI Power Grid network
 - 💻 **Management UI** - Web interface for easy model and job management
 
 **The Flow:**
-1. Job request comes in from the network
-2. Your worker picks it up
-3. ComfyUI processes it on your GPU
-4. Result is uploaded and you get paid! 💰
+1. Your worker connects to the network
+2. Jobs come in and your GPU processes them
+3. You earn AIPG tokens for keeping the worker online
+4. Payments are made every hour on the 20 minute mark! 💰
 
 ---
 
@@ -300,10 +300,10 @@ This worker runs **ComfyUI** (powerful AI generation engine) and connects it to 
 A: Earnings depend on your GPU, models hosted, and network demand. Higher-end GPUs hosting popular models typically earn more. Check the dashboard for current rates.
 
 **Q: How do I get paid?**  
-A: You earn AIPG tokens automatically for each completed generation. View your balance and earnings on the dashboard.
+A: You earn AIPG tokens automatically just by having the worker running. No need to process jobs - just keep it online!
 
 **Q: When do I get paid?**  
-A: Payments are processed automatically after each job completes. Check your dashboard for real-time earnings.
+A: Payments are made automatically every hour on the 20 minute mark (e.g., 1:20, 2:20, 3:20). Check your dashboard to see your earnings.
 
 **Q: Can I run this on multiple GPUs?**  
 A: Yes! Each GPU can run its own worker instance. Just use different worker names and ensure each has enough resources.
@@ -345,7 +345,7 @@ A: Yes! Your API key stays on your machine and is never shared. Only you have ac
 A: No. Only jobs from the AI Power Grid network are processed. You control which models to host.
 
 **Q: What data is collected?**  
-A: Only job processing metrics (for payments) and worker status. No personal data or generated content is stored.
+A: Only worker status and uptime metrics (for payments). No personal data or generated content is stored.
 
 ### 🐛 Troubleshooting
 
