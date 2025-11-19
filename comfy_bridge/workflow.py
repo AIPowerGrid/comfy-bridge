@@ -187,6 +187,7 @@ async def process_workflow(
     # Handle ComfyUI format (nodes array)
     if isinstance(processed_workflow, dict) and "nodes" in processed_workflow:
         nodes = processed_workflow.get("nodes", [])
+        # Don't modify WanVideo workflows - they work correctly as-is
         for node in nodes:
             if not isinstance(node, dict):
                 continue
@@ -335,6 +336,9 @@ async def process_workflow(
             # Handle text encoding nodes - properly handle positive vs negative prompts
             elif class_type == "CLIPTextEncode":
                 if "text" in inputs:
+                    current_text = inputs.get("text", "")
+                    logger.info(f"Processing CLIPTextEncode node {node_id}, current text: '{current_text[:50]}...'")
+                    logger.info(f"Payload prompt: '{payload.get('prompt', 'NOT PROVIDED')[:50]}...', negative: '{payload.get('negative_prompt', 'NOT PROVIDED')[:50]}...'")
                     # First, find which KSampler nodes this CLIPTextEncode connects to
                     is_negative_prompt = False
                     is_positive_prompt = False
@@ -347,7 +351,7 @@ async def process_workflow(
                                 neg_ref = ks_inputs["negative"]
                                 if isinstance(neg_ref, list) and len(neg_ref) > 0 and str(neg_ref[0]) == str(node_id):
                                     is_negative_prompt = True
-                                    logger.debug(f"Node {node_id} identified as negative prompt (connected to KSampler {ks_id} negative input)")
+                                    logger.info(f"Node {node_id} identified as negative prompt (connected to KSampler {ks_id} negative input)")
                                     break
                     
                     # If not negative, check if it's connected to positive input
@@ -357,45 +361,66 @@ async def process_workflow(
                                 ks_inputs = ks_data.get("inputs", {})
                                 if "positive" in ks_inputs:
                                     pos_ref = ks_inputs["positive"]
+                                    logger.info(f"Checking KSampler {ks_id}: positive ref={pos_ref}, node_id={node_id}, match={isinstance(pos_ref, list) and len(pos_ref) > 0 and str(pos_ref[0]) == str(node_id)}")
                                     if isinstance(pos_ref, list) and len(pos_ref) > 0 and str(pos_ref[0]) == str(node_id):
                                         is_positive_prompt = True
-                                        logger.debug(f"Node {node_id} identified as positive prompt (connected to KSampler {ks_id} positive input)")
+                                        logger.info(f"Node {node_id} identified as positive prompt (connected to KSampler {ks_id} positive input)")
                                         break
                     
                     # Now handle the prompt based on connection type
                     if is_negative_prompt:
                         neg = payload.get("negative_prompt")
                         if isinstance(neg, str) and neg:
-                            # Grid provided negative prompt - use it
                             inputs["text"] = neg
-                            logger.debug(f"Updated negative prompt in API format: {neg}")
+                            logger.info(f"Node {node_id}: Updated negative prompt: {neg[:50]}...")
                         else:
-                            # No Grid negative prompt - keep workflow default
-                            logger.debug(f"Keeping workflow default negative prompt: {inputs['text']}")
+                            logger.info(f"Node {node_id}: Keeping workflow default negative prompt: {inputs.get('text', '')[:50]}...")
                     elif is_positive_prompt:
-                        # This is a positive prompt node
                         pos = payload.get("prompt")
                         if isinstance(pos, str) and pos:
+                            old_text = inputs.get("text", "")
                             inputs["text"] = pos
-                            logger.debug(f"Updated positive prompt in API format: {pos}")
+                            logger.info(f"Node {node_id}: Updated positive prompt from '{old_text[:30]}...' to '{pos[:50]}...'")
+                            logger.info(f"Node {node_id}: Final positive prompt value: '{inputs.get('text', '')}'")
+                        else:
+                            logger.warning(f"Node {node_id}: No prompt provided in payload, keeping workflow default: {inputs.get('text', '')[:50]}...")
+                            logger.info(f"Node {node_id}: Final positive prompt value (using default): '{inputs.get('text', '')}'")
                     else:
                         # Fallback: use _meta title if connection analysis failed
                         meta = node_data.get("_meta", {})
                         title = meta.get("title", "").lower()
                         
+                        logger.info(f"Node {node_id}: Connection detection failed, using title fallback. Title: '{title}'")
+                        
                         if "negative" in title:
                             neg = payload.get("negative_prompt")
                             if isinstance(neg, str) and neg:
                                 inputs["text"] = neg
-                                logger.debug(f"Updated negative prompt by title fallback: {neg}")
+                                logger.info(f"Node {node_id}: Updated negative prompt by title fallback: {neg[:50]}...")
                             else:
-                                logger.debug(f"Keeping workflow default negative prompt by title fallback: {inputs['text']}")
-                        else:
-                            # Assume positive for any other CLIPTextEncode nodes
+                                logger.info(f"Node {node_id}: Keeping workflow default negative prompt by title: {inputs.get('text', '')[:50]}...")
+                        elif "positive" in title:
+                            # Explicitly check for positive in title
                             pos = payload.get("prompt")
                             if isinstance(pos, str) and pos:
+                                old_text = inputs.get("text", "")
                                 inputs["text"] = pos
-                                logger.debug(f"Updated unspecified prompt in API format: {pos}")
+                                logger.info(f"Node {node_id}: Updated positive prompt by title fallback from '{old_text[:30]}...' to '{pos[:50]}...'")
+                                logger.info(f"Node {node_id}: Final positive prompt value: '{inputs.get('text', '')}'")
+                            else:
+                                logger.warning(f"Node {node_id}: No prompt provided for positive node, keeping workflow default: {inputs.get('text', '')[:50]}...")
+                                logger.info(f"Node {node_id}: Final positive prompt value (using default): '{inputs.get('text', '')}'")
+                        else:
+                            # Assume positive for any other CLIPTextEncode nodes (most are positive)
+                            pos = payload.get("prompt")
+                            if isinstance(pos, str) and pos:
+                                old_text = inputs.get("text", "")
+                                inputs["text"] = pos
+                                logger.info(f"Node {node_id}: Updated unspecified prompt (assumed positive) from '{old_text[:30]}...' to '{pos[:50]}...'")
+                                logger.info(f"Node {node_id}: Final positive prompt value: '{inputs.get('text', '')}'")
+                            else:
+                                logger.warning(f"Node {node_id}: No prompt provided, keeping workflow default: {inputs.get('text', '')[:50]}...")
+                                logger.info(f"Node {node_id}: Final positive prompt value (using default): '{inputs.get('text', '')}'")
 
             # Handle latent image nodes - only update dimensions if specified
             elif class_type in ["EmptyLatentImage", "EmptySD3LatentImage"]:
@@ -416,6 +441,20 @@ async def process_workflow(
                 if "fps" in inputs and payload.get("fps"):
                     inputs["fps"] = payload.get("fps")
                 logger.debug(f"Updated EmptyHunyuanLatentVideo node with dimensions: {inputs.get('width')}x{inputs.get('height')}, length: {inputs.get('length')}")
+            
+            # Handle Wan22ImageToVideoLatent nodes - update dimensions and length for text-to-video
+            elif class_type == "Wan22ImageToVideoLatent":
+                if "width" in inputs and payload.get("width"):
+                    inputs["width"] = payload.get("width")
+                if "height" in inputs and payload.get("height"):
+                    inputs["height"] = payload.get("height")
+                if "length" in inputs:
+                    # Length can be specified directly or via the length parameter (from styles.json)
+                    # Convert video_length (in frames) to length parameter if needed
+                    video_length = payload.get("length", payload.get("video_length"))
+                    if video_length:
+                        inputs["length"] = video_length
+                logger.debug(f"Updated Wan22ImageToVideoLatent node {node_id} with dimensions: {inputs.get('width')}x{inputs.get('height')}, length: {inputs.get('length')}")
 
             # Handle save image nodes - update filename prefix for job tracking
             elif class_type == "SaveImage":
