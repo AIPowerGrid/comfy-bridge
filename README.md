@@ -11,7 +11,7 @@
 ║           ╚═╝  ╚═╝╚═╝╚═╝      ╚═════╝                         ║
 ║                                                               ║
 ║        Turn Your GPU Into a Money-Making Machine              ║
-║        and Give Back to the Community                         ║
+║        and Help Power the Community                           ║
 ║                                                               ║
 ╚═══════════════════════════════════════════════════════════════╝
 ```
