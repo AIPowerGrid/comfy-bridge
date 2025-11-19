@@ -11,13 +11,69 @@ from .config import Settings
 logger = logging.getLogger(__name__)
 
 
+def detect_workflow_model_type(workflow: Dict[str, Any]) -> str:
+    """Detect the model type (flux, wanvideo, sdxl, etc.) from workflow nodes"""
+    for node_id, node_data in workflow.items():
+        if not isinstance(node_data, dict):
+            continue
+        
+        class_type = node_data.get("class_type", "")
+        
+        # WanVideo workflows use WanVideo-specific nodes
+        if class_type in ["WanVideoModelLoader", "WanVideoVAELoader", "WanVideoSampler", 
+                          "WanVideoTextEmbedBridge", "WanVideoEmptyEmbeds", "WanVideoDecode"]:
+            return "wanvideo"
+        
+        # Flux workflows use DualCLIPLoader + UNETLoader + VAELoader
+        if class_type == "DualCLIPLoader":
+            return "flux"
+        
+        # SDXL workflows use CheckpointLoaderSimple
+        if class_type == "CheckpointLoaderSimple":
+            return "sdxl"
+    
+    # Default to unknown if we can't detect
+    return "unknown"
+
+
+def is_model_compatible(model_name: str, model_type: str) -> bool:
+    """Check if a model filename is compatible with the workflow model type"""
+    model_lower = model_name.lower()
+    
+    if model_type == "flux":
+        # Flux models: flux1CompactCLIP, umt5, flux1-krea-dev, ae.safetensors
+        return any(keyword in model_lower for keyword in [
+            "flux", "umt5", "clip_l", "t5xxl", "ae.safetensors"
+        ])
+    elif model_type == "wanvideo":
+        # WanVideo models: wan2.2, wan_2.1
+        return any(keyword in model_lower for keyword in [
+            "wan2", "wan_2", "wan2.2"
+        ])
+    elif model_type == "sdxl":
+        # SDXL models
+        return "sdxl" in model_lower or "xl" in model_lower
+    
+    return False
+
+
 async def validate_and_fix_model_filenames(
     workflow: Dict[str, Any], 
     available_models: Dict[str, Any]
 ) -> Dict[str, Any]:
-    """Validate and fix model filenames in workflow to match available models"""
+    """Validate and fix model filenames in workflow to match available models.
+    
+    Only replaces models with compatible model types (e.g., Flux with Flux, WanVideo with WanVideo).
+    Fails if no compatible models are available.
+    """
     fixed_workflow = json.loads(json.dumps(workflow))  # Deep copy
     fixes_applied = []
+    model_type = detect_workflow_model_type(workflow)
+    
+    logger.info(f"Detected workflow model type: {model_type}")
+    
+    if model_type == "unknown":
+        logger.warning("Could not detect workflow model type - proceeding with validation anyway")
     
     for node_id, node_data in fixed_workflow.items():
         if not isinstance(node_data, dict):
@@ -26,22 +82,32 @@ async def validate_and_fix_model_filenames(
         class_type = node_data.get("class_type", "")
         inputs = node_data.get("inputs", {})
         
-        # Fix DualCLIPLoader
+        # Fix DualCLIPLoader (Flux models)
         if class_type == "DualCLIPLoader":
+            if model_type != "flux":
+                logger.warning(f"Node {node_id}: DualCLIPLoader found but workflow type is {model_type} - may be incompatible")
+            
             dual_clip_models = available_models.get("DualCLIPLoader", {})
             clip1_options = dual_clip_models.get("clip_name1", [])
             clip2_options = dual_clip_models.get("clip_name2", [])
+            
+            # Filter to compatible models only
+            if model_type == "flux":
+                clip1_options = [m for m in clip1_options if is_model_compatible(m, "flux")]
+                clip2_options = [m for m in clip2_options if is_model_compatible(m, "flux")]
             
             if clip1_options and "clip_name1" in inputs:
                 current_clip1 = inputs.get("clip_name1")
                 if current_clip1 not in clip1_options:
                     if not clip1_options:
-                        logger.error(
-                            f"Node {node_id}: No CLIP models available for DualCLIPLoader clip_name1. "
-                            f"Workflow requires '{current_clip1}' but no models are installed."
+                        error_msg = (
+                            f"Node {node_id}: No compatible Flux CLIP models available for DualCLIPLoader clip_name1. "
+                            f"Workflow requires '{current_clip1}' but no Flux-compatible models are installed. "
+                            f"Available models are for different model types (WanVideo, etc.)"
                         )
+                        logger.error(error_msg)
+                        raise ValueError(error_msg)
                     else:
-                        # Try to find a matching model or use first available
                         new_clip1 = clip1_options[0]
                         logger.warning(
                             f"Node {node_id}: Replacing DualCLIPLoader clip_name1 '{current_clip1}' "
@@ -54,10 +120,13 @@ async def validate_and_fix_model_filenames(
                 current_clip2 = inputs.get("clip_name2")
                 if current_clip2 not in clip2_options:
                     if not clip2_options:
-                        logger.error(
-                            f"Node {node_id}: No CLIP models available for DualCLIPLoader clip_name2. "
-                            f"Workflow requires '{current_clip2}' but no models are installed."
+                        error_msg = (
+                            f"Node {node_id}: No compatible Flux CLIP models available for DualCLIPLoader clip_name2. "
+                            f"Workflow requires '{current_clip2}' but no Flux-compatible models are installed. "
+                            f"Available models are for different model types (WanVideo, etc.)"
                         )
+                        logger.error(error_msg)
+                        raise ValueError(error_msg)
                     else:
                         new_clip2 = clip2_options[0]
                         logger.warning(
@@ -67,17 +136,28 @@ async def validate_and_fix_model_filenames(
                         inputs["clip_name2"] = new_clip2
                         fixes_applied.append(f"Node {node_id} clip_name2: {current_clip2} -> {new_clip2}")
         
-        # Fix UNETLoader
+        # Fix UNETLoader (Flux models)
         elif class_type == "UNETLoader":
+            if model_type != "flux":
+                logger.warning(f"Node {node_id}: UNETLoader found but workflow type is {model_type} - may be incompatible")
+            
             unet_options = available_models.get("UNETLoader", [])
+            
+            # Filter to compatible models only
+            if model_type == "flux":
+                unet_options = [m for m in unet_options if is_model_compatible(m, "flux")]
+            
             if "unet_name" in inputs:
                 current_unet = inputs.get("unet_name")
                 if current_unet not in unet_options:
                     if not unet_options:
-                        logger.error(
-                            f"Node {node_id}: No UNET models available. "
-                            f"Workflow requires '{current_unet}' but no models are installed."
+                        error_msg = (
+                            f"Node {node_id}: No compatible Flux UNET models available. "
+                            f"Workflow requires '{current_unet}' but no Flux-compatible models are installed. "
+                            f"Available models are for different model types (WanVideo, etc.)"
                         )
+                        logger.error(error_msg)
+                        raise ValueError(error_msg)
                     else:
                         new_unet = unet_options[0]
                         logger.warning(
@@ -87,17 +167,28 @@ async def validate_and_fix_model_filenames(
                         inputs["unet_name"] = new_unet
                         fixes_applied.append(f"Node {node_id} unet_name: {current_unet} -> {new_unet}")
         
-        # Fix VAELoader
+        # Fix VAELoader (Flux models)
         elif class_type == "VAELoader":
+            if model_type != "flux":
+                logger.warning(f"Node {node_id}: VAELoader found but workflow type is {model_type} - may be incompatible")
+            
             vae_options = available_models.get("VAELoader", [])
+            
+            # Filter to compatible models only
+            if model_type == "flux":
+                vae_options = [m for m in vae_options if is_model_compatible(m, "flux")]
+            
             if "vae_name" in inputs:
                 current_vae = inputs.get("vae_name")
                 if current_vae not in vae_options:
                     if not vae_options:
-                        logger.error(
-                            f"Node {node_id}: No VAE models available. "
-                            f"Workflow requires '{current_vae}' but no models are installed."
+                        error_msg = (
+                            f"Node {node_id}: No compatible Flux VAE models available. "
+                            f"Workflow requires '{current_vae}' but no Flux-compatible models are installed. "
+                            f"Available models are for different model types (WanVideo, etc.)"
                         )
+                        logger.error(error_msg)
+                        raise ValueError(error_msg)
                     else:
                         new_vae = vae_options[0]
                         logger.warning(
