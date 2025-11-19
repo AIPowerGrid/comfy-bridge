@@ -22,82 +22,65 @@
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 [![Status](https://img.shields.io/badge/Status-Active-success?style=for-the-badge)](https://dashboard.aipowergrid.io)
 
-**🎨 Generate AI art and videos while earning AIPG tokens!**
+**Generate AI art and videos while earning AIPG tokens**
 
 ---
 
 </div>
 
-## 🚀 Quick Start (30 Seconds)
+## Quick Start
 
-**Just want to get started? Here's all you need:**
-
-1. **Get your API key** from [dashboard.aipowergrid.io](https://dashboard.aipowergrid.io)
-2. **Copy `env.example` to `.env`** and add your API key
-3. **Double-click the start script** for your OS:
-   - **Windows**: `start-worker.bat`
-   - **Mac/Linux**: `start-worker.sh`
-4. **Open http://localhost:5000** and select models
-5. **Click "Start Hosting"** → You're earning! 💰
-
-That's it! Your GPU is now making money while you sleep.
+1. Get your API key from [dashboard.aipowergrid.io](https://dashboard.aipowergrid.io)
+2. Copy `env.example` to `.env` and add your API key
+3. Run the start script:
+   - **Windows**: Double-click `start-worker.bat`
+   - **Mac/Linux**: Run `./start-worker.sh`
+4. Open http://localhost:5000 and select models
+5. Click "Start Hosting" to begin earning
 
 ---
 
-## 💰 Why Run This Worker?
+## Why Run This Worker?
 
-### **Earn Passive Income**
-- **Get paid in AIPG tokens** for every AI generation your GPU processes
-- **Work runs 24/7** - earn money even when you're not using your computer
-- **No technical skills needed** - just click start and forget it
-
-### **Support the AI Revolution**
-- Help power the decentralized AI network
-- Make AI generation accessible to everyone
-- Be part of the future of AI infrastructure
-
-### **Easy Setup, Zero Maintenance**
-- **One-click start** - no complex configuration
-- **Automatic updates** - always running the latest version
-- **Web interface** - manage everything from your browser
+- **Earn AIPG tokens** for every AI generation your GPU processes
+- **Runs 24/7** - earn while your computer is idle
+- **Simple setup** - one script to start, web UI to manage
+- **Help power** the decentralized AI network
 
 ---
 
-## 🎁 What You Get
+## What You Get
 
-| Benefit | Description |
-|---------|-------------|
-| 💵 **Earn Tokens** | Get paid for every AI image/video generation |
-| 🎨 **Free AI Tools** | Access to powerful AI models at no cost |
-| 🌐 **Decentralized** | Support the open AI network |
-| 🔒 **Secure** | Your API keys stay private, never shared |
-| 📊 **Dashboard** | Track earnings and performance in real-time |
+- **Earn tokens** for every AI generation
+- **Access to AI models** at no cost
+- **Secure** - API keys stay private
+- **Dashboard** to track earnings
 
 ---
 
-## 📋 Requirements
+## Requirements
 
-The start scripts automatically check these requirements:
+The start scripts check these automatically:
 
-- **Docker Desktop** installed and running
-- **50GB+ free disk space** (for models and Docker images)
-- **NVIDIA GPU** with 6GB+ VRAM (or AMD GPU with ROCm)
-- **8GB+ RAM** recommended
+- Docker Desktop installed and running
+- 50GB+ free disk space
+- NVIDIA GPU with 6GB+ VRAM (or AMD GPU with ROCm)
+- 8GB+ RAM recommended
 
-If requirements are not met, the scripts will guide you through installation.
+Scripts will guide you through installation if anything is missing.
 
 ---
 
-## 🚀 Detailed Setup Guide
+## Detailed Setup
 
-### Step 1: Get Your API Key 🔑
+### Step 1: Get Your API Key
 
 1. Visit [dashboard.aipowergrid.io](https://dashboard.aipowergrid.io)
 2. Sign up (it's free!)
 3. Go to "API Keys" → Generate new key
 4. Copy the key (starts with `aipg_`)
 
-### Step 2: Configure Your Worker ⚙️
+### Step 2: Configure
 
 **Windows:**
 ```bash
@@ -111,16 +94,16 @@ cp env.example .env
 nano .env
 ```
 
-Add these two lines (replace with your actual values):
+Add these lines (replace with your values):
 ```bash
 GRID_API_KEY=aipg_your_key_here
 GRID_WORKER_NAME=YourName.YourWalletAddress
 ```
 
-> 💡 **Worker Name Format**: `YourName.YourWalletAddress`  
-> Example: `JohnDoe.0x1234567890abcdef1234567890abcdef12345678`
+Worker name format: `YourName.YourWalletAddress`  
+Example: `JohnDoe.0x1234567890abcdef1234567890abcdef12345678`
 
-### Step 3: Start the Worker 🎬
+### Step 3: Start the Worker
 
 **Windows:**
 - Double-click `start-worker.bat`
@@ -129,71 +112,67 @@ GRID_WORKER_NAME=YourName.YourWalletAddress
 - Run: `./start-worker.sh`
 - Or: `chmod +x start-worker.sh && ./start-worker.sh`
 
-The script will automatically:
-- Check disk space (50GB minimum)
-- Verify Docker is installed
-- Ensure Docker is running
-- Validate configuration file
+The script checks disk space, Docker installation, and configuration.
 
-### Step 4: Select Models 🎨
+### Step 4: Select Models
 
-1. Open **http://localhost:5000** in your browser
-2. Browse available models (filter by your GPU's VRAM)
-3. Click **Download** for models you want to host
+1. Open http://localhost:5000 in your browser
+2. Browse models (filter by your GPU's VRAM)
+3. Click Download for models you want to host
 4. Wait for downloads to complete
-5. Click **"Start Hosting"** → You're earning! 🎉
+5. Click "Start Hosting" to begin earning
 
 ---
 
-## 📊 Monitor Your Earnings
+## Monitor Earnings
 
-- **Dashboard**: [dashboard.aipowergrid.io](https://dashboard.aipowergrid.io)
-- **Local UI**: http://localhost:5000
-- **View Logs**: `docker-compose logs -f`
+- Dashboard: [dashboard.aipowergrid.io](https://dashboard.aipowergrid.io)
+- Local UI: http://localhost:5000
+- View logs: `docker-compose logs -f`
 
 ---
 
-## 🛠️ Troubleshooting
+## Troubleshooting
 
-**Worker won't start?**
-- Make sure Docker Desktop is running
-- Check that `.env` file exists and has your API key
-- Run `docker-compose logs` to see error messages
+**Worker won't start:**
+- Ensure Docker Desktop is running
+- Verify `.env` file exists with your API key
+- Check logs: `docker-compose logs`
 
-**Not receiving jobs?**
-- Verify models show "Hosting" status (green) in the UI
-- Check your API key is valid at dashboard.aipowergrid.io
-- Ensure worker name format is correct: `Name.WalletAddress`
+**Not receiving jobs:**
+- Models must show "Hosting" status (green) in UI
+- Verify API key at dashboard.aipowergrid.io
+- Check worker name format: `Name.WalletAddress`
 
-**GPU not detected?**
+**GPU not detected:**
 - Install [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)
-- Run `nvidia-smi` to verify GPU is detected
+- Run `nvidia-smi` to verify GPU detection
 - Restart Docker Desktop
 
-**Need more help?**
-- Check logs: `docker-compose logs -f`
-- Visit our [Discord community](https://discord.gg/aipowergrid)
-- Read the [full documentation](https://aipowergrid.io)
+**More help:**
+- Logs: `docker-compose logs -f`
+- [Discord](https://discord.gg/aipowergrid)
+- [Documentation](https://aipowergrid.io)
 
 ---
 
-## 🎮 GPU Requirements
+## GPU Requirements
 
-| Model Type | VRAM Needed | What It Does |
-|------------|-------------|--------------|
-| **SD 1.5** | 6GB | General images |
-| **SDXL** | 8GB | High-res images |
-| **Flux** | 12GB | Advanced images |
-| **Video (5B)** | 16GB | Short videos |
-| **Video (14B)** | 32GB | High-quality videos |
+| Model Type | VRAM Needed |
+|------------|-------------|
+| SD 1.5 | 6GB |
+| SDXL | 8GB |
+| Flux | 12GB |
+| Video (5B) | 16GB |
+| Video (14B) | 32GB |
 
-> 💡 **Start small**: Begin with SD 1.5 models, then upgrade as you expand!
+Start with SD 1.5 models if you have limited VRAM.
 
 ---
 
-## 🔄 Updates & Maintenance
+## Commands
 
-**Update to latest version:**
+**Update:**
 ```bash
 git pull
 docker-compose down
@@ -201,57 +180,41 @@ docker-compose build
 docker-compose up -d
 ```
 
-**Stop the worker:**
-```bash
-docker-compose down
-```
-
-**Start the worker:**
-```bash
-docker-compose up -d
-```
-
-**View logs:**
-```bash
-docker-compose logs -f
-```
+**Stop:** `docker-compose down`  
+**Start:** `docker-compose up -d`  
+**Logs:** `docker-compose logs -f`
 
 ---
 
-## 📚 Advanced Configuration
+## Advanced Configuration
 
-### Optional: Faster Downloads
-
-Add these to your `.env` for faster model downloads:
-
+**Faster downloads** - Add to `.env`:
 ```bash
 HUGGING_FACE_API_KEY=your_hf_token
 CIVITAI_API_KEY=your_civitai_token
 ```
 
-### Optional: Custom Ports
-
-Edit `docker-compose.yml` to change ports if needed.
+**Custom ports** - Edit `docker-compose.yml` if needed.
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
-This worker runs ComfyUI (powerful AI generation engine) and connects it to the AI Power Grid network. When someone requests an AI generation, your GPU processes it and you get paid!
+Runs ComfyUI and connects to the AI Power Grid network. When someone requests a generation, your GPU processes it and you get paid.
 
 **Components:**
-- **ComfyUI**: The AI generation engine
-- **Bridge**: Connects to AI Power Grid network
-- **Management UI**: Web interface for easy management
+- ComfyUI: AI generation engine
+- Bridge: Connects to AI Power Grid network
+- Management UI: Web interface for management
 
 ---
 
-## 📖 Additional Resources
+## Resources
 
-- **📚 Full Docs**: [aipowergrid.io](https://aipowergrid.io)
-- **💬 Community**: Join our Discord
-- **🐛 Report Issues**: GitHub Issues
-- **📊 Dashboard**: [dashboard.aipowergrid.io](https://dashboard.aipowergrid.io)
+- [Documentation](https://aipowergrid.io)
+- [Discord](https://discord.gg/aipowergrid)
+- [Dashboard](https://dashboard.aipowergrid.io)
+- [GitHub Issues](https://github.com/AIPowerGrid/comfy-bridge/issues)
 
 ---
 
@@ -259,10 +222,8 @@ This worker runs ComfyUI (powerful AI generation engine) and connects it to the 
 
 **Made with ❤️ by [ameli0x](https://github.com/ameli0x) and [half](https://github.com/half)**
 
-**🌟 Ready to turn your GPU into a money-making machine?**
-
 [![Get Started](https://img.shields.io/badge/Get%20Started-Dashboard%20AIPG-blue?style=for-the-badge&logo=rocket)](https://dashboard.aipowergrid.io)
 
-**Questions?** Join our [Discord](https://discord.gg/aipowergrid) community!
+[Discord](https://discord.gg/aipowergrid) | [Documentation](https://aipowergrid.io)
 
 </div>
