@@ -72,6 +72,7 @@ class ComfyUIBridge:
             workflow = await self.workflow_builder(job)
             
             # Validate and fix model filenames before submission
+            logger.info("Starting model filename validation...")
             try:
                 from .workflow import validate_and_fix_model_filenames
                 logger.info("Fetching available models from ComfyUI for validation...")
@@ -83,8 +84,11 @@ class ComfyUIBridge:
                     logger.info("Model validation completed")
                 else:
                     logger.warning("Could not fetch available models - skipping validation")
+            except ImportError as e:
+                logger.error(f"Failed to import validate_and_fix_model_filenames: {e}", exc_info=True)
+                logger.warning("Proceeding with workflow submission despite validation failure")
             except Exception as e:
-                logger.error(f"Model validation failed: {e}", exc_info=Settings.DEBUG)
+                logger.error(f"Model validation failed: {e}", exc_info=True)
                 logger.warning("Proceeding with workflow submission despite validation failure")
             
             # Submit workflow to ComfyUI
