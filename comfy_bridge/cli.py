@@ -34,17 +34,24 @@ if __name__ == "__main__":
         """Filter to prevent duplicate log messages"""
         def __init__(self):
             super().__init__()
-            self.last_message = None
-            self.last_time = None
+            self.last_message_key = None
+            self.last_timestamp = None
+            self.duplicate_window = 0.1  # 100ms window to detect duplicates
         
         def filter(self, record):
-            # Check if this is a duplicate of the last message
-            msg = record.getMessage()
+            # Create a key from message content (not timestamp)
+            msg_key = (record.levelname, record.getMessage())
             now = record.created
-            if msg == self.last_message and abs(now - (self.last_time or 0)) < 0.01:
+            
+            # Check if this is a duplicate within the time window
+            if (msg_key == self.last_message_key and 
+                self.last_timestamp is not None and 
+                abs(now - self.last_timestamp) < self.duplicate_window):
                 return False  # Suppress duplicate
-            self.last_message = msg
-            self.last_time = now
+            
+            # Update tracking
+            self.last_message_key = msg_key
+            self.last_timestamp = now
             return True
     
     handler = logging.StreamHandler(sys.stderr)
