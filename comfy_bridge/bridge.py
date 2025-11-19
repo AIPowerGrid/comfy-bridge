@@ -87,8 +87,20 @@ class ComfyUIBridge:
             except ImportError as e:
                 logger.error(f"Failed to import validate_and_fix_model_filenames: {e}", exc_info=True)
                 logger.warning("Proceeding with workflow submission despite validation failure")
+            except ValueError as e:
+                # ValueError from validation means incompatible models - fail the job
+                error_msg = str(e)
+                logger.error(f"Model validation failed: {error_msg}")
+                logger.error(f"Job {job_id} rejected: Required models are not installed or incompatible")
+                # Cancel the job in the API
+                try:
+                    await self.api.cancel_job(job_id)
+                except Exception as cancel_error:
+                    logger.error(f"Failed to cancel job {job_id}: {cancel_error}")
+                # Re-raise to prevent workflow submission
+                raise RuntimeError(f"Job rejected: {error_msg}") from e
             except Exception as e:
-                logger.error(f"Model validation failed: {e}", exc_info=True)
+                logger.error(f"Model validation failed with unexpected error: {e}", exc_info=True)
                 logger.warning("Proceeding with workflow submission despite validation failure")
             
             # Submit workflow to ComfyUI
