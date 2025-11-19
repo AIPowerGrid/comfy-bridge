@@ -71,6 +71,17 @@ class ComfyUIBridge:
             logger.info(f"Building workflow for {model_name}")
             workflow = await self.workflow_builder(job)
             
+            # Validate and fix model filenames before submission
+            try:
+                from .workflow import validate_and_fix_model_filenames
+                available_models = await self.comfy.get_available_models()
+                if available_models:
+                    workflow = await validate_and_fix_model_filenames(workflow, available_models)
+                else:
+                    logger.warning("Could not fetch available models - skipping validation")
+            except Exception as e:
+                logger.warning(f"Model validation failed, proceeding anyway: {e}")
+            
             # Submit workflow to ComfyUI
             prompt_id = await self.comfy.submit_workflow(workflow)
             
