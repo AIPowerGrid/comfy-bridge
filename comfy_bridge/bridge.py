@@ -74,13 +74,13 @@ class ComfyUIBridge:
             # Validate and fix model filenames before submission
             try:
                 from .workflow import validate_and_fix_model_filenames
-                logger.debug("Fetching available models from ComfyUI...")
+                logger.info("Fetching available models from ComfyUI for validation...")
                 available_models = await self.comfy.get_available_models()
-                logger.debug(f"Available models fetched: {available_models}")
+                logger.info(f"Available models fetched: {list(available_models.keys())} loader types")
                 if available_models:
                     logger.info("Validating and fixing model filenames in workflow...")
                     workflow = await validate_and_fix_model_filenames(workflow, available_models)
-                    logger.debug("Model validation completed")
+                    logger.info("Model validation completed")
                 else:
                     logger.warning("Could not fetch available models - skipping validation")
             except Exception as e:
