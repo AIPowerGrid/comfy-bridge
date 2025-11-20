@@ -57,8 +57,8 @@ class ModelMapper:
         # Video Generation Models
         "wan2_2_t2v_14b": "wan2.2_ti2v_5B",
         "wan2.2-t2v-a14b": "wan2.2_ti2v_5B",
-        "wan2_2_t2v_14b_hq": "wan2.2_ti2v_5B",
-        "wan2.2-t2v-a14b-hq": "wan2.2_ti2v_5B",
+        "wan2_2_t2v_14b_hq": "wan2.2-t2v-a14b-hq",
+        "wan2.2-t2v-a14b-hq": "wan2.2-t2v-a14b-hq",
         "wan2_2_ti2v_5b": "wan2.2_ti2v_5B",
         "wan2.2_ti2v_5b": "wan2.2_ti2v_5B",
         "ltxv": "ltxv",
