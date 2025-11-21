@@ -9,6 +9,8 @@ interface DownloadProgressPanelProps {
   downloadState: ModelDownloadState;
   onCancelFile: (modelId: string, fileName: string) => void;
   onCancelAll: (modelId: string) => void;
+  onDismiss?: (modelId: string) => void;
+  isCompleted?: boolean;
 }
 
 export default function DownloadProgressPanel({
@@ -16,7 +18,9 @@ export default function DownloadProgressPanel({
   modelName,
   downloadState,
   onCancelFile,
-  onCancelAll
+  onCancelAll,
+  onDismiss,
+  isCompleted
 }: DownloadProgressPanelProps) {
   return (
     <motion.div
@@ -36,12 +40,21 @@ export default function DownloadProgressPanel({
             </p>
           </div>
         </div>
-        <button
-          onClick={() => onCancelAll(modelId)}
-          className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-bold rounded-lg transition-all"
-        >
-          Cancel All
-        </button>
+        {isCompleted ? (
+          <button
+            onClick={() => onDismiss?.(modelId)}
+            className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-bold rounded-lg transition-all"
+          >
+            Dismiss
+          </button>
+        ) : (
+          <button
+            onClick={() => onCancelAll(modelId)}
+            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-bold rounded-lg transition-all"
+          >
+            Cancel All
+          </button>
+        )}
       </div>
 
       {/* Overall Progress Bar */}

@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
-import { spawn } from 'child_process';
-import { startDownload, updateProgress, completeDownload, updateDownloadMessage, failDownload, FileDownloadState, updateFileProgress, setFileStatus, setProcessId } from '@/lib/downloadState';
+import { startDownload, updateProgress, completeDownload, updateDownloadMessage, failDownload, FileDownloadState, updateFileProgress, setFileStatus, setProcessId, getDownloadState } from '@/lib/downloadState';
 import { downloadsApiUrl } from '@/lib/serverEnv';
 import * as fs from 'fs/promises';
+import * as path from 'path';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,7 +21,8 @@ export async function POST(request: Request): Promise<Response> {
     console.log('Starting download for models:', models);
     
     // Load model configs to get file list
-    const modelConfigPath = '/app/comfy-bridge/model_configs.json';
+    const defaultConfigPath = path.join(bridgePath, 'model_configs.json');
+    const modelConfigPath = process.env.MODEL_CONFIGS_PATH || defaultConfigPath;
     let files: FileDownloadState[] = [];
     
     try {
@@ -170,22 +171,14 @@ export async function POST(request: Request): Promise<Response> {
                           const speedMB = parseFloat(progressMatch[4]);
                           const eta = progressMatch[5];
                           
-                          // Update the file size if we haven't set it yet
-                          const downloadState = require('@/lib/downloadState').getDownloadState(currentModel);
-                          if (downloadState && downloadState.files) {
-                            const fileIdx = downloadState.files.findIndex((f: any) => f.file_name === currentFileName);
-                            if (fileIdx !== -1 && downloadState.files[fileIdx].file_size_mb === 0) {
-                              downloadState.files[fileIdx].file_size_mb = totalMB;
-                            }
-                          }
-                          
                           updateFileProgress(
                             currentModel,
                             currentFileName,
                             progress,
                             downloaded,
-                            `${speedMB.toFixed(2)} MB/s`,
-                            eta
+                            speedMB,
+                            eta,
+                            totalMB
                           );
                         }
                         
@@ -221,7 +214,16 @@ export async function POST(request: Request): Promise<Response> {
                           failDownload(currentModel, data.message || 'Download failed');
                         }
                         
-                        safeEnqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+                        const latestState = getDownloadState(currentModel);
+                        if (latestState) {
+                          safeEnqueue(encoder.encode(`data: ${JSON.stringify({
+                            type: 'status',
+                            model: currentModel,
+                            state: latestState
+                          })}\n\n`));
+                        } else {
+                          safeEnqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+                        }
                       } catch (e) {
                         console.error('Error parsing SSE data:', e);
                       }
