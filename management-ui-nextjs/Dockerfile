@@ -6,9 +6,10 @@ FROM base AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-# Install dependencies
+# Install dependencies with npm cache mount
 COPY package.json ./
-RUN npm install --legacy-peer-deps
+RUN --mount=type=cache,target=/root/.npm \
+    npm install --legacy-peer-deps
 
 # Rebuild the source code only when needed
 FROM base AS builder
@@ -16,8 +17,9 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Build Next.js app
-RUN npm run build
+# Build Next.js app with cache mount for .next/cache
+RUN --mount=type=cache,target=/app/.next/cache \
+    npm run build
 
 # Production image, copy all the files and run next
 FROM base AS runner
@@ -28,8 +30,9 @@ ENV NODE_ENV production
 # Install curl for healthcheck, python3 and requests for download scripts, git for cloning repos, and docker for container management
 RUN apk add --no-cache curl python3 py3-requests git docker-cli docker-cli-compose
 
-# Clone grid-image-model-reference repository
-RUN git clone https://github.com/aipowergrid/grid-image-model-reference.git /app/grid-image-model-reference
+# Clone grid-image-model-reference repository with git cache mount
+RUN --mount=type=cache,target=/root/.cache/git \
+    git clone --depth 1 https://github.com/aipowergrid/grid-image-model-reference.git /app/grid-image-model-reference
 
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
