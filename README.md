@@ -26,9 +26,13 @@
 
 > ⏱️ **Heads up:** The very first build takes **45–60 minutes** (Docker images, model cache, desktop app). Let it run once; every restart after that is usually under two minutes.
 
-> 🧱 **No manual ComfyUI/Python installs needed.** Everything (ComfyUI, Python, custom nodes) ships inside our containers—you only install Docker Desktop and Node.js on your machine.
-
 ---
+=======
+- Docker Desktop (Free version is fine) (https://www.docker.com/products/docker-desktop/)
+- Node.js (https://nodejs.org/en/download)
+- An API key from [AI Power Grid](https://dashboard.aipowergrid.io)
+- An API key from [Huggingface](https://huggingface.co/settings/tokens) (once logged in)
+- An API key from [Civitai](https://civitai.com/user/account) (once logged in)
 
 </div>
 
@@ -476,4 +480,5 @@ The desktop app provides the same functionality as the web interface but with:
 
 **Ready to turn your GPU into a money-making machine?** 🚀
 
-</div>
+- [AI Power Grid](https://aipowergrid.io/) for the API
+- [ComfyUI](https://github.com/comfyanonymous/ComfyUI) for the local image generation backend 
