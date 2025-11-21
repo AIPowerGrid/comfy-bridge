@@ -129,7 +129,16 @@ async function getAvailableWorkflows(): Promise<string[]> {
 export async function GET() {
   try {
     const configPath = process.env.MODEL_CONFIGS_PATH || '/app/comfy-bridge/model_configs.json';
-    const configContent = await fs.readFile(configPath, 'utf-8');
+    let configContent: string;
+    try {
+      configContent = await fs.readFile(configPath, 'utf-8');
+    } catch (fileError: any) {
+      if (fileError.code === 'ENOENT') {
+        return NextResponse.json({});
+      }
+      throw fileError;
+    }
+    
     const configs: Record<string, ModelConfig> = JSON.parse(configContent);
     
     const installed = await getInstalledModels();
@@ -170,7 +179,7 @@ export async function GET() {
     return NextResponse.json(enhanced);
   } catch (error) {
     console.error('Error loading models:', error);
-    return NextResponse.json({ error: 'Failed to load models' }, { status: 500 });
+    return NextResponse.json({});
   }
 }
 
