@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ComfyUI Bridge - Model Manager</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #0a0a0a;
+            min-height: 100vh;
+            padding: 20px;
+            color: #ffffff;
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: radial-gradient(ellipse at top, rgba(138, 43, 226, 0.15), transparent 50%),
+                        radial-gradient(ellipse at bottom, rgba(0, 191, 255, 0.1), transparent 50%);
+            pointer-events: none;
+            z-index: 0;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        
+        .card h2 {
+            margin-bottom: 15px;
+            color: #333;
+            font-size: 1.5em;
+        }
+        
+        .gpu-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+        
+        .gpu-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+        }
+        
+        .gpu-card h3 {
+            font-size: 1.1em;
+            margin-bottom: 10px;
+        }
+        
+        .gpu-card .memory {
+            font-size: 2em;
+            font-weight: bold;
+        }
+        
+        .disk-info {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        
+        .disk-bar {
+            flex: 1;
+            height: 30px;
+            background: #e0e0e0;
+            border-radius: 15px;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .disk-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s ease;
+        }
+        
+        .disk-text {
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .model-filters {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .filter-btn {
+            padding: 10px 20px;
+            border: 2px solid #667eea;
+            background: white;
+            color: #667eea;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        
+        .filter-btn:hover, .filter-btn.active {
+            background: #667eea;
+            color: white;
+        }
+        
+        .models-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 20px;
+        }
+        
+        .model-card {
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 20px;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+        
+        .model-card:hover {
+            border-color: #667eea;
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.2);
+        }
+        
+        .model-card.selected {
+            border-color: #667eea;
+            background: #f0f4ff;
+        }
+        
+        .model-card.incompatible {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .model-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 10px;
+        }
+        
+        .model-title {
+            font-weight: bold;
+            color: #333;
+            font-size: 1.1em;
+        }
+        
+        .model-badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.75em;
+            font-weight: bold;
+        }
+        
+        .badge-selected {
+            background: #4caf50;
+            color: white;
+        }
+        
+        .badge-installed {
+            background: #2196f3;
+            color: white;
+        }
+        
+        .badge-incompatible {
+            background: #f44336;
+            color: white;
+        }
+        
+        .model-category {
+            color: #667eea;
+            font-weight: 600;
+            font-size: 0.9em;
+            margin-bottom: 8px;
+        }
+        
+        .model-description {
+            color: #666;
+            font-size: 0.9em;
+            margin-bottom: 15px;
+            line-height: 1.4;
+        }
+        
+        .model-specs {
+            display: flex;
+            justify-content: space-between;
+            padding-top: 15px;
+            border-top: 1px solid #e0e0e0;
+        }
+        
+        .spec {
+            text-align: center;
+        }
+        
+        .spec-label {
+            font-size: 0.75em;
+            color: #999;
+            text-transform: uppercase;
+        }
+        
+        .spec-value {
+            font-weight: bold;
+            color: #333;
+            margin-top: 5px;
+        }
+        
+        .actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
+        .btn {
+            flex: 1;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-secondary {
+            background: white;
+            color: #667eea;
+            border: 2px solid #667eea;
+        }
+        
+        .btn-secondary:hover {
+            background: #f0f4ff;
+        }
+        
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .status-message {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        
+        .status-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .status-info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .summary {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            background: #f0f4ff;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .summary-stats {
+            display: flex;
+            gap: 30px;
+        }
+        
+        .summary-stat {
+            text-align: center;
+        }
+        
+        .summary-stat-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .summary-stat-label {
+            font-size: 0.9em;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎨 ComfyUI Bridge Model Manager</h1>
+            <p>Select and download AI models based on your GPU capabilities</p>
+        </div>
+        
+        <div id="statusMessage" class="status-message"></div>
+        
+        <!-- GPU Information -->
+        <div class="card">
+            <h2>🖥️ GPU Information</h2>
+            <div id="gpuInfo" class="loading">
+                <div class="spinner"></div>
+                <p>Detecting GPU...</p>
+            </div>
+        </div>
+        
+        <!-- Disk Space -->
+        <div class="card">
+            <h2>💾 Disk Space</h2>
+            <div id="diskInfo" class="loading">
+                <div class="spinner"></div>
+                <p>Checking disk space...</p>
+            </div>
+        </div>
+        
+        <!-- Model Selection -->
+        <div class="card">
+            <h2>📦 Available Models</h2>
+            
+            <div class="summary" id="summary" style="display: none;">
+                <div class="summary-stats">
+                    <div class="summary-stat">
+                        <div class="summary-stat-value" id="selectedCount">0</div>
+                        <div class="summary-stat-label">Selected</div>
+                    </div>
+                    <div class="summary-stat">
+                        <div class="summary-stat-value" id="totalSize">0 GB</div>
+                        <div class="summary-stat-label">Total Size</div>
+                    </div>
+                    <div class="summary-stat">
+                        <div class="summary-stat-value" id="vramRequired">0 GB</div>
+                        <div class="summary-stat-label">VRAM Required</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="model-filters" id="filters">
+                <button class="filter-btn active" data-filter="all">All Models</button>
+                <button class="filter-btn" data-filter="compatible">GPU Compatible</button>
+                <button class="filter-btn" data-filter="selected">Selected</button>
+            </div>
+            
+            <div id="modelsGrid" class="loading">
+                <div class="spinner"></div>
+                <p>Loading models...</p>
+            </div>
+            
+            <div class="actions">
+                <button class="btn btn-secondary" id="clearBtn">Clear Selection</button>
+                <button class="btn btn-primary" id="saveBtn">Save & Download Models</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let gpuInfo = null;
+        let models = {};
+        let selectedModels = new Set();
+        let currentFilter = 'all';
+        
+        // Load GPU info
+        async function loadGPUInfo() {
+            try {
+                const response = await fetch('/api/gpu-info');
+                gpuInfo = await response.json();
+                renderGPUInfo();
+            } catch (error) {
+                document.getElementById('gpuInfo').innerHTML = '<p style="color: red;">Failed to load GPU info</p>';
+            }
+        }
+        
+        // Render GPU info
+        function renderGPUInfo() {
+            const container = document.getElementById('gpuInfo');
+            
+            if (!gpuInfo.available) {
+                container.innerHTML = `
+                    <div style="text-align: center; color: #666;">
+                        <p style="font-size: 1.2em; margin-bottom: 10px;">⚠️ No GPU Detected</p>
+                        <p>Running in CPU mode. Some models may not be available.</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = '';
+            container.className = 'gpu-info';
+            
+            gpuInfo.gpus.forEach(gpu => {
+                const card = document.createElement('div');
+                card.className = 'gpu-card';
+                card.innerHTML = `
+                    <h3>${gpu.name}</h3>
+                    <div class="memory">${gpu.memory_gb} GB</div>
+                    <p style="opacity: 0.9; margin-top: 5px;">VRAM Available</p>
+                `;
+                container.appendChild(card);
+            });
+        }
+        
+        // Load disk space
+        async function loadDiskSpace() {
+            try {
+                const response = await fetch('/api/disk-space');
+                const data = await response.json();
+                renderDiskSpace(data);
+            } catch (error) {
+                document.getElementById('diskInfo').innerHTML = '<p style="color: red;">Failed to load disk space</p>';
+            }
+        }
+        
+        // Render disk space
+        function renderDiskSpace(data) {
+            const container = document.getElementById('diskInfo');
+            container.innerHTML = `
+                <div class="disk-info">
+                    <div class="disk-text">
+                        ${data.free_gb} GB free of ${data.total_gb} GB
+                    </div>
+                    <div class="disk-bar">
+                        <div class="disk-bar-fill" style="width: ${data.percent_used}%"></div>
+                    </div>
+                    <div class="disk-text">
+                        ${data.percent_used}% used
+                    </div>
+                </div>
+            `;
+        }
+        
+        // Load models
+        async function loadModels() {
+            try {
+                const response = await fetch('/api/models');
+                models = await response.json();
+                
+                // Load selected models
+                const selectedResponse = await fetch('/api/models/selected');
+                const selectedData = await selectedResponse.json();
+                selectedModels = new Set(selectedData.models);
+                
+                renderModels();
+                updateSummary();
+            } catch (error) {
+                document.getElementById('modelsGrid').innerHTML = '<p style="color: red;">Failed to load models</p>';
+            }
+        }
+        
+        // Check if model is compatible with GPU
+        function isModelCompatible(model) {
+            if (!gpuInfo.available) return false;
+            return model.vram_required_gb <= gpuInfo.total_memory_gb;
+        }
+        
+        // Render models
+        function renderModels() {
+            const container = document.getElementById('modelsGrid');
+            container.innerHTML = '';
+            container.className = 'models-grid';
+            
+            Object.entries(models).forEach(([modelName, model]) => {
+                const compatible = isModelCompatible(model);
+                const selected = selectedModels.has(modelName);
+                
+                // Apply filter
+                if (currentFilter === 'compatible' && !compatible) return;
+                if (currentFilter === 'selected' && !selected) return;
+                
+                const card = document.createElement('div');
+                card.className = `model-card ${selected ? 'selected' : ''} ${!compatible && gpuInfo.available ? 'incompatible' : ''}`;
+                
+                let badge = '';
+                if (selected) badge = '<span class="model-badge badge-selected">✓ Selected</span>';
+                else if (model.installed) badge = '<span class="model-badge badge-installed">Installed</span>';
+                else if (!compatible && gpuInfo.available) badge = '<span class="model-badge badge-incompatible">Insufficient VRAM</span>';
+                
+                card.innerHTML = `
+                    <div class="model-header">
+                        <div class="model-title">${model.display_name}</div>
+                        ${badge}
+                    </div>
+                    <div class="model-category">${model.category}</div>
+                    <div class="model-description">${model.description}</div>
+                    <div class="model-specs">
+                        <div class="spec">
+                            <div class="spec-label">Size</div>
+                            <div class="spec-value">${model.size_gb} GB</div>
+                        </div>
+                        <div class="spec">
+                            <div class="spec-label">VRAM</div>
+                            <div class="spec-value">${model.vram_required_gb} GB</div>
+                        </div>
+                        <div class="spec">
+                            <div class="spec-label">Type</div>
+                            <div class="spec-value">${model.type}</div>
+                        </div>
+                    </div>
+                `;
+                
+                if (compatible || !gpuInfo.available) {
+                    card.onclick = () => toggleModel(modelName);
+                }
+                
+                container.appendChild(card);
+            });
+            
+            document.getElementById('summary').style.display = 'flex';
+        }
+        
+        // Toggle model selection
+        function toggleModel(modelName) {
+            if (selectedModels.has(modelName)) {
+                selectedModels.delete(modelName);
+            } else {
+                selectedModels.add(modelName);
+            }
+            renderModels();
+            updateSummary();
+        }
+        
+        // Update summary
+        function updateSummary() {
+            const selectedArray = Array.from(selectedModels);
+            const totalSize = selectedArray.reduce((sum, name) => sum + (models[name]?.size_gb || 0), 0);
+            const maxVRAM = Math.max(...selectedArray.map(name => models[name]?.vram_required_gb || 0), 0);
+            
+            document.getElementById('selectedCount').textContent = selectedArray.length;
+            document.getElementById('totalSize').textContent = totalSize.toFixed(1) + ' GB';
+            document.getElementById('vramRequired').textContent = maxVRAM + ' GB';
+        }
+        
+        // Show status message
+        function showStatus(message, type = 'info') {
+            const el = document.getElementById('statusMessage');
+            el.textContent = message;
+            el.className = `status-message status-${type}`;
+            el.style.display = 'block';
+            
+            setTimeout(() => {
+                el.style.display = 'none';
+            }, 5000);
+        }
+        
+        // Save and download models
+        async function saveAndDownload() {
+            const btn = document.getElementById('saveBtn');
+            btn.disabled = true;
+            btn.textContent = 'Saving...';
+            
+            try {
+                // Save selection
+                const response = await fetch('/api/models/selected', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ models: Array.from(selectedModels) })
+                });
+                
+                if (!response.ok) throw new Error('Failed to save selection');
+                
+                showStatus('Models saved! Starting download...', 'success');
+                btn.textContent = 'Downloading...';
+                
+                // Trigger download
+                const downloadResponse = await fetch('/api/models/download', {
+                    method: 'POST'
+                });
+                
+                const result = await downloadResponse.json();
+                
+                if (result.success) {
+                    showStatus('Models downloaded successfully!', 'success');
+                    loadModels(); // Reload to update installed status
+                } else {
+                    showStatus('Download failed: ' + (result.error || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                showStatus('Error: ' + error.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Save & Download Models';
+            }
+        }
+        
+        // Clear selection
+        function clearSelection() {
+            selectedModels.clear();
+            renderModels();
+            updateSummary();
+        }
+        
+        // Filter models
+        function setFilter(filter) {
+            currentFilter = filter;
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.filter === filter);
+            });
+            renderModels();
+        }
+        
+        // Event listeners
+        document.getElementById('saveBtn').onclick = saveAndDownload;
+        document.getElementById('clearBtn').onclick = clearSelection;
+        
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.onclick = () => setFilter(btn.dataset.filter);
+        });
+        
+        // Initialize
+        loadGPUInfo();
+        loadDiskSpace();
+        loadModels();
+    </script>
+</body>
+</html>
+
