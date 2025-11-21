@@ -188,6 +188,7 @@ export default function ModelDetailView({
           ...(searchTerm && { search: searchTerm }),
           ...(styleFilter !== 'all' && { styleFilter }),
           ...(nsfwFilter !== 'all' && { nsfwFilter }),
+          ...(filter !== 'all' && { filter }),
           sortField,
           sortDirection
         });
@@ -203,12 +204,12 @@ export default function ModelDetailView({
     };
 
     fetchCatalog();
-  }, [currentPage, itemsPerPage, searchTerm, styleFilter, nsfwFilter, sortField, sortDirection]);
+  }, [currentPage, itemsPerPage, searchTerm, styleFilter, nsfwFilter, filter, sortField, sortDirection]);
 
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, styleFilter, nsfwFilter]);
+  }, [searchTerm, styleFilter, nsfwFilter, filter]);
 
   // Sync global download status with local state (for backwards compatibility)
   useEffect(() => {
@@ -268,22 +269,6 @@ export default function ModelDetailView({
 
   const models = localCatalog?.models || catalog?.models || [];
   const pagination = localCatalog?.pagination || null;
-  
-  // Apply client-side filters (compatibility and installed status)
-  const filteredModels = models.filter((model: any) => {
-    // Apply capability filter
-    if (filter === 'compatible') {
-      const maxVram = gpuInfo?.gpus?.[0]?.vram_available_gb || gpuInfo?.total_memory_gb || 0;
-      return model.vram_required_gb <= maxVram;
-    }
-    
-    // Apply installed filter
-    if (filter === 'installed') {
-      return model.installed === true;
-    }
-    
-    return true;
-  });
 
   const handleUninstall = (modelId: string) => {
     setConfirmModal({ isOpen: true, modelName: modelId });
@@ -749,10 +734,10 @@ export default function ModelDetailView({
               <div className="col-span-1 flex items-center justify-center">
                 <input
                   type="checkbox"
-                  checked={selectedModels.size === filteredModels.length && filteredModels.length > 0}
+                  checked={selectedModels.size === models.length && models.length > 0}
                   onChange={(e) => {
                     if (e.target.checked) {
-                      setSelectedModels(new Set(filteredModels.map((m: any) => m.id)));
+                      setSelectedModels(new Set(models.map((m: any) => m.id)));
                     } else {
                       setSelectedModels(new Set());
                     }
@@ -807,7 +792,7 @@ export default function ModelDetailView({
 
         {/* Table Body */}
         <div className="divide-y divide-gray-700">
-          {filteredModels.map((model: any, index: number) => {
+          {models.map((model: any, index: number) => {
             const maxVram = gpuInfo?.gpus?.[0]?.vram_available_gb || gpuInfo?.total_memory_gb || 0;
             const isCompatible = model.vram_required_gb <= maxVram;
             const isHosting = hostingModels.has(model.id) || model.hosting || false;
@@ -992,7 +977,7 @@ export default function ModelDetailView({
           })}
         </div>
 
-        {filteredModels.length === 0 && !loading && (
+        {models.length === 0 && !loading && (
           <div className="text-center py-12 text-gray-500">
             <p className="text-xl mb-2">No models found</p>
             <p>Try changing the filter or search term</p>

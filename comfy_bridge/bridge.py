@@ -71,6 +71,45 @@ class ComfyUIBridge:
             logger.info(f"Building workflow for {model_name}")
             workflow = await self.workflow_builder(job)
             
+            # Validate and fix model filenames before submission
+            logger.info("Starting model filename validation...")
+            validation_failed = False
+            try:
+                from .workflow import validate_and_fix_model_filenames
+                logger.info("Fetching available models from ComfyUI for validation...")
+                available_models = await self.comfy.get_available_models()
+                logger.info(f"Available models fetched: {list(available_models.keys())} loader types")
+                if available_models:
+                    logger.info("Validating and fixing model filenames in workflow...")
+                    workflow = await validate_and_fix_model_filenames(workflow, available_models)
+                    logger.info("Model validation completed")
+                else:
+                    logger.warning("Could not fetch available models - skipping validation")
+            except ImportError as e:
+                logger.error(f"Failed to import validate_and_fix_model_filenames: {e}", exc_info=True)
+                logger.warning("Proceeding with workflow submission despite validation failure")
+            except ValueError as e:
+                # ValueError from validation means incompatible models - fail the job
+                validation_failed = True
+                error_msg = str(e)
+                logger.error(f"Model validation failed: {error_msg}")
+                logger.error(f"Job {job_id} rejected: Required models are not installed or incompatible")
+                # Cancel the job in the API
+                try:
+                    await self.api.cancel_job(job_id)
+                except Exception as cancel_error:
+                    logger.error(f"Failed to cancel job {job_id}: {cancel_error}")
+                # Raise RuntimeError to prevent workflow submission - this will be caught by outer handler
+                raise RuntimeError(f"Job rejected: {error_msg}") from e
+            except Exception as e:
+                logger.error(f"Model validation failed with unexpected error: {e}", exc_info=True)
+                logger.warning("Proceeding with workflow submission despite validation failure")
+            
+            # Safety check: if validation failed, we should not have reached here
+            if validation_failed:
+                logger.error("CRITICAL: Validation failed but execution continued - this should not happen!")
+                raise RuntimeError("Validation failed but execution continued unexpectedly")
+            
             # Submit workflow to ComfyUI
             prompt_id = await self.comfy.submit_workflow(workflow)
             
