@@ -18,31 +18,47 @@
 
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue?logo=docker&style=for-the-badge)](https://www.docker.com/)
 [![NVIDIA](https://img.shields.io/badge/NVIDIA-GPU-green?logo=nvidia&style=for-the-badge)](https://www.nvidia.com/)
-[![Python](https://img.shields.io/badge/Python-3.10+-yellow?logo=python&style=for-the-badge)](https://www.python.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?logo=node.js&style=for-the-badge)](https://nodejs.org/en/download)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 [![Status](https://img.shields.io/badge/Status-Active-success?style=for-the-badge)](https://dashboard.aipowergrid.io)
 
 **🎨 Generate AI art and videos while earning AIPG tokens!**
 
-- Python 3.9+
-- A running [ComfyUI](https://github.com/comfyanonymous/ComfyUI) instance
+> ⏱️ **Heads up:** The very first build takes **45–60 minutes** (Docker images, model cache, desktop app). Let it run once; every restart after that is usually under two minutes.
+
+---
+=======
+- Docker Desktop (Free version is fine) (https://www.docker.com/products/docker-desktop/)
+- Node.js (https://nodejs.org/en/download)
 - An API key from [AI Power Grid](https://dashboard.aipowergrid.io)
+- An API key from [Huggingface](https://huggingface.co/settings/tokens) (once logged in)
+- An API key from [Civitai](https://civitai.com/user/account) (once logged in)
 
 </div>
 
 ## 🚀 Quick Start
 
-**Get up and running in under 2 minutes:**
+**Get up and running in under 2 minutes - everything happens automatically!**
 
 1. 🔑 Get your API key from [dashboard.aipowergrid.io](https://dashboard.aipowergrid.io)
 2. ⚙️ Copy `env.example` to `.env` and add your API key
-3. ▶️ Run the start script:
-   - **Windows**: Double-click `start-worker.bat`
-   - **Mac/Linux**: Run `./start-worker.sh`
-4. 🎨 Open http://localhost:5000 and select models
-5. 💰 Click "Start Hosting" → You're earning!
+3. ▶️ **Right-click** and **"Run as Administrator"** the start script:
+   - **Windows**: `start-worker.bat` (right-click → Run as Administrator)
+   - **Mac/Linux**: `sudo ./start-worker.sh`
+4. ⏳ **Plan 45–60 minutes for the very first run.** Docker pulls, dependency installs, and the desktop app build all happen automatically—later launches are fast.
+5. ✨ **That's it!** The script automatically:
+   - ✅ Checks all requirements (disk space, Docker, etc.)
+   - ✅ Starts Docker containers
+   - ✅ Cleans up stale Docker volumes so upgrades stay reliable
+   - ✅ Builds the desktop app (if Node.js is installed)
+   - ✅ Creates a desktop shortcut for easy access
+6. 🖥️ **Desktop app shortcut** will appear on your desktop automatically!
+7. 🎨 Open the desktop app OR http://localhost:5000 in your browser
+8. 💰 Click "Start Hosting" → You're earning!
 
-> ⚡ **Pro Tip:** The script automatically checks all requirements and guides you through setup!
+> 💡 **No Node.js?** The script skips the desktop app build, tells you why, and keeps the worker online. Install Node later and rerun the script to add the app.
+
+> ⚡ **Pro Tip:** The script does everything automatically - just run it as admin and you're done! The desktop app shortcut makes it super easy to manage your worker.
 
 ---
 
@@ -77,14 +93,20 @@ Join thousands of GPU owners helping build a decentralized AI network. Make AI g
 
 ## 📋 Requirements
 
-The start scripts **automatically check** these for you:
+### Software (install once)
 
-- ✅ **Docker Desktop** installed and running
-- ✅ **50GB+ free disk space** (for models and Docker images)
-- ✅ **NVIDIA GPU** with 6GB+ VRAM (or AMD GPU with ROCm)
-- ✅ **8GB+ RAM** recommended
+- ✅ **Docker Desktop** – [Download for Windows / macOS](https://www.docker.com/products/docker-desktop/) (Linux users install Docker Engine from your distro repos). Docker runs ComfyUI, Python, and every dependency in containers, so you never touch those directly.
+- ✅ **Node.js 18+** – [Download installers](https://nodejs.org/en/download). We use Node to build the AI Power Grid desktop app automatically.
 
-> 💡 **Don't worry!** If anything is missing, the scripts guide you through installation step-by-step.
+> 💡 The start scripts verify both apps are installed/running and walk you through fixes if something is missing.
+
+### Hardware & Space (automatically checked)
+
+- 💾 **50GB+ free disk space** (for Docker images + models)
+- 🖥️ **NVIDIA GPU** with 6GB+ VRAM (or comparable AMD ROCm card)
+- 🧠 **8GB+ system RAM** recommended
+
+If a check fails, the script pauses with a friendly message so you can address it and re-run.
 
 ---
 
@@ -134,14 +156,27 @@ The script automatically:
 - ✅ Verifies Docker is installed
 - ✅ Ensures Docker is running
 - ✅ Validates your configuration
+- ✅ Builds the desktop app (if Node.js is installed)
+- ✅ Creates a desktop shortcut for easy access
 
 ### Step 4: Select Models 🎨
 
+**Option A: Use the Desktop App (Recommended - Created Automatically!)**
+1. Look for **"AI Power Grid Manager"** shortcut on your desktop
+2. Double-click to launch (no browser needed!)
+3. Browse available models (filter by your GPU's VRAM)
+4. Click **Download** for models you want to host
+5. Wait for downloads to complete
+6. Click **"Start Hosting"** → You're earning! 🎉
+
+**Option B: Use the Web Interface**
 1. Open **http://localhost:5000** in your browser
 2. Browse available models (filter by your GPU's VRAM)
 3. Click **Download** for models you want to host
 4. Wait for downloads to complete
 5. Click **"Start Hosting"** → You're earning! 🎉
+
+> 💡 **Note:** The desktop app is automatically built and a shortcut is created when you run the start script. If the shortcut wasn't created, you can still use the web interface!
 
 ---
 
@@ -149,8 +184,9 @@ The script automatically:
 
 Track your progress in real-time:
 
+- **🖥️ Desktop App**: Desktop shortcut created automatically! Launch "AI Power Grid Manager" from your desktop (no browser needed!)
 - **🌐 Dashboard**: [dashboard.aipowergrid.io](https://dashboard.aipowergrid.io) - View earnings, stats, and history
-- **💻 Local UI**: http://localhost:5000 - Manage models and monitor jobs
+- **💻 Web UI**: http://localhost:5000 - Manage models and monitor jobs in your browser
 - **📝 View Logs**: `docker-compose logs -f` - See detailed activity
 
 ---
@@ -387,6 +423,50 @@ A: Yes! Use the ComfyUI interface at http://localhost:8188 to test models before
 
 **Q: Why are some models not available?**  
 A: Models may require more VRAM than your GPU has, or may not be supported yet. Check GPU requirements table above.
+
+---
+
+## 🖥️ Desktop App
+
+**Automatic Setup:** The desktop app is automatically built and a shortcut is created on your desktop when you run the start script (`start-worker.bat` or `start-worker.sh`). No manual setup required!
+
+**Manual Building (if needed):**
+
+If you need to rebuild the desktop app manually:
+
+1. Navigate to the management UI directory:
+   ```bash
+   cd management-ui-nextjs
+   ```
+
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+3. Build the Electron app:
+   ```bash
+   npm run electron:build
+   ```
+
+4. Find the installer in the `dist/` directory:
+   - **Windows**: `.exe` installer or portable `.exe`
+   - **macOS**: `.dmg` disk image
+   - **Linux**: `.AppImage` or `.deb` package
+
+**Development Mode:**
+
+Run the app in development mode (connects to localhost:5000):
+```bash
+npm run electron:dev
+```
+
+The desktop app provides the same functionality as the web interface but with:
+- ✅ Native window controls
+- ✅ No browser needed
+- ✅ Better integration with your system
+- ✅ Desktop shortcut for easy access
+- ✅ Automatic creation during worker setup
 
 ---
 
