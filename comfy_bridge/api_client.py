@@ -74,7 +74,6 @@ class APIClient:
             raise
 
     async def cancel_job(self, job_id: str) -> None:
-        """Cancel a job that was picked up but cannot be completed."""
         payload = {"id": job_id}
         
         try:
@@ -87,7 +86,6 @@ class APIClient:
             logger.error(f"Failed to cancel job {job_id}: {e.response.status_code} - {e.response.text}")
 
     async def submit_result(self, payload: Dict[str, Any]) -> None:
-        """Submit a completed job result back to the AI Power Grid."""
         job_id = payload.get("id")
         media_type = payload.get("media_type", "image")
         

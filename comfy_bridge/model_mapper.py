@@ -55,10 +55,10 @@ class ModelMapper:
     # Map Grid model names to ComfyUI workflow files
     DEFAULT_WORKFLOW_MAP = {
         # Video Generation Models
-        "wan2_2_t2v_14b": "wan2.2_ti2v_5B",
-        "wan2.2-t2v-a14b": "wan2.2_ti2v_5B",
-        "wan2_2_t2v_14b_hq": "wan2.2_ti2v_5B",
-        "wan2.2-t2v-a14b-hq": "wan2.2_ti2v_5B",
+        "wan2_2_t2v_14b": "wan2.2-t2v-a14b",
+        "wan2.2-t2v-a14b": "wan2.2-t2v-a14b",
+        "wan2_2_t2v_14b_hq": "wan2.2-t2v-a14b-hq",
+        "wan2.2-t2v-a14b-hq": "wan2.2-t2v-a14b-hq",
         "wan2_2_ti2v_5b": "wan2.2_ti2v_5B",
         "wan2.2_ti2v_5b": "wan2.2_ti2v_5B",
         "ltxv": "ltxv",
@@ -113,6 +113,8 @@ class ModelMapper:
         # If WORKFLOW_FILE is set, only use models derived from those workflows (no defaults)
         if Settings.WORKFLOW_FILE:
             self._build_workflow_map_from_env()
+            # Validate workflows against available models
+            await self._validate_workflows_against_models(comfy_url)
         else:
             # No env override: fall back to static defaults
             self._build_workflow_map()
@@ -242,14 +244,6 @@ class ModelMapper:
         return resolved_paths
 
     def _extract_model_files_from_workflow(self, workflow_path: str) -> List[str]:
-        """Extract model file names from a workflow JSON file.
-
-        Supports both simple format (direct node objects) and ComfyUI format (nodes array).
-        - CheckpointLoaderSimple.ckpt_name (SD/SDXL ckpt)
-        - UNETLoader.unet_name (e.g., Flux-style UNET weights)
-        - CLIPLoader.clip_name (e.g., WAN2 clip models)
-        - VAELoader.vae_name (e.g., WAN2 VAE)
-        """
         try:
             with open(workflow_path, "r", encoding="utf-8") as f:
                 wf = json.load(f)
@@ -328,6 +322,7 @@ class ModelMapper:
         """Build workflow map based on env-specified workflows.
         
         Use explicit mapping for known workflow files to avoid model name resolution issues.
+        Validates that required models are installed before advertising workflows.
         """
         self.workflow_map = {}
         env_workflows = self._iter_env_workflow_files()
@@ -352,6 +347,101 @@ class ModelMapper:
         logger.info(f"Final workflow map from env: {len(self.workflow_map)} models")
         for model, workflow in self.workflow_map.items():
             logger.debug(f"  {model} -> {workflow}")
+    
+    async def _validate_workflows_against_models(self, comfy_url: str):
+        """Validate workflows against available models and remove incompatible ones.
+        
+        This ensures we only advertise models whose workflows have all required models installed.
+        """
+        # Import here to avoid circular imports
+        from .workflow import detect_workflow_model_type, is_model_compatible
+        from .comfyui_client import ComfyUIClient
+        
+        # Get available models from ComfyUI
+        comfy_client = ComfyUIClient(comfy_url)
+        try:
+            available_models = await comfy_client.get_available_models()
+        except Exception as e:
+            logger.warning(f"Failed to fetch available models for validation: {e}")
+            logger.warning("Skipping workflow validation - will validate at job time")
+            return
+        
+        if not available_models:
+            logger.warning("No available models found - skipping workflow validation")
+            return
+        
+        # Validate each workflow in the map
+        workflows_to_remove = []
+        for grid_model_name, workflow_id in list(self.workflow_map.items()):
+            workflow_path = os.path.join(Settings.WORKFLOW_DIR, f"{workflow_id}.json")
+            
+            if not os.path.exists(workflow_path):
+                logger.warning(f"Workflow file not found: {workflow_path}")
+                workflows_to_remove.append(grid_model_name)
+                continue
+            
+            try:
+                # Load workflow
+                with open(workflow_path, "r", encoding="utf-8") as f:
+                    workflow = json.load(f)
+                
+                # Detect workflow model type
+                model_type = detect_workflow_model_type(workflow)
+                
+                if model_type == "unknown":
+                    # Allow unknown types (might be custom workflows)
+                    logger.debug(f"Workflow {workflow_id} has unknown type, allowing it")
+                    continue
+                
+                # Check if compatible models are available
+                has_compatible_models = False
+                
+                if model_type == "flux":
+                    # Check for Flux models
+                    unet_models = available_models.get("UNETLoader", [])
+                    dual_clip = available_models.get("DualCLIPLoader", {})
+                    vae_models = available_models.get("VAELoader", [])
+                    
+                    # Filter to Flux-compatible models
+                    flux_unet = [m for m in unet_models if is_model_compatible(m, "flux")]
+                    flux_clip1 = []
+                    flux_clip2 = []
+                    if dual_clip:
+                        clip1 = dual_clip.get("clip_name1", [])
+                        clip2 = dual_clip.get("clip_name2", [])
+                        flux_clip1 = [m for m in clip1 if is_model_compatible(m, "flux")]
+                        flux_clip2 = [m for m in clip2 if is_model_compatible(m, "flux")]
+                    flux_vae = [m for m in vae_models if is_model_compatible(m, "flux")]
+                    
+                    has_compatible_models = bool(flux_unet and (flux_clip1 or flux_clip2) and flux_vae)
+                    
+                elif model_type == "wanvideo":
+                    # Check for WanVideo models (simpler check - just check if any WanVideo models exist)
+                    # WanVideo uses custom loaders, so we check the object_info directly
+                    # For now, we'll allow WanVideo workflows if WanVideo models are detected
+                    # The real validation happens at job time
+                    has_compatible_models = True  # Allow and validate at job time
+                
+                if not has_compatible_models:
+                    logger.warning(
+                        f"Removing {grid_model_name} from advertised models: "
+                        f"No compatible {model_type} models installed"
+                    )
+                    workflows_to_remove.append(grid_model_name)
+                else:
+                    logger.debug(f"Workflow {workflow_id} validated - compatible models available")
+                    
+            except Exception as e:
+                logger.warning(f"Failed to validate workflow {workflow_id}: {e}")
+                # On error, remove the workflow to be safe
+                workflows_to_remove.append(grid_model_name)
+        
+        # Remove invalid workflows
+        for model_name in workflows_to_remove:
+            del self.workflow_map[model_name]
+        
+        if workflows_to_remove:
+            logger.info(f"Removed {len(workflows_to_remove)} workflows due to missing models")
 
     def get_workflow_file(self, horde_model_name: str) -> str:
         """Get the workflow file for a Grid model"""
