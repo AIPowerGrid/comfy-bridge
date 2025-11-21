@@ -11,7 +11,9 @@
 [![Python](https://img.shields.io/badge/Python-3.10+-yellow?logo=python)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
----
+- Python 3.9+
+- A running [ComfyUI](https://github.com/comfyanonymous/ComfyUI) instance
+- An API key from [AI Power Grid](https://dashboard.aipowergrid.io)
 
 **🎨 Generate stunning AI art, videos, and images while earning rewards**
 
@@ -400,4 +402,5 @@ cp .env .env.backup
 
 [![Get Started](https://img.shields.io/badge/Get%20Started-Dashboard%20AIPG-blue?style=for-the-badge)](https://dashboard.aipowergrid.io)
 
-</div>
+- [AI Power Grid](https://aipowergrid.io/) for the API
+- [ComfyUI](https://github.com/comfyanonymous/ComfyUI) for the local image generation backend 
