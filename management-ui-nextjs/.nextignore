@@ -1,0 +1,5 @@
+persistent_volumes
+persistent_volumes/**
+.next/standalone/persistent_volumes
+.next/standalone/persistent_volumes/**
+
