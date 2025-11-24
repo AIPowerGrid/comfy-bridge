@@ -6,6 +6,8 @@ const projectRoot = path.join(__dirname, '..');
 const repoRoot = path.join(projectRoot, '..');
 const volumesDir = path.join(projectRoot, 'persistent_volumes');
 const stashDir = path.join(repoRoot, 'persistent_volumes_ui_backup');
+const winUnpackedDir = path.join(projectRoot, 'dist', 'win-unpacked');
+const windowsExeName = 'AI Power Grid Manager.exe';
 
 const args = process.argv.slice(2);
 const mode = args.includes('--pack') ? 'pack' : 'build';
@@ -26,6 +28,41 @@ function runShellCommand(command, options = {}) {
     env: { ...process.env, ...(options.env || {}) },
     shell: true,
   });
+}
+
+function killRunningExecutable() {
+  if (process.platform !== 'win32') {
+    return;
+  }
+
+  try {
+    const taskOutput = execSync(
+      `tasklist /FI "IMAGENAME eq ${windowsExeName}" /FO LIST`,
+      { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }
+    );
+
+    if (taskOutput && taskOutput.includes(windowsExeName)) {
+      log(`Detected running instance of "${windowsExeName}", attempting to terminate...`);
+      try {
+        runShellCommand(`taskkill /IM "${windowsExeName}" /F`);
+      } catch (err) {
+        log(`Failed to terminate "${windowsExeName}". Please close the app manually if the build fails.`);
+      }
+    }
+  } catch {
+    // tasklist returns non-zero when the task is missing; that's fine
+  }
+}
+
+function clearWinUnpackedDir() {
+  if (fs.existsSync(winUnpackedDir)) {
+    log(`Removing previous build directory: ${winUnpackedDir}`);
+    try {
+      fs.rmSync(winUnpackedDir, { recursive: true, force: true });
+    } catch (error) {
+      log(`Failed to remove ${winUnpackedDir}: ${error.message}`);
+    }
+  }
 }
 
 function tryDockerCommand(command) {
@@ -100,6 +137,9 @@ function restoreVolumes() {
 async function main() {
   try {
     movedVolumes = stashVolumes();
+
+    killRunningExecutable();
+    clearWinUnpackedDir();
 
     runShellCommand('npx next build');
     runShellCommand('npx tsc -p electron/tsconfig.json');
