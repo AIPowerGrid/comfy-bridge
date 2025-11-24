@@ -78,24 +78,31 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     DESKTOP="$HOME/Desktop"
     if [ -d "$DESKTOP" ]; then
         echo "Creating desktop shortcut..."
-        osascript -e "tell application \"Finder\" to make alias file at POSIX file \"$DESKTOP\" to POSIX file \"$(pwd)/$ELECTRON_EXE\"" || {
+        FULL_PATH="$(cd "$(dirname "$ELECTRON_EXE")" && pwd)/$(basename "$ELECTRON_EXE")"
+        osascript -e "tell application \"Finder\" to make alias file at POSIX file \"$DESKTOP\" to POSIX file \"$FULL_PATH\"" 2>/dev/null || {
             echo -e "${YELLOW}WARNING: Failed to create desktop shortcut${NC}"
-            echo "You can manually create an alias to: $(pwd)/$ELECTRON_EXE"
+            echo "You can manually create an alias to: $FULL_PATH"
         }
+        if [ $? -eq 0 ]; then
+            echo -e "${GREEN}Desktop shortcut created successfully!${NC}"
+            echo "Location: $DESKTOP/AI Power Grid Manager"
+        fi
     fi
 elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
     # Linux - Create .desktop file
     DESKTOP="$HOME/Desktop"
     if [ -d "$DESKTOP" ]; then
         echo "Creating desktop shortcut..."
+        FULL_PATH="$(cd "$(dirname "$ELECTRON_EXE")" && pwd)/$(basename "$ELECTRON_EXE")"
+        ICON_PATH="$(pwd)/public/logo.png"
         cat > "$DESKTOP/AI Power Grid Manager.desktop" << EOF
 [Desktop Entry]
 Version=1.0
 Type=Application
 Name=AI Power Grid Manager
 Comment=AI Power Grid Worker Management UI
-Exec=$(pwd)/$ELECTRON_EXE
-Icon=$(pwd)/public/logo.png
+Exec="$FULL_PATH"
+Icon=$ICON_PATH
 Terminal=false
 Categories=Utility;
 EOF
