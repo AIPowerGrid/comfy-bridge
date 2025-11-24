@@ -1,4 +1,5 @@
 import logging
+import json
 import httpx
 from typing import List, Any, Dict, Optional
 from .config import Settings
@@ -46,9 +47,6 @@ class APIClient:
             "blacklist": [],
             "amount": 1,
         }
-
-        if models:
-            payload["models"] = models
 
         logger.debug(f"Polling for jobs with {len(payload.get('models', []))} models")
         
@@ -104,5 +102,16 @@ class APIClient:
             logger.info(f"Successfully submitted {media_type} result for job {job_id}")
             
         except httpx.HTTPStatusError as e:
-            logger.error(f"Failed to submit result for job {job_id}: {e.response.status_code} - {e.response.text}")
+            error_text = e.response.text
+            try:
+                error_json = e.response.json()
+                logger.error(f"Failed to submit result for job {job_id}: {e.response.status_code}")
+                logger.error(f"Error response: {json.dumps(error_json, indent=2)}")
+            except (ValueError, json.JSONDecodeError):
+                logger.error(f"Failed to submit result for job {job_id}: {e.response.status_code} - {error_text}")
+            
+            # Log payload info for debugging (without the large base64)
+            payload_debug = {k: v for k, v in payload.items() if k != "generation"}
+            payload_debug["generation"] = f"<base64 data, length: {len(payload.get('generation', ''))}>"
+            logger.debug(f"Payload sent: {json.dumps(payload_debug, indent=2)}")
             raise

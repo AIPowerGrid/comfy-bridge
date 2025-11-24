@@ -4,6 +4,8 @@ services:
         build:
           context: ./management-ui-nextjs
           dockerfile: Dockerfile
+          # BuildKit cache mounts persist npm packages and Next.js build cache
+          # Enable BuildKit for cache mounts (default in Docker Desktop)
         container_name: comfy-bridge-ui
         
         deploy:
@@ -61,9 +63,10 @@ services:
     build:
       context: .
       dockerfile: dockerfile
-      # BuildKit cache mounts persist pip packages and git clones between rebuilds
+      # BuildKit cache mounts persist pip packages, git clones, and apt packages between rebuilds
       # This dramatically speeds up rebuilds (PyTorch wheels ~900MB cached)
       # To force a clean rebuild: DOCKER_BUILDKIT=1 docker-compose build --no-cache comfy-bridge
+      # Enable BuildKit for cache mounts (default in Docker Desktop)
     container_name: comfy-bridge
     
     deploy:
