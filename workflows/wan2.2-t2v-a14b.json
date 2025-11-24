@@ -4,34 +4,6 @@
     "last_node_id": 26,
     "last_link_id": 39,
     "nodes": [{
-        "id": 1,
-        "type": "Note",
-        "pos": [753.0169677734375, -62.24666213989258],
-        "size": [210, 159.49227905273438],
-        "flags": {},
-        "order": 0,
-        "mode": 0,
-        "inputs": [],
-        "outputs": [],
-        "properties": {},
-        "widgets_values": ["This model uses a different diffusion model for the first steps (high noise) vs the last steps (low noise).\n\n"],
-        "color": "#432",
-        "bgcolor": "#653"
-    }, {
-        "id": 2,
-        "type": "Note",
-        "pos": [755.0725708007812, 335.61279296875],
-        "size": [210, 159.49227905273438],
-        "flags": {},
-        "order": 1,
-        "mode": 0,
-        "inputs": [],
-        "outputs": [],
-        "properties": {},
-        "widgets_values": ["This model uses the wan 2.1 VAE.\n\n\n"],
-        "color": "#432",
-        "bgcolor": "#653"
-    }, {
         "id": 10,
         "type": "CLIPLoader",
         "pos": [985.0725708007812, 185.61280822753906],
@@ -146,20 +118,6 @@
             "Node name for S&R": "ModelSamplingSD3"
         },
         "widgets_values": [12]
-    }, {
-        "id": 18,
-        "type": "Note",
-        "pos": [2595.45361328125, 116.22357177734375],
-        "size": [283.3333740234375, 143.33334350585938],
-        "flags": {},
-        "order": 4,
-        "mode": 0,
-        "inputs": [],
-        "outputs": [],
-        "properties": {},
-        "widgets_values": ["These settings are taken from the official Wan2.2 imnference code. You could lower the number of setps down to 20 for still very good results."],
-        "color": "#432",
-        "bgcolor": "#653"
     }, {
         "id": 3,
         "type": "VAEDecode",
