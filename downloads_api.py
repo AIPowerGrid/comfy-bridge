@@ -56,17 +56,50 @@ def _expected_files_for_model(model_id: str) -> list[str]:
     if not isinstance(info, dict):
         return files
 
-    conf = info.get("config", {}) if isinstance(info.get("config", {}), dict) else {}
-    for fe in conf.get("files", []) or []:
-        fn = (fe or {}).get("path")
+    def _extract_files(source: dict | list | None):
+        if isinstance(source, list):
+            for entry in source:
+                if isinstance(entry, dict):
+                    fn = entry.get("path")
+                    if isinstance(fn, str) and fn:
+                        files.append(fn)
+                elif isinstance(entry, str) and entry:
+                    files.append(entry)
+            return
+        if isinstance(source, dict):
+            for entry in source.get("files", []) or []:
+                if isinstance(entry, dict):
+                    fn = entry.get("path")
+                    if isinstance(fn, str) and fn:
+                        files.append(fn)
+                elif isinstance(entry, str) and entry:
+                    files.append(entry)
+
+    # Primary location (most entries)
+    _extract_files(info.get("files"))
+
+    # Some entries embed metadata under config
+    config = info.get("config")
+    if isinstance(config, dict):
+        _extract_files(config.get("files"))
+
+    if not files:
+        fn = None
+        if isinstance(config, dict):
+            fn = config.get("file_name") or config.get("filename")
+        fn = fn or info.get("file_name") or info.get("filename")
         if isinstance(fn, str) and fn:
             files.append(fn)
 
-    if not files:
-        fn = conf.get("file_name") or info.get("filename")
-        if isinstance(fn, str) and fn:
-            files.append(fn)
-    return files
+    # Deduplicate while preserving order
+    unique_files: list[str] = []
+    seen: set[str] = set()
+    for fn in files:
+        if fn and fn not in seen:
+            unique_files.append(fn)
+            seen.add(fn)
+
+    return unique_files
 
 
 def _all_files_present(model_id: str, models_dir: str) -> bool:

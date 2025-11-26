@@ -3,6 +3,9 @@ from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
 
+# Constants
+MIN_VIDEO_SIZE_BYTES = 100 * 1024  # 100KB minimum for valid video file
+
 
 class ResultProcessor:
     def __init__(self, comfy_client):
@@ -34,7 +37,7 @@ class ResultProcessor:
         try:
             media_bytes = await self.comfy.get_file(filename)
             
-            if len(media_bytes) >= 100 * 1024:
+            if len(media_bytes) >= MIN_VIDEO_SIZE_BYTES:
                 logger.info(f"Found complete video: {filename}")
                 return (media_bytes, "video", filename)
         except Exception as e:

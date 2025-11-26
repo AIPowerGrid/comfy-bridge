@@ -2,7 +2,7 @@ import asyncio
 import logging
 import json
 import websockets
-from typing import List, Dict, Any, Optional, Set
+from typing import List, Dict, Any, Optional, Set, Callable
 
 from .api_client import APIClient
 from .workflow import build_workflow
@@ -14,7 +14,6 @@ from .payload_builder import PayloadBuilder
 from .job_poller import JobPoller
 from .r2_uploader import R2Uploader
 from .filesystem_checker import FilesystemChecker
-from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
 
