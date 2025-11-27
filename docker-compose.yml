@@ -1,0 +1,163 @@
+services:
+  # Management UI - Next.js web interface for model selection
+  management-ui:
+        build:
+          context: ./management-ui-nextjs
+          dockerfile: Dockerfile
+        container_name: comfy-bridge-ui
+        
+        deploy:
+          resources:
+            reservations:
+              devices:
+                - driver: nvidia
+                  count: all
+                  capabilities: [gpu]
+        environment:
+          - NVIDIA_VISIBLE_DEVICES=all
+          - NVIDIA_DRIVER_CAPABILITIES=utility
+          - COMFY_BRIDGE_PATH=/app/comfy-bridge
+          - MODELS_PATH=/app/ComfyUI/models
+          - ENV_FILE_PATH=/app/comfy-bridge/.env
+          - MODEL_CONFIGS_PATH=/app/comfy-bridge/model_configs.json
+          - GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH=/app/grid-image-model-reference
+          - CIVITAI_API_KEY=${CIVITAI_API_KEY:-}
+          - HUGGING_FACE_API_KEY=${HUGGING_FACE_API_KEY:-}
+        
+        ports:
+          - "5000:5000"  # Management UI
+        
+        volumes:
+          # Share .env file for reading/writing model selections
+          - ./.env:/app/comfy-bridge/.env
+          # Share model configs (read-write so it can be updated by catalog sync)
+          - ./model_configs.json:/app/comfy-bridge/model_configs.json
+          # Share download scripts
+          - ./download_models_from_catalog.py:/app/comfy-bridge/download_models_from_catalog.py:ro
+          # Share utility scripts
+          - ./model_manager.py:/app/comfy-bridge/model_manager.py:ro
+          - ./get_gpu_info.py:/app/comfy-bridge/get_gpu_info.py:ro
+          # Access to models directory to check installed models
+          - models:/app/ComfyUI/models
+          # Access to workflows directory
+          - ./workflows:/app/comfy-bridge/workflows
+          # Docker socket for container restarts (Windows: //var/run/docker.sock, Linux: /var/run/docker.sock)
+          - //var/run/docker.sock:/var/run/docker.sock
+          # Share docker-compose.yml for restarts
+          - ./docker-compose.yml:/app/comfy-bridge/docker-compose.yml:ro
+        
+        restart: unless-stopped
+        healthcheck:
+          test: ["CMD", "curl", "-f", "http://localhost:5000"]
+          interval: 30s
+          timeout: 10s
+          retries: 3
+          start_period: 20s
+        depends_on:
+          - comfy-bridge
+
+  # Main ComfyUI Bridge service
+  comfy-bridge:
+    build:
+      context: .
+      dockerfile: dockerfile
+      # BuildKit cache mounts persist pip packages and git clones between rebuilds
+      # This dramatically speeds up rebuilds (PyTorch wheels ~900MB cached)
+      # To force a clean rebuild: DOCKER_BUILDKIT=1 docker-compose build --no-cache comfy-bridge
+    container_name: comfy-bridge
+    
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - GRID_API_KEY=${GRID_API_KEY}
+      - GRID_WORKER_NAME=${GRID_WORKER_NAME:-ComfyBridge-Worker}
+      - COMFYUI_URL=http://localhost:8188
+      - GRID_API_URL=${GRID_API_URL:-https://api.aipowergrid.io/api}
+      - GRID_NSFW=${GRID_NSFW:-true}
+      - GRID_THREADS=${GRID_THREADS:-2}
+      - GRID_MAX_PIXELS=${GRID_MAX_PIXELS:-1048576}
+      - WORKFLOW_FILE=${WORKFLOW_FILE:-}
+      - GRID_MODEL=${GRID_MODEL:-}
+      - GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH=/app/grid-image-model-reference
+      - COMFYUI_EXTRA_ARGS=${COMFYUI_EXTRA_ARGS:-}
+      - HUGGING_FACE_API_KEY=${HUGGING_FACE_API_KEY:-}
+      - CIVITAI_API_KEY=${CIVITAI_API_KEY:-}
+      - DEBUG=${DEBUG:-true}
+    
+    # Ports
+    ports:
+      - "8188:8188"  # ComfyUI API
+      - "8000:8000"  # ComfyUI Web UI (optional)
+      - "8001:8001"  # GPU Info Server
+    
+    # Volumes for persistent storage - survives container removal
+    volumes:
+      # ComfyUI models - persistent storage for downloaded models
+      - models:/app/ComfyUI/models
+      # ComfyUI outputs - where generated images are saved
+      - output:/app/ComfyUI/output
+      # ComfyUI inputs - for input images
+      - input:/app/ComfyUI/input
+      # Model cache and metadata - for tracking downloads and checksums
+      - cache:/app/comfy-bridge/.cache
+      # Workflows (optional: use local workflows)
+      - ./workflows:/app/comfy-bridge/workflows:ro
+      # Config file (optional)
+      - ./.env:/app/comfy-bridge/.env:ro
+      # Model configs (shared with management-ui)
+      - ./model_configs.json:/app/comfy-bridge/model_configs.json
+      # Grid image model reference repository
+      - ../grid-image-model-reference:/app/grid-image-model-reference:ro
+    
+    # Restart policy
+    restart: unless-stopped
+    
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8188/system_stats"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  # Persistent volumes that survive container removal
+  models:
+    driver: local
+    driver_opts:
+      type: none
+      device: ${PWD}/persistent_volumes/models
+      o: bind
+  output:
+    driver: local
+    driver_opts:
+      type: none
+      device: ${PWD}/persistent_volumes/output
+      o: bind
+  input:
+    driver: local
+    driver_opts:
+      type: none
+      device: ${PWD}/persistent_volumes/input
+      o: bind
+  cache:
+    driver: local
+    driver_opts:
+      type: none
+      device: ${PWD}/persistent_volumes/cache
+      o: bind
+

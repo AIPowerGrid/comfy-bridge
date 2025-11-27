@@ -1,0 +1,90 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 10 10 10;
+    --foreground: 255 255 255;
+  }
+
+  body {
+    @apply bg-black text-white;
+    background: radial-gradient(ellipse at top, rgba(255, 107, 53, 0.05), transparent 50%), 
+                radial-gradient(ellipse at bottom, rgba(255, 215, 0, 0.03), transparent 50%),
+                #000000;
+  }
+}
+
+@layer utilities {
+  .glow-text-orange {
+    text-shadow: 0 0 20px rgba(255, 107, 53, 0.5);
+  }
+  
+  .glow-text-gold {
+    text-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+  }
+  
+  .glass-effect {
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  }
+  
+  .aipg-card {
+    background: linear-gradient(135deg, rgba(255, 107, 53, 0.05), rgba(0, 0, 0, 0.8));
+    border: 1px solid rgba(255, 107, 53, 0.2);
+    box-shadow: 0 4px 20px rgba(255, 107, 53, 0.1);
+  }
+  
+  .aipg-button {
+    background: linear-gradient(135deg, #FF6B35, #FF8C42);
+    border: 1px solid rgba(255, 107, 53, 0.3);
+    box-shadow: 0 4px 15px rgba(255, 107, 53, 0.2);
+  }
+  
+  .aipg-button:hover {
+    background: linear-gradient(135deg, #FF8C42, #FF6B35);
+    box-shadow: 0 6px 20px rgba(255, 107, 53, 0.3);
+    transform: translateY(-1px);
+  }
+  
+  .gradient-border {
+    position: relative;
+    background: linear-gradient(135deg, rgba(255, 107, 53, 0.1), rgba(255, 215, 0, 0.1));
+    border: 1px solid transparent;
+  }
+  
+  .gradient-border::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg, #FF6B35, #FFD700);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+  }
+  
+  .aipg-grid {
+    background-image: 
+      linear-gradient(rgba(255, 107, 53, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 107, 53, 0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+  
+  .aipg-gradient-text {
+    background: linear-gradient(135deg, #FFFFFF, #FF6B35, #FFD700);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  
+  .aipg-border-glow {
+    border: 1px solid rgba(255, 107, 53, 0.3);
+    box-shadow: 0 0 20px rgba(255, 107, 53, 0.1);
+  }
+}
+

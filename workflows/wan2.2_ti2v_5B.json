@@ -1,0 +1,167 @@
+{
+  "3": {
+    "inputs": {
+      "model": [
+        "22",
+        0
+      ],
+      "image_embeds": [
+        "55",
+        0
+      ],
+      "text_embeds": [
+        "46",
+        0
+      ],
+      "steps": 20,
+      "cfg": 5,
+      "shift": 8,
+      "seed": 741775740776511,
+      "scheduler": "unipc",
+      "force_offload": true,
+      "riflex_freq_index": 0,
+      "rope_function": "comfy"
+    },
+    "class_type": "WanVideoSampler",
+    "_meta": {
+      "title": "WanVideoSampler"
+    }
+  },
+  "6": {
+    "inputs": {
+      "text": "cinematic abstract scene of cats flying through the air",
+      "clip": [
+        "38",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Positive Prompt)"
+    }
+  },
+  "7": {
+    "inputs": {
+      "text": "Bright colors, overexposed, static, blurry details, subtitles, style, work, painting, image, still, overall gray, worst quality, low quality, JPEG compression artifacts, ugly, incomplete, extra fingers, poorly drawn hands, poorly drawn face, deformed, disfigured, misshapen limbs, fused fingers, motionless image, messy background, three legs, crowded background, walking backwards.",
+      "clip": [
+        "38",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Negative Prompt)"
+    }
+  },
+  "8": {
+    "inputs": {
+      "samples": [
+        "3",
+        0
+      ],
+      "vae": [
+        "39",
+        0
+      ],
+      "enable_vae_tiling": false,
+      "tile_x": 512,
+      "tile_y": 512,
+      "tile_stride_x": 256,
+      "tile_stride_y": 256,
+      "normalization": "default"
+    },
+    "class_type": "WanVideoDecode",
+    "_meta": {
+      "title": "WanVideoDecode"
+    }
+  },
+  "22": {
+    "inputs": {
+      "model": "wan2.2_ti2v_5B_fp16.safetensors",
+      "base_precision": "fp16",
+      "load_device": "main_device",
+      "quantization": "disabled",
+      "attention_mode": "sdpa"
+    },
+    "class_type": "WanVideoModelLoader",
+    "_meta": {
+      "title": "WanVideoModelLoader"
+    }
+  },
+  "38": {
+    "inputs": {
+      "clip_name": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+      "type": "wan",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "Load CLIP"
+    }
+  },
+  "39": {
+    "inputs": {
+      "model_name": "wan_2.1_vae.safetensors",
+      "precision": "bf16"
+    },
+    "class_type": "WanVideoVAELoader",
+    "_meta": {
+      "title": "Load VAE"
+    }
+  },
+  "46": {
+    "inputs": {
+      "positive": [
+        "6",
+        0
+      ],
+      "negative": [
+        "7",
+        0
+      ]
+    },
+    "class_type": "WanVideoTextEmbedBridge",
+    "_meta": {
+      "title": "WanVideoTextEmbedBridge"
+    }
+  },
+  "55": {
+    "inputs": {
+      "width": 640,
+      "height": 640,
+      "num_frames": 80
+    },
+    "class_type": "WanVideoEmptyEmbeds",
+    "_meta": {
+      "title": "WanVideoEmptyEmbeds"
+    }
+  },
+  "57": {
+    "inputs": {
+      "fps": 16,
+      "images": [
+        "8",
+        0
+      ]
+    },
+    "class_type": "CreateVideo",
+    "_meta": {
+      "title": "Create Video"
+    }
+  },
+  "58": {
+    "inputs": {
+      "filename_prefix": "video/ComfyUI",
+      "format": "auto",
+      "codec": "auto",
+      "video": [
+        "57",
+        0
+      ]
+    },
+    "class_type": "SaveVideo",
+    "_meta": {
+      "title": "Save Video"
+    }
+  }
+}
