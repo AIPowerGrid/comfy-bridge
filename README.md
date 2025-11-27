@@ -10,7 +10,7 @@ The ComfyUI Bridge acts as a worker for the AI Power Grid network, receiving ima
 
 - Python 3.9+
 - A running [ComfyUI](https://github.com/comfyanonymous/ComfyUI) instance
-- An API key from [AI Power Grid](https://dashboard.aipowergrid.io)
+- An API key from [AI Power Grid](https://aipowergrid.io/register)
 
 ## Installation
 
