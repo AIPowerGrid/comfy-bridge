@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "comfy-bridge"
+version = "0.1.0"
+description = "ComfyUI Bridge for AI Power Grid"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+  "httpx",
+  "aiohttp",
+  "python-dotenv",
+  "pytest>=7.0.0",
+  "pytest-asyncio>=0.20.0",
+  "pytest-cov>=4.0.0",
+  "pytest-mock>=3.10.0",
+  "httpx-mock>=0.1.0"
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["comfy_bridge*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "--cov=comfy_bridge",
+    "--cov-report=html",
+    "--cov-report=term-missing",
+           "--cov-fail-under=50",
+    "-v"
+]
+asyncio_mode = "auto"
+
+[tool.coverage.run]
+source = ["comfy_bridge"]
+omit = [
+    "*/tests/*",
+    "*/test_*",
+    "*/__pycache__/*"
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:"
+]

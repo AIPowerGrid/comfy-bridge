@@ -1,0 +1,31 @@
+{
+  "1": {
+    "inputs": {
+      "model": "LTX-2 (Pro)",
+      "prompt": "A towering wave crashes against jagged cliffs, spray exploding into the air while gulls scream overhead and the rumble of water shakes the rocks.",
+      "duration": 8,
+      "resolution": "1920x1080",
+      "fps": 50,
+      "generate_audio": true
+    },
+    "class_type": "LtxvApiTextToVideo",
+    "_meta": {
+      "title": "LTXV Text To Video"
+    }
+  },
+  "27": {
+    "inputs": {
+      "filename_prefix": "video\\ltx-t2v",
+      "format": "mp4",
+      "codec": "h264",
+      "video": [
+        "1",
+        0
+      ]
+    },
+    "class_type": "SaveVideo",
+    "_meta": {
+      "title": "Save Video"
+    }
+  }
+}
