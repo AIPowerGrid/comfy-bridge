@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
 import { spawn } from 'child_process';
+import { startDownload, updateProgress, completeDownload, updateDownloadMessage, failDownload, FileDownloadState, updateFileProgress, setFileStatus, setProcessId } from '@/lib/downloadState';
+import { downloadsApiUrl } from '@/lib/serverEnv';
+import * as fs from 'fs/promises';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,124 +20,258 @@ export async function POST(request: Request): Promise<Response> {
     
     console.log('Starting download for models:', models);
     
-        // Run the download script in the comfy-bridge container which has correct permissions
-        const modelsList = models.join(',');
-        const env = {
-          ...process.env,
-          HUGGING_FACE_API_KEY: process.env.HUGGING_FACE_API_KEY || '',
-          CIVITAI_API_KEY: process.env.CIVITAI_API_KEY || '',
-          GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH: process.env.GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH || '/app/grid-image-model-reference'
-        };
-        
-        // Stream download progress using Server-Sent Events
-        const encoder = new TextEncoder();
-        
+    // Load model configs to get file list
+    const modelConfigPath = '/app/comfy-bridge/model_configs.json';
+    let files: FileDownloadState[] = [];
+    
+    try {
+      const configData = await fs.readFile(modelConfigPath, 'utf-8');
+      const modelConfigs = JSON.parse(configData);
+      const modelInfo = modelConfigs[models[0]];
+      
+      if (modelInfo && modelInfo.files && Array.isArray(modelInfo.files)) {
+        // Create FileDownloadState objects for each file
+        files = modelInfo.files.map((file: any) => ({
+          file_name: file.path || 'unknown',
+          file_type: file.file_type || 'checkpoints',
+          file_size_mb: 0, // Will be updated during download
+          progress: 0,
+          speed: '',
+          eta: '',
+          status: 'queued' as const,
+          downloaded_mb: 0
+        }));
+        console.log(`Initialized ${files.length} files for ${models[0]}`);
+      }
+    } catch (error) {
+      console.error('Error loading model configs:', error);
+    }
+    
+    // Start download state tracking with files
+    startDownload(models[0], files);
+    
+        // Call the comfy-bridge API to download models
         const stream = new ReadableStream({
           start(controller) {
-            const child = spawn('python3', [
-              '/app/comfy-bridge/download_models_from_catalog.py',
-              '--models', modelsList,
-              '--models-path', '/app/ComfyUI/models'
-            ], {
-              cwd: bridgePath,
-              env: env,
-              stdio: ['pipe', 'pipe', 'pipe']
-            });
-
-            let stdout = '';
-            let stderr = '';
-
-            child.stdout.on('data', (data) => {
-              const chunk = data.toString();
-              stdout += chunk;
-              console.log('Download progress:', chunk.trim());
+            const encoder = new TextEncoder();
+            let isClosed = false;
+            let sawComplete = false;
+            let started = false;
+            
+            // Helper to safely enqueue data
+            const safeEnqueue = (data: Uint8Array) => {
+              try {
+                if (!isClosed) {
+                  controller.enqueue(data);
+                }
+              } catch (e) {
+                console.error('Error enqueuing data (stream may be closed):', e);
+                isClosed = true;
+              }
+            };
+            
+            // Helper to safely close controller
+            const safeClose = () => {
+              try {
+                if (!isClosed) {
+                  controller.close();
+                  isClosed = true;
+                }
+              } catch (e) {
+                console.error('Error closing stream (may already be closed):', e);
+                isClosed = true;
+              }
+            };
+            
+            // Make request to downloads API (separate service)
+            const downloadsUrl = downloadsApiUrl('/downloads');
+            console.log(`Download route: POST to ${downloadsUrl}`);
+            // Immediately emit a local 'start' event so the UI shows activity,
+            // even if the backend exits quickly (e.g., already installed).
+            try {
+              const startEvt = {
+                type: 'start',
+                model: models[0],
+                message: `Starting download for ${models[0]}...`
+              };
+              safeEnqueue(encoder.encode(`data: ${JSON.stringify(startEvt)}\n\n`));
+              started = true;
+            } catch (e) {
+              console.error('Failed to enqueue local start event', e);
+            }
+            fetch(downloadsUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ models })
+            }).then(response => {
+              if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+              }
               
-              // Send progress update to client
-              const progressData = JSON.stringify({
-                type: 'progress',
-                message: chunk.trim(),
-                timestamp: new Date().toISOString()
-              });
-              controller.enqueue(encoder.encode(`data: ${progressData}\n\n`));
-            });
-
-            child.stderr.on('data', (data) => {
-              const chunk = data.toString();
-              stderr += chunk;
-              console.log('Download stderr:', chunk.trim());
+              const reader = response.body?.getReader();
+              if (!reader) {
+                throw new Error('No response body');
+              }
               
-              // Send error update to client
+              const decoder = new TextDecoder();
+              let buffer = '';
+              let currentFileName = '';
+              
+              function pump(): Promise<void> {
+                return reader!.read().then(({ done, value }) => {
+                  if (done) {
+                    // If backend ended without sending an explicit complete, emit one here
+                    if (!sawComplete) {
+                      const finalEvt = {
+                        type: 'complete',
+                        success: true,
+                        model: models[0],
+                        message: started ? 'Download finished' : 'Nothing to download'
+                      };
+                      safeEnqueue(encoder.encode(`data: ${JSON.stringify(finalEvt)}\n\n`));
+                    }
+                    safeClose();
+                    return;
+                  }
+                  
+                  if (isClosed) {
+                    // Stream was closed, stop reading
+                    return;
+                  }
+                  
+                  buffer += decoder.decode(value, { stream: true });
+                  const lines = buffer.split('\n');
+                  buffer = lines.pop() || '';
+                  
+                  for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                      try {
+                        const data = JSON.parse(line.slice(6));
+                        const currentModel = data.model || models[0];
+                        
+                        // Parse raw message for file-specific progress
+                        const message = data.message || '';
+                        
+                        // Detect which file is being downloaded: [DOWNLOAD] [1/6] filename.safetensors -> checkpoints/
+                        const downloadMatch = message.match(/\[DOWNLOAD\].*?(\S+\.safetensors|\S+\.ckpt|\S+\.pth)/i);
+                        if (downloadMatch) {
+                          currentFileName = downloadMatch[1];
+                          setFileStatus(currentModel, currentFileName, 'downloading');
+                        }
+                        
+                        // Parse progress: [PROGRESS] 38.9% (455.53/1170.14 MB) @ 53.93 MB/s ETA: 13s
+                        const progressMatch = message.match(/\[PROGRESS\]\s+([\d.]+)%\s+\(([\d.]+)\/([\d.]+)\s+MB\)\s+@\s+([\d.]+)\s+MB\/s\s+ETA:\s+(.+)/);
+                        if (progressMatch && currentFileName) {
+                          const progress = parseFloat(progressMatch[1]);
+                          const downloaded = parseFloat(progressMatch[2]);
+                          const totalMB = parseFloat(progressMatch[3]);
+                          const speedMB = parseFloat(progressMatch[4]);
+                          const eta = progressMatch[5];
+                          
+                          // Update the file size if we haven't set it yet
+                          const downloadState = require('@/lib/downloadState').getDownloadState(currentModel);
+                          if (downloadState && downloadState.files) {
+                            const fileIdx = downloadState.files.findIndex((f: any) => f.file_name === currentFileName);
+                            if (fileIdx !== -1 && downloadState.files[fileIdx].file_size_mb === 0) {
+                              downloadState.files[fileIdx].file_size_mb = totalMB;
+                            }
+                          }
+                          
+                          updateFileProgress(
+                            currentModel,
+                            currentFileName,
+                            progress,
+                            downloaded,
+                            `${speedMB.toFixed(2)} MB/s`,
+                            eta
+                          );
+                        }
+                        
+                        // Detect file completion: [OK] Downloaded filename.safetensors
+                        const completeMatch = message.match(/\[OK\].*?Downloaded\s+(\S+\.safetensors|\S+\.ckpt|\S+\.pth)/i);
+                        if (completeMatch) {
+                          const fileName = completeMatch[1];
+                          setFileStatus(currentModel, fileName, 'completed');
+                        }
+                        
+                        // Update progress based on message type
+                        if (data.type === 'process_info' && data.pid) {
+                          // Store the process ID for cancellation
+                          setProcessId(currentModel, data.pid);
+                          console.log(`Download process for ${currentModel} started with PID: ${data.pid}`);
+                        } else if (data.type === 'progress' && data.progress !== undefined) {
+                          updateProgress(data.progress, data.speed || '', data.eta || '', currentModel, data.message);
+                        } else if (data.type === 'complete') {
+                          sawComplete = true;
+                          if (data.success) {
+                            completeDownload(currentModel);
+                          } else {
+                            failDownload(
+                              currentModel,
+                              data.message || 'Download failed'
+                            );
+                          }
+                        } else if (data.type === 'start') {
+                          updateDownloadMessage(currentModel, data.message || 'Starting download...');
+                        } else if (data.type === 'success' || data.type === 'info') {
+                          updateDownloadMessage(currentModel, data.message);
+                        } else if (data.type === 'error') {
+                          failDownload(currentModel, data.message || 'Download failed');
+                        }
+                        
+                        safeEnqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+                      } catch (e) {
+                        console.error('Error parsing SSE data:', e);
+                      }
+                    }
+                  }
+                  
+                  return pump();
+                }).catch(error => {
+                  console.error('Error reading stream:', error);
+                  // Ensure client unblocks
+                  try {
+                    const errEvt = {
+                      type: 'error',
+                      model: models[0],
+                      message: `Download stream error: ${error instanceof Error ? error.message : String(error)}`
+                    };
+                    safeEnqueue(encoder.encode(`data: ${JSON.stringify(errEvt)}\n\n`));
+                  } catch {}
+                  safeClose();
+                });
+              }
+              
+              return pump();
+            }).catch(error => {
+              console.error('Download API error (connecting to 8002):', error);
               const errorData = JSON.stringify({
                 type: 'error',
-                message: chunk.trim(),
+                message: `Download API error: ${error.message}`,
                 timestamp: new Date().toISOString()
               });
-              controller.enqueue(encoder.encode(`data: ${errorData}\n\n`));
+              safeEnqueue(encoder.encode(`data: ${errorData}\n\n`));
+              safeClose();
             });
-
-            child.on('close', (code) => {
-              console.log('Download completed with code:', code);
-              
-              const resultData = JSON.stringify({
-                type: 'complete',
-                success: code === 0,
-                message: code === 0 ? `Downloaded ${models.length} models successfully` : `Download failed with exit code ${code}`,
-                models: models,
-                output: stdout,
-                error: stderr || null,
-                timestamp: new Date().toISOString()
-              });
-              controller.enqueue(encoder.encode(`data: ${resultData}\n\n`));
-              controller.close();
-            });
-
-            child.on('error', (error) => {
-              console.error('Download spawn error:', error);
-              const errorData = JSON.stringify({
-                type: 'error',
-                message: `Download spawn error: ${error.message}`,
-                timestamp: new Date().toISOString()
-              });
-              controller.enqueue(encoder.encode(`data: ${errorData}\n\n`));
-              controller.close();
-            });
-
-            // Set timeout
-            setTimeout(() => {
-              child.kill();
-              const timeoutData = JSON.stringify({
-                type: 'error',
-                message: 'Download timed out after 1 hour',
-                timestamp: new Date().toISOString()
-              });
-              controller.enqueue(encoder.encode(`data: ${timeoutData}\n\n`));
-              controller.close();
-            }, 3600000);
           }
         });
 
-        return new Response(stream, {
-          headers: {
-            'Content-Type': 'text/event-stream',
-            'Cache-Control': 'no-cache',
-            'Connection': 'keep-alive',
-          },
-        });
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache, no-transform',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no', // Disable nginx buffering
+      },
+    });
   } catch (error: any) {
     console.error('Download error:', error);
-    
-    if (error.message && error.message.includes('timed out')) {
-      return NextResponse.json({
-        success: false,
-        error: 'Download timed out after 1 hour',
-      }, { status: 408 });
-    }
     
     return NextResponse.json({
       success: false,
       error: error.message || 'Unknown error',
-      output: '',
-      stderr: '',
     }, { status: 500 });
   }
 }

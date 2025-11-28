@@ -11,6 +11,7 @@ interface ModelGridProps {
   filter: 'all' | 'compatible' | 'selected';
   styleFilter: 'all' | 'text-to-image' | 'text-to-video' | 'image-to-video' | 'image-to-image' | 'anime' | 'realistic' | 'generalist' | 'artistic' | 'video';
   gpuInfo: any;
+  downloadStatus: any;
   onToggleModel: (modelName: string) => void;
   onFilterChange: (filter: 'all' | 'compatible' | 'selected') => void;
   onStyleFilterChange: (styleFilter: 'all' | 'text-to-image' | 'text-to-video' | 'image-to-video' | 'image-to-image' | 'anime' | 'realistic' | 'generalist' | 'artistic' | 'video') => void;
@@ -19,6 +20,7 @@ interface ModelGridProps {
   onUnhost: (modelId: string) => void;
   onDownload: (modelId: string) => void;
   onDownloadAndHost: (modelId: string) => void;
+  onCancelDownload: () => void;
   onSave: () => void;
   onClear: () => void;
 }
@@ -30,6 +32,7 @@ export default function ModelGrid({
   filter,
   styleFilter,
   gpuInfo,
+  downloadStatus,
   onToggleModel,
   onFilterChange,
   onStyleFilterChange,
@@ -38,6 +41,7 @@ export default function ModelGrid({
   onUnhost,
   onDownload,
   onDownloadAndHost,
+  onCancelDownload,
   onSave,
   onClear,
 }: ModelGridProps) {
@@ -216,6 +220,8 @@ export default function ModelGrid({
           const maxVram = gpuInfo?.gpus?.[0]?.vram_available_gb || gpuInfo?.total_memory_gb || 0;
           const isCompatible = model.vram_required_gb <= maxVram;
           const isHosting = model.hosting || false; // This will be set by the API
+          const isDownloading = downloadStatus?.is_downloading && downloadStatus?.current_model === model.id;
+          const downloadProgress = downloadStatus?.progress || 0;
           
           return (
             <ModelCard
@@ -225,12 +231,15 @@ export default function ModelGrid({
               isSelected={selectedModels.has(model.id)}
               isCompatible={isCompatible}
               isHosting={isHosting}
+              isDownloading={isDownloading}
+              downloadProgress={downloadProgress}
               onToggle={() => onToggleModel(model.id)}
               onUninstall={model.installed ? () => onUninstall(model.id) : undefined}
               onHost={() => onHost(model.id)}
               onUnhost={() => onUnhost(model.id)}
               onDownload={() => onDownload(model.id)}
               onDownloadAndHost={() => onDownloadAndHost(model.id)}
+              onCancelDownload={onCancelDownload}
               index={index}
             />
           );
