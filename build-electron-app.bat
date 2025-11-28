@@ -3,7 +3,55 @@ setlocal enabledelayedexpansion
 
 cd /d "%~dp0"
 
+set "ROOT_DIR=%CD%"
+set "COMPOSE_FILE=%ROOT_DIR%\docker-compose.yml"
+
+if not exist "%COMPOSE_FILE%" (
+    echo ERROR: Could not find docker-compose.yml at "%COMPOSE_FILE%"
+    echo Ensure you are running this script from the comfy-bridge repository root.
+    exit /b 1
+)
+
 echo.
+echo Starting full stack via docker compose...
+echo.
+
+REM Ensure Docker is installed
+where docker >nul 2>&1
+if errorlevel 1 (
+    echo ERROR: Docker is not installed or not in PATH
+    echo Install Docker Desktop from https://www.docker.com/products/docker-desktop/
+    exit /b 1
+)
+
+REM Detect docker compose command (v2 or legacy)
+set "USE_DOCKER_COMPOSE_V2=1"
+docker compose version >nul 2>&1
+if errorlevel 1 (
+    set "USE_DOCKER_COMPOSE_V2=0"
+    docker-compose version >nul 2>&1
+    if errorlevel 1 (
+        echo ERROR: Neither "docker compose" nor "docker-compose" is available.
+        echo Install Docker Desktop or standalone Docker Compose.
+        exit /b 1
+    )
+)
+
+if "%USE_DOCKER_COMPOSE_V2%"=="1" (
+    docker compose -f "%COMPOSE_FILE%" up -d --build
+) else (
+    docker-compose -f "%COMPOSE_FILE%" up -d --build
+)
+
+if errorlevel 1 (
+    echo ERROR: Failed to run docker compose
+    exit /b 1
+)
+
+echo.
+echo Docker compose stack is running.
+echo.
+
 echo Building Electron desktop app...
 echo.
 
