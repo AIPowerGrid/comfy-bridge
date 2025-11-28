@@ -9,22 +9,113 @@ echo "================================================"
 download_models() {
     echo "🔍 Checking configured models..."
     cd /app/comfy-bridge
-    
-    # Check if GRID_MODEL is set and not empty
-    if [ -z "$GRID_MODEL" ] || [ "$GRID_MODEL" = "" ]; then
-        echo "ℹ️  No models configured in GRID_MODEL"
-        echo "   Please visit http://localhost:5000 to select models via the Management UI"
-        return 0
+
+    # Remove legacy Wan 2.1 VAE symlink if it pointed at the 2.2 file so we re-download the real weights
+    WAN21_PATH="/app/ComfyUI/models/vae/wan_2.1_vae.safetensors"
+    if [ -L "$WAN21_PATH" ]; then
+        echo "🧹 Removing legacy wan_2.1_vae.safetensors symlink so the correct 16-channel VAE can be downloaded"
+        rm -f "$WAN21_PATH"
     fi
     
-    echo "📦 Downloading configured models..."
-    # Run the model download script
-    if python3 download_models_from_catalog.py --models $GRID_MODEL --config model_configs.json; then
-        echo "✅ Model download completed successfully"
+    if python3 <<'PY'
+import os
+from download_models_from_catalog import download_models, load_model_configs
+from comfy_bridge.config import Settings
+from comfy_bridge.model_mapper import ModelMapper
+
+def parse_grid_model_env(raw: str) -> list[str]:
+    if not raw:
+        return []
+    if "," in raw:
+        tokens = raw.split(",")
+    else:
+        tokens = raw.split()
+    return [token.strip() for token in tokens if token.strip()]
+
+def build_alias_map():
+    # Extra aliases for catalog IDs that differ from workflow filenames
+    return {
+        "chroma_final": "Chroma",
+        "flux1.dev": "FLUX.1-dev",
+        "flux1_dev": "FLUX.1-dev",
+        "flux1_krea_dev": "flux.1-krea-dev",
+        "flux1-krea-dev_fp8_scaled": "flux.1-krea-dev",
+        "wan2_2_t2v_14b": "wan2.2-t2v-a14b",
+        "wan2_2_t2v_14b_hq": "wan2.2-t2v-a14b-hq",
+        "wan2_2_ti2v_5b": "wan2.2_ti2v_5B",
+    }
+
+grid_env_models = parse_grid_model_env(os.environ.get("GRID_MODEL", ""))
+workflow_models = Settings.GRID_MODELS
+requested_models = grid_env_models or workflow_models
+
+if not requested_models:
+    print("ℹ️  No models configured in GRID_MODEL or WORKFLOW_FILE")
+    print("   Please visit http://localhost:5000 to select models via the Management UI")
+    raise SystemExit(0)
+
+config_path = os.environ.get("MODEL_CONFIG_PATH", "/app/comfy-bridge/model_configs.json")
+catalog = load_model_configs(config_path)
+catalog_keys = set(catalog.keys())
+catalog_lower = {k.lower(): k for k in catalog_keys}
+alias_map = build_alias_map()
+
+def resolve_model_id(name: str) -> str:
+    if name in catalog_keys:
+        return name
+    lower = catalog_lower.get(name.lower())
+    if lower:
+        return lower
+    mapped = ModelMapper.DEFAULT_WORKFLOW_MAP.get(name)
+    if mapped:
+        if mapped in catalog_keys:
+            return mapped
+        lower = catalog_lower.get(mapped.lower())
+        if lower:
+            return lower
+    special = alias_map.get(name) or alias_map.get(mapped or "")
+    if special:
+        if special in catalog_keys:
+            return special
+        lower = catalog_lower.get(special.lower())
+        if lower:
+            return lower
+    return name
+
+resolved = []
+seen = set()
+for model in requested_models:
+    resolved_id = resolve_model_id(model)
+    if resolved_id not in catalog_keys:
+        print(f"[WARN] Model '{model}' not found in catalog; skipping.")
+        continue
+    if resolved_id in seen:
+        continue
+    seen.add(resolved_id)
+    resolved.append(resolved_id)
+
+if not resolved:
+    print("ℹ️  No resolvable models found after mapping. Configure models via the Management UI.")
+    raise SystemExit(0)
+
+print(f"📦 Downloading configured models: {', '.join(resolved)}")
+success = download_models(
+    resolved,
+    os.environ.get("MODELS_PATH", "/app/ComfyUI/models"),
+    os.environ.get("STABLE_DIFFUSION_CATALOG", "/app/grid-image-model-reference/stable_diffusion.json"),
+    config_path,
+)
+
+if success:
+    print("✅ Model download completed successfully")
+else:
+    raise SystemExit(1)
+PY
+    then
+        return 0
     else
         echo "⚠️  Model download had issues, but continuing..."
         echo "   You can manage models via the UI at http://localhost:5000"
-        # Don't exit - allow container to continue
         return 0
     fi
 }
@@ -37,15 +128,16 @@ wait_for_comfyui() {
     
     while [ $attempt -lt $max_attempts ]; do
         if curl -s http://localhost:8188/system_stats > /dev/null 2>&1; then
-            echo "✅ ComfyUI is ready!"
+            attempt=$((attempt + 1))
+            echo "✅ ComfyUI is ready! (checked $attempt/$max_attempts)"
             return 0
         fi
         attempt=$((attempt + 1))
-        echo "  Waiting for ComfyUI... ($attempt/$max_attempts)"
+        echo "  Waiting for ComfyUI... ($attempt/$max_attempts)" >&2
         sleep 2
     done
     
-    echo "❌ ComfyUI failed to start within expected time"
+    echo "❌ ComfyUI failed to start within expected time" >&2
     return 1
 }
 
@@ -53,17 +145,17 @@ wait_for_comfyui() {
 echo "🔧 Using preinstalled PyTorch (no runtime reinstall)"
 python3 -c "import torch; print(f'✅ PyTorch {torch.__version__} with CUDA {torch.version.cuda} ready')" 2>/dev/null || true
 
-# Create VAE symlink for ComfyUI compatibility (wan_2.1_vae.safetensors -> wan2.2_vae.safetensors)
-if [ -f "/app/ComfyUI/models/vae/wan2.2_vae.safetensors" ] && [ ! -f "/app/ComfyUI/models/vae/wan_2.1_vae.safetensors" ]; then
-    echo "🔗 Creating VAE symlink: wan_2.1_vae.safetensors -> wan2.2_vae.safetensors"
-    ln -sf /app/ComfyUI/models/vae/wan2.2_vae.safetensors /app/ComfyUI/models/vae/wan_2.1_vae.safetensors
-fi
-
 # Download required models
 download_models
+echo "🔗 Normalizing Wan asset locations..."
+python3 - <<'PY' || echo "⚠️  Wan asset normalization reported an issue (continuing)"
+from comfy_bridge.wan_assets import ensure_wan_symlinks
+ensure_wan_symlinks()
+PY
 
 # Start catalog sync service in background
 echo "🔄 Starting catalog sync service..."
+/usr/bin/git config --global --add safe.directory /app/grid-image-model-reference >/dev/null 2>&1 || true
 /app/comfy-bridge/start_catalog_sync.sh
 
 # Ensure cache directory exists for downloads API locks

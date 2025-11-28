@@ -2,7 +2,7 @@ import asyncio
 import logging
 import json
 import websockets
-from typing import List, Dict, Any, Optional, Set
+from typing import List, Dict, Any, Optional, Set, Callable
 
 from .api_client import APIClient
 from .workflow import build_workflow
@@ -14,7 +14,6 @@ from .payload_builder import PayloadBuilder
 from .job_poller import JobPoller
 from .r2_uploader import R2Uploader
 from .filesystem_checker import FilesystemChecker
-from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +70,45 @@ class ComfyUIBridge:
             logger.info(f"Building workflow for {model_name}")
             workflow = await self.workflow_builder(job)
             
+            # Validate and fix model filenames before submission
+            logger.info("Starting model filename validation...")
+            validation_failed = False
+            try:
+                from .workflow import validate_and_fix_model_filenames
+                logger.info("Fetching available models from ComfyUI for validation...")
+                available_models = await self.comfy.get_available_models()
+                logger.info(f"Available models fetched: {list(available_models.keys())} loader types")
+                if available_models:
+                    logger.info("Validating and fixing model filenames in workflow...")
+                    workflow = await validate_and_fix_model_filenames(workflow, available_models)
+                    logger.info("Model validation completed")
+                else:
+                    logger.warning("Could not fetch available models - skipping validation")
+            except ImportError as e:
+                logger.error(f"Failed to import validate_and_fix_model_filenames: {e}", exc_info=True)
+                logger.warning("Proceeding with workflow submission despite validation failure")
+            except ValueError as e:
+                # ValueError from validation means incompatible models - fail the job
+                validation_failed = True
+                error_msg = str(e)
+                logger.error(f"Model validation failed: {error_msg}")
+                logger.error(f"Job {job_id} rejected: Required models are not installed or incompatible")
+                # Cancel the job in the API
+                try:
+                    await self.api.cancel_job(job_id)
+                except Exception as cancel_error:
+                    logger.error(f"Failed to cancel job {job_id}: {cancel_error}")
+                # Raise RuntimeError to prevent workflow submission - this will be caught by outer handler
+                raise RuntimeError(f"Job rejected: {error_msg}") from e
+            except Exception as e:
+                logger.error(f"Model validation failed with unexpected error: {e}", exc_info=True)
+                logger.warning("Proceeding with workflow submission despite validation failure")
+            
+            # Safety check: if validation failed, we should not have reached here
+            if validation_failed:
+                logger.error("CRITICAL: Validation failed but execution continued - this should not happen!")
+                raise RuntimeError("Validation failed but execution continued unexpectedly")
+            
             # Submit workflow to ComfyUI
             prompt_id = await self.comfy.submit_workflow(workflow)
             
@@ -106,6 +144,8 @@ class ComfyUIBridge:
             # Submit result
             logger.info(f"Submitting {media_type} result for job {job_id}")
             await self.api.submit_result(payload)
+            if Settings.DEBUG:
+                await self._log_post_submit_status(job_id)
             logger.info(f"Job {job_id} completed successfully (seed: {payload.get('seed')})")
             
             # Remove job from processing set
@@ -279,3 +319,36 @@ class ComfyUIBridge:
         await self.comfy.close()
         if hasattr(self.api, 'client'):
             await self.api.client.aclose()
+
+    async def _log_post_submit_status(self, job_id: str) -> None:
+        """Fetch and log Horde status immediately after submitting a payload."""
+        try:
+            status_payload = await self.api.get_request_status(job_id)
+        except Exception as exc:
+            logger.debug("Post-submit status fetch failed for job %s: %s", job_id, exc)
+            return
+
+        generations = status_payload.get("generations") or []
+        state = (
+            status_payload.get("state")
+            or status_payload.get("status", {}).get("status_str")
+            or status_payload.get("status", {}).get("state")
+        )
+
+        logger.debug(
+            "Post-submit Horde status for job %s: state=%s, kudos=%s, generations=%s",
+            job_id,
+            state,
+            status_payload.get("kudos") or status_payload.get("kudos_consumed"),
+            len(generations),
+        )
+
+        if generations:
+            sample = generations[0]
+            logger.debug(
+                "First generation metadata: media_type=%s form=%s type=%s keys=%s",
+                sample.get("media_type"),
+                sample.get("form"),
+                sample.get("type"),
+                list(sample.keys()),
+            )

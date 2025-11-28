@@ -3,6 +3,9 @@ from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
 
+# Constants
+MIN_VIDEO_SIZE_BYTES = 100 * 1024  # 100KB minimum for valid video file
+
 
 class ResultProcessor:
     def __init__(self, comfy_client):
@@ -32,11 +35,9 @@ class ResultProcessor:
     
     async def _process_video(self, filename: str) -> Optional[tuple[bytes, str, str]]:
         try:
-            video_resp = await self.comfy.get(f"/view?filename={filename}")
-            video_resp.raise_for_status()
-            media_bytes = video_resp.content
+            media_bytes = await self.comfy.get_file(filename)
             
-            if len(media_bytes) >= 100 * 1024:  # At least 100KB
+            if len(media_bytes) >= MIN_VIDEO_SIZE_BYTES:
                 logger.info(f"Found complete video: {filename}")
                 return (media_bytes, "video", filename)
         except Exception as e:
@@ -56,9 +57,7 @@ class ResultProcessor:
             return None  # Skip images for video jobs
         
         try:
-            img_resp = await self.comfy.get(f"/view?filename={filename}")
-            img_resp.raise_for_status()
-            media_bytes = img_resp.content
+            media_bytes = await self.comfy.get_file(filename)
             logger.info(f"Found complete image: {filename}")
             return (media_bytes, "image", filename)
         except Exception as e:

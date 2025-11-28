@@ -1,72 +1,168 @@
 {
   "3": {
     "inputs": {
-      "seed": 898471028164125,
-      "steps": 20,
-      "cfg": 5,
-      "sampler_name": "uni_pc",
-      "scheduler": "simple",
-      "denoise": 1,
-      "model": ["48", 0],
-      "positive": ["6", 0],
-      "negative": ["7", 0],
-      "latent_image": ["55", 0]
+      "model": [
+        "22",
+        0
+      ],
+      "image_embeds": [
+        "55",
+        0
+      ],
+      "text_embeds": [
+        "46",
+        0
+      ],
+      "steps": 40,
+      "cfg": 7.5,
+      "shift": 12,
+      "seed": 987654321,
+      "scheduler": "unipc",
+      "force_offload": true,
+      "riflex_freq_index": 0,
+      "rope_function": "comfy"
     },
-    "class_type": "KSampler",
-    "_meta": { "title": "KSampler" }
+    "class_type": "WanVideoSampler",
+    "_meta": {
+      "title": "WanVideoSampler (HQ)"
+    }
   },
   "6": {
-    "inputs": { "text": "A high quality video", "clip": ["38", 0] },
+    "inputs": {
+      "text": "hyper-detailed cinematic masterpiece, award-winning lighting, volumetric fog, intricate environment, 8k",
+      "clip": [
+        "38",
+        0
+      ]
+    },
     "class_type": "CLIPTextEncode",
-    "_meta": { "title": "CLIP Text Encode (Positive Prompt)" }
+    "_meta": {
+      "title": "CLIP Text Encode (Positive Prompt)"
+    }
   },
   "7": {
     "inputs": {
-      "text": "Bright colors, overexposed, static, blurry details, subtitles, style, work, painting, image, still, overall gray, worst quality, low quality, JPEG compression artifacts, ugly, incomplete, extra fingers, poorly drawn hands, poorly drawn face, deformed, disfigured, misshapen limbs, fused fingers, motionless image, messy background, three legs, crowded background, walking backwards.",
-      "clip": ["38", 0]
+      "text": "low quality, blurry, artifacts, repeating frames, bad anatomy, noisy, flicker",
+      "clip": [
+        "38",
+        0
+      ]
     },
     "class_type": "CLIPTextEncode",
-    "_meta": { "title": "CLIP Text Encode (Negative Prompt)" }
+    "_meta": {
+      "title": "CLIP Text Encode (Negative Prompt)"
+    }
   },
   "8": {
-    "inputs": { "samples": ["3", 0], "vae": ["39", 0] },
-    "class_type": "VAEDecode",
-    "_meta": { "title": "VAE Decode" }
+    "inputs": {
+      "samples": [
+        "3",
+        0
+      ],
+      "vae": [
+        "39",
+        0
+      ],
+      "enable_vae_tiling": true,
+      "tile_x": 448,
+      "tile_y": 448,
+      "tile_stride_x": 224,
+      "tile_stride_y": 224,
+      "normalization": "default"
+    },
+    "class_type": "WanVideoDecode",
+    "_meta": {
+      "title": "WanVideoDecode"
+    }
   },
-  "37": {
-    "inputs": { "unet_name": "wan2.2_ti2v_5B_fp16.safetensors", "weight_dtype": "default" },
-    "class_type": "UNETLoader",
-    "_meta": { "title": "Load Diffusion Model" }
+  "22": {
+    "inputs": {
+      "model": "wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors",
+      "base_precision": "bf16",
+      "load_device": "offload_device",
+      "quantization": "fp8_e4m3fn_scaled",
+      "attention_mode": "sdpa"
+    },
+    "class_type": "WanVideoModelLoader",
+    "_meta": {
+      "title": "WanVideoModelLoader"
+    }
   },
   "38": {
-    "inputs": { "clip_name": "umt5_xxl_fp8_e4m3fn_scaled.safetensors", "type": "wan", "device": "default" },
+    "inputs": {
+      "clip_name": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+      "type": "wan",
+      "device": "default"
+    },
     "class_type": "CLIPLoader",
-    "_meta": { "title": "Load CLIP" }
+    "_meta": {
+      "title": "Load CLIP"
+    }
   },
   "39": {
-    "inputs": { "vae_name": "wan_2.1_vae.safetensors" },
-    "class_type": "VAELoader",
-    "_meta": { "title": "Load VAE" }
+    "inputs": {
+      "model_name": "wan_2.1_vae.safetensors",
+      "precision": "bf16"
+    },
+    "class_type": "WanVideoVAELoader",
+    "_meta": {
+      "title": "Load Wan VAE"
+    }
   },
-  "48": {
-    "inputs": { "shift": 8, "model": ["37", 0] },
-    "class_type": "ModelSamplingSD3",
-    "_meta": { "title": "ModelSamplingSD3" }
+  "46": {
+    "inputs": {
+      "positive": [
+        "6",
+        0
+      ],
+      "negative": [
+        "7",
+        0
+      ]
+    },
+    "class_type": "WanVideoTextEmbedBridge",
+    "_meta": {
+      "title": "WanVideoTextEmbedBridge"
+    }
   },
   "55": {
-    "inputs": { "width": 640, "height": 640, "length": 80, "batch_size": 1, "vae": ["39", 0] },
-    "class_type": "Wan22ImageToVideoLatent",
-    "_meta": { "title": "Wan22ImageToVideoLatent" }
+    "inputs": {
+      "width": 1536,
+      "height": 864,
+      "num_frames": 97
+    },
+    "class_type": "WanVideoEmptyEmbeds",
+    "_meta": {
+      "title": "WanVideoEmptyEmbeds"
+    }
   },
   "57": {
-    "inputs": { "fps": 16, "images": ["8", 0] },
+    "inputs": {
+      "fps": 18,
+      "images": [
+        "8",
+        0
+      ]
+    },
     "class_type": "CreateVideo",
-    "_meta": { "title": "Create Video" }
+    "_meta": {
+      "title": "Create Video"
+    }
   },
   "58": {
-    "inputs": { "filename_prefix": "video/ComfyUI", "format": "auto", "codec": "auto", "video": ["57", 0] },
+    "inputs": {
+      "filename_prefix": "video/ComfyUI",
+      "format": "auto",
+      "codec": "auto",
+      "video": [
+        "57",
+        0
+      ]
+    },
     "class_type": "SaveVideo",
-    "_meta": { "title": "Save Video" }
+    "_meta": {
+      "title": "Save Video"
+    }
   }
 }
 
