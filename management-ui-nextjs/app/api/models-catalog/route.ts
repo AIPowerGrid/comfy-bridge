@@ -130,9 +130,9 @@ function estimateVramRequirement(model: ModelInfo): number {
   
   // More accurate VRAM estimation based on model architecture
   if (baseline.includes('wan')) {
-    if (name.includes('a14b')) return 96; // 14B parameter models need high-end hardware
-    if (name.includes('5b')) return Math.max(baseVram, 24); // 5B parameter models
-    return Math.max(baseVram, 32); // Default Wan models
+    if (name.includes('a14b')) return 32; // 14B parameter models
+    if (name.includes('5b')) return 16; // 5B parameter models
+    return Math.max(baseVram, 24); // Default Wan models
   }
   if (baseline.includes('flux')) {
     return Math.max(baseVram, 16); // Flux models are memory intensive
@@ -179,11 +179,14 @@ async function getHostedModels(): Promise<Set<string>> {
     const envFilePath = process.env.ENV_FILE_PATH || '/app/comfy-bridge/.env';
     const envContent = await fs.readFile(envFilePath, 'utf-8');
     
-    // Check WORKFLOW_FILE for hosted models
+    // Check WORKFLOW_FILE for hosted models and strip .json extension
     const workflowMatch = envContent.match(/^WORKFLOW_FILE=(.*)$/m);
     
     if (workflowMatch && workflowMatch[1]) {
-      const hostedModels = workflowMatch[1].split(',').map(s => s.trim()).filter(Boolean);
+      const hostedModels = workflowMatch[1].split(',').map(s => {
+        const trimmed = s.trim();
+        return trimmed.endsWith('.json') ? trimmed.slice(0, -5) : trimmed;
+      }).filter(Boolean);
       return new Set(hostedModels);
     }
     
@@ -200,11 +203,15 @@ async function checkModelInstalled(modelId: string, files: ModelFile[], modelsPa
       return false; // No files to check
     }
     
+    // Track if we found any files with valid paths
+    let hasValidFiles = false;
+    
     for (const file of files) {
       if (!file.path) {
         continue; // Skip files without paths
       }
       
+      hasValidFiles = true; // Found at least one file with a path
       const fileName = path.basename(file.path);
       
       // Check in all possible directories based on file type
@@ -233,6 +240,12 @@ async function checkModelInstalled(modelId: string, files: ModelFile[], modelsPa
         return false; // If any file is missing, model is not installed
       }
     }
+    
+    // If we had no valid files to check, model is not installed
+    if (!hasValidFiles) {
+      return false;
+    }
+    
     return true; // All files found
   } catch (error) {
     console.error(`Error checking model ${modelId}:`, error);
@@ -291,7 +304,7 @@ export async function GET(request: Request) {
         const enhancedModel: EnhancedModel = {
           id: modelId,
           name: modelId.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-          baseline: modelInfo.type || 'stable_diffusion',
+          baseline: modelInfo.baseline || 'stable_diffusion',
           type: modelInfo.type || 'checkpoints',
           inpainting: false,
           description: modelInfo.description || '',
@@ -302,7 +315,7 @@ export async function GET(request: Request) {
           download_all: false,
           requirements: {},
           config: {
-            files: [{
+            files: modelInfo.files || [{
               path: modelInfo.filename,
               file_type: modelInfo.type || 'checkpoints'
             }],
@@ -341,6 +354,11 @@ export async function GET(request: Request) {
         // Check if model is installed
         const installed = await checkModelInstalled(modelId, enhancedModel.config.files, comfyUIModelsPath);
         enhancedModel.installed = installed;
+        
+        // Log for debugging
+        if (modelId.includes('wan')) {
+          console.log(`Model ${modelId}: installed=${installed}, files=${JSON.stringify(enhancedModel.config.files)}`);
+        }
         
         if (installed) {
           installedCount++;

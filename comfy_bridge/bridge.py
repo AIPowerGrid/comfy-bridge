@@ -1,19 +1,20 @@
 import asyncio
 import logging
-import httpx
 import json
 import websockets
-import time
-import glob
-import os
 from typing import List, Dict, Any, Optional, Set
-from pathlib import Path
 
 from .api_client import APIClient
 from .workflow import build_workflow
-from .utils import encode_media
 from .config import Settings
 from .model_mapper import initialize_model_mapper, get_horde_models
+from .comfyui_client import ComfyUIClient
+from .result_processor import ResultProcessor
+from .payload_builder import PayloadBuilder
+from .job_poller import JobPoller
+from .r2_uploader import R2Uploader
+from .filesystem_checker import FilesystemChecker
+from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -23,169 +24,29 @@ logging.getLogger("httpcore").setLevel(logging.CRITICAL)
 
 
 class ComfyUIBridge:
-    def __init__(self):
-        self.api = APIClient()
-        self.comfy = httpx.AsyncClient(base_url=Settings.COMFYUI_URL, timeout=300)
+    def __init__(
+        self,
+        api_client: Optional[APIClient] = None,
+        comfy_client: Optional[ComfyUIClient] = None,
+        workflow_builder: Optional[Callable] = None
+    ):
+        self.api = api_client or APIClient()
+        self.comfy = comfy_client or ComfyUIClient()
+        self.workflow_builder = workflow_builder or build_workflow
+        
+        # Initialize components
+        self.result_processor = ResultProcessor(self.comfy)
+        self.payload_builder = PayloadBuilder()
+        self.job_poller = JobPoller(self.comfy, self.result_processor)
+        self.r2_uploader = R2Uploader()
+        self.filesystem_checker = FilesystemChecker()
+        
         self.supported_models: List[str] = []
         # Track jobs currently being processed to prevent duplicates
         self.processing_jobs: Set[str] = set()
-        # Cache for frequently accessed data
-        self._workflow_cache: Dict[str, Any] = {}
-        self._model_cache: Dict[str, bool] = {}
     
-    def _reset_job_flags(self) -> None:
-        """Reset job-specific flags for a new job."""
-        for attr in ['_first_history_check', '_filesystem_checked', '_debug_logged']:
-            if hasattr(self, attr):
-                delattr(self, attr)
-    
-    async def _process_job_polling(self, prompt_id: str, job_id: str, model_name: str) -> tuple[bytes, str, str]:
-        """Optimized job polling with fallback mechanisms."""
-        start_time = time.time()
-        max_wait_time = 600  # 10 minutes timeout
-        
-        while True:
-            elapsed = time.time() - start_time
-            if elapsed > max_wait_time:
-                raise Exception(f"Job timed out after {max_wait_time}s")
-            
-            # Get job status
-            hist = await self.comfy.get(f"/history/{prompt_id}")
-            hist.raise_for_status()
-            data = hist.json().get(prompt_id, {})
-            
-            # Show progress every 30 seconds
-            if int(elapsed) % 30 == 0 and int(elapsed) > 0:
-                logger.info(f"Processing... ({elapsed:.0f}s)")
-            
-            # Check filesystem fallback after 5 minutes
-            if elapsed > 300 and not hasattr(self, '_filesystem_checked'):
-                self._filesystem_checked = True
-                result = await self._check_filesystem_fallback(job_id)
-                if result:
-                    return result
-            
-            # Check workflow completion
-            status = data.get("status", {})
-            status_completed = status.get("completed", False)
-            outputs = data.get("outputs", {})
-            
-            # Debug logging once after 60 seconds
-            if elapsed > 60 and not hasattr(self, '_debug_logged'):
-                self._debug_logged = True
-                logger.debug(f"Status: {status}, Outputs: {list(outputs.keys()) if outputs else 'None'}")
-            
-            # Check for errors
-            if status_completed and status.get("status_str") == "error":
-                error_msg = status.get("exception_message", "Unknown execution error")
-                raise Exception(f"ComfyUI workflow failed: {error_msg}")
-            
-            if status_completed and not outputs:
-                raise Exception("Workflow completed without outputs")
-            
-            # Process completed outputs
-            if outputs and status_completed:
-                result = await self._process_completed_outputs(outputs, model_name)
-                if result:
-                    return result
-            
-            # Adaptive polling interval
-            await asyncio.sleep(0.5 if elapsed > 200 else 1.0)
-    
-    async def _check_filesystem_fallback(self, job_id: str) -> Optional[tuple[bytes, str, str]]:
-        """Check filesystem for completed files as fallback."""
-        logger.info(f"Checking filesystem for complete files for job {job_id}")
-        expected_prefix = f"horde_{job_id}"
-        
-        search_patterns = [
-            f"{Settings.COMFYUI_OUTPUT_DIR}/{expected_prefix}*.mp4",
-            f"{Settings.COMFYUI_OUTPUT_DIR}/*{job_id}*.mp4",
-        ]
-        
-        video_files = []
-        for pattern in search_patterns:
-            files = glob.glob(pattern, recursive=True)
-            for file_path in files:
-                if Path(file_path).suffix.lower() in ['.mp4', '.webm', '.avi', '.mov', '.mkv']:
-                    try:
-                        file_size = os.path.getsize(file_path)
-                        video_files.append((file_path, Path(file_path).name, file_size))
-                    except OSError:
-                        continue
-        
-        if video_files:
-            # Sort by file size (largest first)
-            video_files.sort(key=lambda x: x[2], reverse=True)
-            video_path, filename, file_size = video_files[0]
-            
-            with open(video_path, 'rb') as f:
-                media_bytes = f.read()
-            
-            # Validate file size
-            if len(media_bytes) < 100 * 1024:  # Less than 100KB
-                return None
-            
-            logger.info(f"Found complete video: {len(media_bytes)} bytes")
-            
-            # Wait for file to be completely written
-            await asyncio.sleep(2)
-            with open(video_path, 'rb') as f:
-                new_media_bytes = f.read()
-            
-            return (new_media_bytes, "video", filename)
-        
-        return None
-    
-    async def _process_completed_outputs(self, outputs: Dict[str, Any], model_name: str) -> Optional[tuple[bytes, str, str]]:
-        """Process completed workflow outputs."""
-        for node_id, node_data in outputs.items():
-            # Handle videos
-            videos = node_data.get("videos", [])
-            if videos:
-                filename = videos[0]["filename"]
-                video_resp = await self.comfy.get(f"/view?filename={filename}")
-                video_resp.raise_for_status()
-                media_bytes = video_resp.content
-                
-                if len(media_bytes) >= 100 * 1024:  # At least 100KB
-                    logger.info(f"Found complete video: {filename}")
-                    return (media_bytes, "video", filename)
-            
-            # Handle images (check if they're actually videos)
-            imgs = node_data.get("images", [])
-            if imgs:
-                filename = imgs[0]["filename"]
-                
-                if filename.lower().endswith(('.mp4', '.webm', '.avi', '.mov', '.mkv')):
-                    # Video file in images array
-                    try:
-                        video_resp = await self.comfy.get(f"/view?filename={filename}")
-                        video_resp.raise_for_status()
-                        media_bytes = video_resp.content
-                        
-                        if len(media_bytes) >= 100 * 1024:
-                            logger.info(f"Found complete video: {filename}")
-                            return (media_bytes, "video", filename)
-                    except Exception as e:
-                        logger.error(f"Failed to fetch video file: {e}")
-                        continue
-                else:
-                    # Actual image
-                    if model_name and 'wan2' in model_name.lower():
-                        continue  # Skip images for video jobs
-                    
-                    img_resp = await self.comfy.get(f"/view?filename={filename}")
-                    img_resp.raise_for_status()
-                    media_bytes = img_resp.content
-                    logger.info(f"Found complete image: {filename}")
-                    return (media_bytes, "image", filename)
-        
-        return None
-
     async def process_once(self) -> None:
         """Process a single job from the queue."""
-        # Reset flags for new job
-        self._reset_job_flags()
         
         job = await self.api.pop_job(self.supported_models)
         
@@ -206,122 +67,34 @@ class ComfyUIBridge:
         logger.info(f"Processing job {job_id} for model {model_name}")
         
         try:
-            # Use cached workflow if available
-            workflow_key = f"{model_name}_{job.get('params', {}).get('width', 512)}_{job.get('params', {}).get('height', 512)}"
-            if workflow_key in self._workflow_cache:
-                wf = self._workflow_cache[workflow_key]
-            else:
-                wf = await build_workflow(job)
-                self._workflow_cache[workflow_key] = wf
-                
-            resp = await self.comfy.post("/prompt", json={"prompt": wf})
-            resp.raise_for_status()
+            # Build workflow
+            logger.info(f"Building workflow for {model_name}")
+            workflow = await self.workflow_builder(job)
             
-            prompt_id = resp.json().get("prompt_id")
-            if not prompt_id:
-                logger.error(f"No prompt_id for job {job_id}")
-                return
-
+            # Submit workflow to ComfyUI
+            prompt_id = await self.comfy.submit_workflow(workflow)
+            
             # Start WebSocket listener for ComfyUI logs
             websocket_task = asyncio.create_task(self.listen_comfyui_logs(prompt_id))
             
-            # Process the job with optimized polling
-            media_bytes, media_type, filename = await self._process_job_polling(
-                prompt_id, job_id, model_name
-            )
-
-            # Ensure we're using the correct job ID from the job metadata
-            job_id = job.get("id")
-            r2_upload_url = job.get("r2_upload")
+            # Poll for completion with filesystem fallback
+            async def filesystem_checker(jid: str):
+                return await self.filesystem_checker.check_for_completed_file(jid)
             
-            # For videos, use the R2 upload functionality if available
+            media_bytes, media_type, filename = await self.job_poller.poll_until_complete(
+                prompt_id, job_id, model_name, filesystem_checker
+            )
+            
+            # Handle R2 upload for videos if available
+            r2_upload_url = job.get("r2_upload")
             if media_type == "video" and r2_upload_url:
-                print(f"[UPLOAD] 📤 Uploading video to R2...")
-                try:
-                    # Upload the video directly to R2 storage with timeout
-                    async with httpx.AsyncClient(timeout=30) as client:
-                        headers = {"Content-Type": "video/mp4"}
-                        r2_response = await client.put(r2_upload_url, content=media_bytes, headers=headers)
-                        r2_response.raise_for_status()
-                        print(f"[UPLOAD] ✅ R2 upload successful")
-                    
-                    # Create payload for video
-                    r2_uploads = job.get("r2_uploads", [])
-                    b64 = encode_media(media_bytes, media_type)
-                    
-                    # Extract original filename and ensure it has the correct extension
-                    original_filename = filename if 'filename' in locals() else f"video_{job_id}.mp4"
-                    if not original_filename.lower().endswith('.mp4'):
-                        original_filename += ".mp4"
-                    
-                    # Create a payload that matches the image format but with video-specific fields
-                    payload = {
-                        "id": job_id,
-                        "generation": b64,
-                        "state": "ok",
-                        "seed": int(job.get("payload", {}).get("seed", 0)),
-                        "filename": original_filename,
-                        "form": "video",
-                        "type": "video",
-                        "media_type": "video"
-                    }
-                    
-                    # Include the original r2_uploads array if available
-                    if r2_uploads:
-                        payload["r2_uploads"] = r2_uploads
-                
-                except Exception as e:
-                    # If R2 upload fails, fallback to direct encoding
-                    print(f"[UPLOAD] ⚠️ R2 upload failed, using fallback: {e}")
-                    r2_uploads = job.get("r2_uploads", [])
-                    
-                    # Use the same direct encoding approach for fallback
-                    original_filename = filename if 'filename' in locals() else f"video_{job_id}.mp4"
-                    if not original_filename.lower().endswith('.mp4'):
-                        original_filename += ".mp4"
-                    
-                    # Encode the video directly
-                    b64 = encode_media(media_bytes, media_type)
-                    
-                    # Create the same payload structure as the main path
-                    payload = {
-                        "id": job_id,
-                        "generation": b64,
-                        "state": "ok",
-                        "seed": int(job.get("payload", {}).get("seed", 0)),
-                        "filename": original_filename,
-                        "form": "video",
-                        "type": "video",
-                        "media_type": "video"
-                    }
-                    
-                    # If we have r2_uploads info, pass it back to the API
-                    if r2_uploads:
-                        payload["r2_uploads"] = r2_uploads
-            else:
-                # For images or when no R2 URL is available, use the standard approach
-                b64 = encode_media(media_bytes, media_type)
-                
-                # Create the standard payload structure
-                payload = {
-                    "id": job_id,
-                    "generation": b64,
-                    "state": "ok",
-                    "seed": int(job.get("payload", {}).get("seed", 0)),
-                    "media_type": media_type
-                }
-                
-                # Add video-specific parameters if needed
-                if media_type == "video":
-                    # Extract original filename and ensure it has the correct extension
-                    original_filename = filename if 'filename' in locals() else f"video_{job_id}.mp4"
-                    if not original_filename.lower().endswith(('.mp4', '.webm', '.avi', '.mov')):
-                        original_filename += ".mp4"
-                        
-                    # Add video-specific fields
-                    payload["filename"] = original_filename
-                    payload["form"] = "video"
-                    payload["type"] = "video"
+                logger.info("Uploading video to R2...")
+                await self.r2_uploader.upload_video(r2_upload_url, media_bytes)
+            
+            # Build and submit payload
+            payload = self.payload_builder.build_payload(
+                job, media_bytes, media_type, filename
+            )
             
             # Clean up WebSocket task
             websocket_task.cancel()
@@ -331,9 +104,9 @@ class ComfyUIBridge:
                 pass
             
             # Submit result
-            print(f"[SUBMIT] 📋 Submitting {media_type} result for job {job_id}")
+            logger.info(f"Submitting {media_type} result for job {job_id}")
             await self.api.submit_result(payload)
-            print(f"[COMPLETE] ✅ Job {job_id} completed successfully (seed: {payload.get('seed')})")
+            logger.info(f"Job {job_id} completed successfully (seed: {payload.get('seed')})")
             
             # Remove job from processing set
             self.processing_jobs.discard(job_id)
@@ -346,30 +119,34 @@ class ComfyUIBridge:
             try:
                 await self.api.cancel_job(job_id)
             except Exception as cancel_error:
-                print(f"[ERROR] ❌ Failed to cancel job {job_id}: {cancel_error}")
+                logger.error(f"Failed to cancel job {job_id}: {cancel_error}")
             
             # Re-raise the exception so it can be handled by the caller
             raise
 
     async def run(self):
-        print(f"[STARTUP] 🚀 ComfyUI Bridge starting...")
-        print(f"[STARTUP] 🔗 ComfyUI: {Settings.COMFYUI_URL}")
-        print(f"[STARTUP] 🔗 AI Power Grid: {Settings.GRID_API_URL}")
-        print(f"[STARTUP] 👤 Worker: {Settings.GRID_WORKER_NAME}")
+        logger.info("ComfyUI Bridge starting...")
+        logger.info(f"ComfyUI: {Settings.COMFYUI_URL}")
+        logger.info(f"AI Power Grid: {Settings.GRID_API_URL}")
+        logger.info(f"Worker: {Settings.GRID_WORKER_NAME}")
+        if Settings.DEBUG:
+            logger.info("DEBUG MODE ENABLED - Detailed logging active")
         
         await initialize_model_mapper(Settings.COMFYUI_URL)
 
         # Prioritize WORKFLOW_FILE when set, otherwise use auto-detected models
         derived_models = get_horde_models()
         if Settings.GRID_MODELS:
-            # WORKFLOW_FILE is explicitly set - use only those models
-            self.supported_models = Settings.GRID_MODELS
-            print(f"[STARTUP] 📋 Using models from WORKFLOW_FILE: {Settings.GRID_MODELS}")
+            # WORKFLOW_FILE is explicitly set - use the resolved models from the mapper
+            self.supported_models = derived_models
+            logger.info(f"Using models from WORKFLOW_FILE: {Settings.GRID_MODELS}")
+            if not self.supported_models:
+                logger.warning("No models resolved from WORKFLOW_FILE!")
         elif Settings.WORKFLOW_FILE:
             # WORKFLOW_FILE is set - use auto-detected models
             self.supported_models = derived_models
             if not self.supported_models:
-                print("[ERROR] ⚠️ No models resolved from WORKFLOW_FILE!")
+                logger.warning("No models resolved from WORKFLOW_FILE!")
         else:
             # Fallback to auto-detected models
             if derived_models:
@@ -377,29 +154,26 @@ class ComfyUIBridge:
             else:
                 self.supported_models = []
                 
-        print(f"[STARTUP] 📢 Advertising {len(self.supported_models)} models:")
+        logger.info(f"Advertising {len(self.supported_models)} models:")
         for i, model in enumerate(self.supported_models, 1):
-            print(f"[STARTUP]   {i}. {model}")
+            logger.info(f"  {i}. {model}")
             
         if not self.supported_models:
-            print("[ERROR] ❌ CRITICAL: No models configured! The bridge will not receive any jobs.")
-            print("[ERROR] To fix this, either:")
-            print("[ERROR]   1. Set WORKFLOW_FILE in your .env file, or") 
-            print("[ERROR]   2. Ensure DEFAULT_WORKFLOW_MAP contains models")
+            logger.error("CRITICAL: No models configured! The bridge will not receive any jobs.")
+            logger.error("To fix this, either:")
+            logger.error("  1. Set WORKFLOW_FILE in your .env file, or") 
+            logger.error("  2. Ensure DEFAULT_WORKFLOW_MAP contains models")
 
         job_count = 0
         while True:
             job_count += 1
             # Only show polling message every 10 attempts to reduce noise
             if job_count % 10 == 1:
-                print(f"[HEALTH] 💓 Service running (poll #{job_count})")
+                logger.debug(f"Service running (poll #{job_count})")
             try:
                 await self.process_once()
             except Exception as e:
-                logger.error(f"Error processing job: {e}")
-                print(f"[ERROR] ❌ Error processing job: {e}")
-                import traceback
-                print(f"[DEBUG] Full traceback: {traceback.format_exc()}")
+                logger.error(f"Error processing job: {e}", exc_info=Settings.DEBUG)
                 
                 # Clean up any jobs that might be stuck in processing
                 # Note: We can't easily determine which job failed here, so we'll clean up on next cycle
@@ -412,47 +186,96 @@ class ComfyUIBridge:
             ws_url = Settings.COMFYUI_URL.replace("http://", "ws://").replace("https://", "wss://")
             ws_url = f"{ws_url}/ws?clientId={prompt_id}"
             
+            logger.debug(f"Connecting to ComfyUI WebSocket: {ws_url}")
+            
             async with websockets.connect(ws_url) as websocket:
+                logger.debug("WebSocket connected, waiting for messages...")
+                message_count = 0
                 async for message in websocket:
+                    message_count += 1
                     try:
                         data = json.loads(message)
+                        msg_type = data.get("type")
                         
                         # Handle execution start
-                        if data.get("type") == "execution_start":
-                            print(f"[COMFYUI] got prompt")
+                        if msg_type == "execution_start":
+                            logger.info(f"Execution started (prompt: {prompt_id})")
+                        
+                        # Handle execution queued
+                        elif msg_type == "status":
+                            status_data = data.get("data", {})
+                            queue_remaining = status_data.get("status", {}).get("exec_info", {}).get("queue_remaining", 0)
+                            if queue_remaining > 0:
+                                logger.info(f"Queue status: {queue_remaining} jobs ahead")
                         
                         # Handle progress updates
-                        elif data.get("type") == "progress":
+                        elif msg_type == "progress":
                             progress_data = data.get("data", {})
                             current_step = progress_data.get("value", 0)
                             total_steps = progress_data.get("max", 1)
-                            node_name = progress_data.get("prompt_id", "")
+                            node = progress_data.get("node", "")
                             
                             if total_steps > 0:
                                 percentage = (current_step / total_steps) * 100
-                                print(f"[COMFYUI] {percentage:.0f}%|{'█' * int(percentage/10):<10}| {current_step}/{total_steps} [{node_name}]")
+                                logger.info(f"Progress: {percentage:.0f}% ({current_step}/{total_steps}) [node:{node}]")
+                        
+                        # Handle node execution
+                        elif msg_type == "executing":
+                            node_id = data.get("data", {}).get("node")
+                            if node_id:
+                                logger.debug(f"Executing node: {node_id}")
+                            else:
+                                logger.info("Workflow execution complete")
                         
                         # Handle execution error
-                        elif data.get("type") == "execution_error":
+                        elif msg_type == "execution_error":
                             error_data = data.get("data", {})
                             error_msg = error_data.get("exception_message", "Unknown error")
-                            print(f"[COMFYUI] ❌ Error: {error_msg}")
+                            node_id = error_data.get("node_id", "unknown")
+                            node_type = error_data.get("node_type", "unknown")
+                            logger.error(f"Error in node {node_id} ({node_type}): {error_msg}")
+                            if Settings.DEBUG:
+                                logger.debug(f"Full error data: {error_data}")
                         
-                        # Handle execution complete
-                        elif data.get("type") == "execution_cached":
-                            print(f"[COMFYUI] ✅ Execution completed")
+                        # Handle execution interrupted
+                        elif msg_type == "execution_interrupted":
+                            logger.warning("Execution interrupted")
+                        
+                        # Handle execution cached
+                        elif msg_type == "execution_cached":
+                            cached_nodes = data.get("data", {}).get("nodes", [])
+                            if Settings.DEBUG:
+                                logger.debug(f"Cached nodes: {cached_nodes}")
+                        
+                        # Handle progress_state (detailed node progress)
+                        elif msg_type == "progress_state" and Settings.DEBUG:
+                            progress_data = data.get("data", {})
+                            nodes = progress_data.get("nodes", {})
+                            running = [nid for nid, ndata in nodes.items() if ndata.get("state") == "running"]
+                            
+                            if running:
+                                for node_id in running:
+                                    node_data = nodes[node_id]
+                                    val = node_data.get("value", 0)
+                                    max_val = node_data.get("max", 1)
+                                    if max_val > 1:
+                                        pct = (val / max_val) * 100
+                                        logger.debug(f"Node {node_id}: {pct:.0f}% ({val}/{max_val})")
                         
                     except json.JSONDecodeError:
-                        # Skip non-JSON messages
+                        logger.debug(f"Non-JSON WebSocket message: {message[:100]}")
                         continue
                     except Exception as e:
-                        # Continue on any other errors
+                        logger.debug(f"Error processing WS message: {e}")
                         continue
                         
         except Exception as e:
             # If WebSocket fails, continue without real-time logs
-            print(f"[COMFYUI] ⚠️ WebSocket connection failed, using fallback logging")
+            logger.warning(f"WebSocket connection failed: {e}")
+            if Settings.DEBUG:
+                logger.debug("WebSocket error", exc_info=True)
 
     async def cleanup(self):
-        await self.comfy.aclose()
-        await self.api.client.aclose()
+        await self.comfy.close()
+        if hasattr(self.api, 'client'):
+            await self.api.client.aclose()

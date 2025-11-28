@@ -25,14 +25,17 @@ WORKDIR /app
 
 ENV NODE_ENV production
 
-# Install curl for healthcheck, python3 and requests for download scripts, and git for cloning repos
-RUN apk add --no-cache curl python3 py3-requests git
+# Install curl for healthcheck, python3 and requests for download scripts, git for cloning repos, and docker for container management
+RUN apk add --no-cache curl python3 py3-requests git docker-cli docker-cli-compose
 
 # Clone grid-image-model-reference repository
 RUN git clone https://github.com/aipowergrid/grid-image-model-reference.git /app/grid-image-model-reference
 
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
+
+# Add nextjs user to docker group (if it exists) to allow docker socket access
+RUN addgroup nextjs docker 2>/dev/null || true
 
 # Copy built assets
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
@@ -43,7 +46,9 @@ COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 # Create cache directory with correct permissions
 RUN mkdir -p /app/.next/cache && chown -R nextjs:nodejs /app/.next/cache
 
-USER nextjs
+# Note: Running as root to allow Docker socket access for container restarts
+# This is safe for a local management tool
+# USER nextjs
 
 EXPOSE 5000
 

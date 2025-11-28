@@ -12,7 +12,7 @@
   },
   "72": {
     "inputs": {
-      "text": "worst quality, low quality, blurry, static, motionless, deformed, disfigured, ugly",
+      "text": "Bright colors, overexposed, static, blurry details, subtitles, style, work, painting, image, still, overall gray, worst quality, low quality, JPEG compression artifacts, ugly, incomplete, extra fingers, poorly drawn hands, poorly drawn face, deformed, disfigured, misshapen limbs, fused fingers, motionless image, messy background, three legs, crowded background, walking backwards",
       "clip": [
         "71",
         0
@@ -230,7 +230,7 @@
   },
   "89": {
     "inputs": {
-      "text": "A high quality video",
+      "text": "Beautiful young European woman with honey blonde hair gracefully turning her head back over shoulder, gentle smile, bright eyes looking at camera. Hair flowing in slow motion as she turns. Soft natural lighting, clean background, cinematic slow-motion portrait.",
       "clip": [
         "71",
         0

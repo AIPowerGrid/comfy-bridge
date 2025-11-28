@@ -12,9 +12,14 @@ class Settings:
     COMFYUI_URL = os.getenv("COMFYUI_URL", "http://127.0.0.1:8000")
     GRID_API_URL = os.getenv("GRID_API_URL", "https://api.aipowergrid.io/api")
     NSFW = os.getenv("GRID_NSFW", "false").lower() == "true"
+    DEBUG = os.getenv("DEBUG", "false").lower() == "true"
     THREADS = int(os.getenv("GRID_THREADS", "1"))
     MAX_PIXELS = int(os.getenv("GRID_MAX_PIXELS", "20971520"))
-    WORKFLOW_DIR = os.getenv("WORKFLOW_DIR", os.path.join(os.getcwd(), "workflows"))
+    # Default workflows path relative to this package: /app/comfy-bridge/workflows
+    WORKFLOW_DIR = os.getenv(
+        "WORKFLOW_DIR",
+        os.path.join(os.path.dirname(os.path.dirname(__file__)), "workflows"),
+    )
     WORKFLOW_FILE = os.getenv("WORKFLOW_FILE", None)
     COMFYUI_OUTPUT_DIR = os.getenv("COMFYUI_OUTPUT_DIR", r"C:\dev\ComfyUI\output")
     GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH = os.getenv("GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH")

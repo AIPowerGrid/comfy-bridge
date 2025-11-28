@@ -11,6 +11,9 @@ import os
 import sys
 from pathlib import Path
 import requests
+import threading
+import time
+import signal
 
 app = Flask(__name__)
 
@@ -19,6 +22,66 @@ COMFY_BRIDGE_PATH = os.getenv('COMFY_BRIDGE_PATH', '/app/comfy-bridge')
 MODEL_CONFIGS_PATH = os.path.join(COMFY_BRIDGE_PATH, 'model_configs.json')
 ENV_FILE_PATH = os.path.join(COMFY_BRIDGE_PATH, '.env')
 MODELS_PATH = os.getenv('MODELS_PATH', '/app/ComfyUI/models')
+
+# Global download state tracking
+download_state = {
+    'is_downloading': False,
+    'progress': 0,
+    'current_model': None,
+    'process': None,
+    'start_time': None,
+    'total_size': 0,
+    'downloaded_size': 0,
+    'speed': 0,
+    'eta': None,
+    'session_id': None
+}
+download_lock = threading.Lock()
+
+# Persistent download state file
+DOWNLOAD_STATE_FILE = os.path.join(COMFY_BRIDGE_PATH, '.download_state.json')
+
+def save_download_state():
+    """Save download state to persistent storage"""
+    try:
+        state_to_save = {
+            'is_downloading': download_state['is_downloading'],
+            'progress': download_state['progress'],
+            'current_model': download_state['current_model'],
+            'start_time': download_state['start_time'],
+            'total_size': download_state['total_size'],
+            'downloaded_size': download_state['downloaded_size'],
+            'speed': download_state['speed'],
+            'eta': download_state['eta'],
+            'session_id': download_state['session_id']
+        }
+        with open(DOWNLOAD_STATE_FILE, 'w') as f:
+            json.dump(state_to_save, f)
+    except Exception as e:
+        print(f"Error saving download state: {e}", file=sys.stderr)
+
+def load_download_state():
+    """Load download state from persistent storage"""
+    try:
+        if os.path.exists(DOWNLOAD_STATE_FILE):
+            with open(DOWNLOAD_STATE_FILE, 'r') as f:
+                saved_state = json.load(f)
+                # Only restore if the session is recent (within 1 hour)
+                if saved_state.get('start_time') and (time.time() - saved_state['start_time']) < 3600:
+                    download_state.update(saved_state)
+                    return True
+        return False
+    except Exception as e:
+        print(f"Error loading download state: {e}", file=sys.stderr)
+        return False
+
+def clear_download_state():
+    """Clear persistent download state"""
+    try:
+        if os.path.exists(DOWNLOAD_STATE_FILE):
+            os.remove(DOWNLOAD_STATE_FILE)
+    except Exception as e:
+        print(f"Error clearing download state: {e}", file=sys.stderr)
 
 def get_gpu_info():
     """Detect GPU information"""
@@ -270,31 +333,135 @@ def api_selected_models():
 @app.route('/api/models/download', methods=['POST'])
 def api_download_models():
     """Trigger model download"""
+    global download_state
+    
+    with download_lock:
+        if download_state['is_downloading']:
+            return jsonify({
+                'success': False,
+                'error': 'Download already in progress'
+            }), 400
+    
     try:
-        # Run download_models.py script
-        result = subprocess.run(
-            ['python3', 'download_models.py'],
-            cwd=COMFY_BRIDGE_PATH,
-            capture_output=True,
-            text=True,
-            timeout=3600  # 1 hour timeout
-        )
+        # Start download in background thread
+        def download_thread():
+            global download_state
+            import uuid
+            
+            with download_lock:
+                download_state['is_downloading'] = True
+                download_state['progress'] = 0
+                download_state['start_time'] = time.time()
+                download_state['current_model'] = None
+                download_state['session_id'] = str(uuid.uuid4())
+                save_download_state()
+            
+            try:
+                # Run download_models.py script
+                process = subprocess.Popen(
+                    ['python3', 'download_models_from_catalog.py', '--models'] + get_selected_models(),
+                    cwd=COMFY_BRIDGE_PATH,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True
+                )
+                
+                with download_lock:
+                    download_state['process'] = process
+                    save_download_state()
+                
+                stdout, stderr = process.communicate()
+                
+                with download_lock:
+                    download_state['is_downloading'] = False
+                    download_state['process'] = None
+                    download_state['progress'] = 100 if process.returncode == 0 else 0
+                    clear_download_state()
+                
+            except Exception as e:
+                with download_lock:
+                    download_state['is_downloading'] = False
+                    download_state['process'] = None
+                    clear_download_state()
+        
+        # Start the download thread
+        thread = threading.Thread(target=download_thread)
+        thread.daemon = True
+        thread.start()
         
         return jsonify({
-            'success': result.returncode == 0,
-            'output': result.stdout,
-            'error': result.stderr
+            'success': True,
+            'message': 'Download started'
         })
-    except subprocess.TimeoutExpired:
-        return jsonify({
-            'success': False,
-            'error': 'Download timeout (1 hour exceeded)'
-        }), 500
+        
     except Exception as e:
+        with download_lock:
+            download_state['is_downloading'] = False
+            clear_download_state()
         return jsonify({
             'success': False,
             'error': str(e)
         }), 500
+
+@app.route('/api/models/download/cancel', methods=['POST'])
+def api_cancel_download():
+    """Cancel ongoing download"""
+    global download_state
+    
+    with download_lock:
+        if not download_state['is_downloading']:
+            return jsonify({
+                'success': False,
+                'error': 'No download in progress'
+            }), 400
+        
+        if download_state['process']:
+            try:
+                # Terminate the download process
+                download_state['process'].terminate()
+                time.sleep(2)  # Give it time to terminate gracefully
+                if download_state['process'].poll() is None:
+                    download_state['process'].kill()  # Force kill if needed
+                
+                download_state['is_downloading'] = False
+                download_state['process'] = None
+                download_state['progress'] = 0
+                download_state['current_model'] = None
+                clear_download_state()
+                
+                return jsonify({
+                    'success': True,
+                    'message': 'Download cancelled'
+                })
+            except Exception as e:
+                return jsonify({
+                    'success': False,
+                    'error': f'Failed to cancel download: {str(e)}'
+                }), 500
+        else:
+            download_state['is_downloading'] = False
+            clear_download_state()
+            return jsonify({
+                'success': True,
+                'message': 'Download cancelled'
+            })
+
+@app.route('/api/models/download/status', methods=['GET'])
+def api_download_status():
+    """Get current download status"""
+    global download_state
+    
+    with download_lock:
+        return jsonify({
+            'is_downloading': download_state['is_downloading'],
+            'progress': download_state['progress'],
+            'current_model': download_state['current_model'],
+            'start_time': download_state['start_time'],
+            'total_size': download_state['total_size'],
+            'downloaded_size': download_state['downloaded_size'],
+            'speed': download_state['speed'],
+            'eta': download_state['eta']
+        })
 
 @app.route('/api/disk-space')
 def api_disk_space():
@@ -320,6 +487,9 @@ if __name__ == '__main__':
     # Ensure .env file exists
     if not os.path.exists(ENV_FILE_PATH):
         print(f"Warning: .env file not found at {ENV_FILE_PATH}")
+    
+    # Load any existing download state on startup
+    load_download_state()
     
     # Run Flask app
     app.run(host='0.0.0.0', port=5000, debug=False)

@@ -11,7 +11,9 @@
 [![Python](https://img.shields.io/badge/Python-3.10+-yellow?logo=python)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
----
+- Python 3.9+
+- A running [ComfyUI](https://github.com/comfyanonymous/ComfyUI) instance
+- An API key from [AI Power Grid](https://dashboard.aipowergrid.io)
 
 **🎨 Generate stunning AI art, videos, and images while earning rewards**
 
@@ -159,7 +161,11 @@ GRID_API_URL=https://api.aipowergrid.io
 COMFYUI_HOST=localhost
 COMFYUI_PORT=8188
 MANAGEMENT_UI_PORT=5000
+# Optional - Downloads service override (when UI runs outside docker compose)
+DOWNLOADS_API_BASE=http://localhost:8002
 ```
+
+`DOWNLOADS_API_BASE` defaults to `http://comfy-bridge:8002`, which works automatically inside Docker Compose. Set it to `http://localhost:8002` (or the remote bridge URL) when you run the management UI outside the compose network so downloads and cancellations can reach the Python service.
 
 ### GPU Selection 🎮
 To use a specific GPU:
@@ -196,8 +202,8 @@ services:
 | **SD 1.5** | 6GB | Realistic Vision, Deliberate | General image generation |
 | **SDXL** | 8GB | SDXL 1.0, Juggernaut XL | High-resolution images |
 | **Flux** | 12GB | Flux.1-Schnell, Flux.1-Krea | Advanced image generation |
-| **Video (5B)** | 12GB | wan2.2_ti2v_5B | Text-to-video, Image-to-video |
-| **Video (14B)** | 16GB | wan2.2-t2v-a14b | High-quality video generation |
+| **Video (5B)** | 16GB | wan2.2_ti2v_5B | Text-to-video, Image-to-video |
+| **Video (14B)** | 32GB | wan2.2-t2v-a14b | High-quality video generation |
 
 > **💡 Pro Tip**: Start with SD 1.5 models if you have limited VRAM, then upgrade to SDXL or Flux as you expand your setup!
 
@@ -302,9 +308,14 @@ docker-compose up -d
 
 ---
 
+## 🏗️ Architecture
+
+Components are separated by responsibility for maintainability and testability. See [ARCHITECTURE.md](ARCHITECTURE.md) for details.
+
 ## 📚 Additional Resources
 
 - **📖 Documentation**: [aipowergrid.io](https://aipowergrid.io)
+- **🏗️ Architecture**: See [ARCHITECTURE.md](ARCHITECTURE.md) for design details
 - **💬 Community**: Join our Discord for support and discussions
 - **🐛 Issues**: Report bugs and feature requests on GitHub
 - **📊 Dashboard**: Monitor your earnings at [dashboard.aipowergrid.io](https://dashboard.aipowergrid.io)
@@ -391,4 +402,5 @@ cp .env .env.backup
 
 [![Get Started](https://img.shields.io/badge/Get%20Started-Dashboard%20AIPG-blue?style=for-the-badge)](https://dashboard.aipowergrid.io)
 
-</div>
+- [AI Power Grid](https://aipowergrid.io/) for the API
+- [ComfyUI](https://github.com/comfyanonymous/ComfyUI) for the local image generation backend 

@@ -20,7 +20,7 @@ services:
           - HUGGING_FACE_API_KEY=${HUGGING_FACE_API_KEY:-}
         
         ports:
-          - "5000:5000"  # Management UI
+          - "3000:5000"  # Management UI
         
         volumes:
           # Share .env file for reading/writing model selections
@@ -34,6 +34,12 @@ services:
           - ./get_gpu_info.py:/app/comfy-bridge/get_gpu_info.py:ro
           # Access to models directory to check installed models
           - models:/app/ComfyUI/models
+          # Access to workflows directory
+          - ./workflows:/app/comfy-bridge/workflows
+          # Docker socket for container restarts (Windows: //var/run/docker.sock, Linux: /var/run/docker.sock)
+          - //var/run/docker.sock:/var/run/docker.sock
+          # Share docker-compose.yml for restarts
+          - ./docker-compose.yml:/app/comfy-bridge/docker-compose.yml:ro
         
         restart: unless-stopped
         healthcheck:
@@ -49,7 +55,7 @@ services:
   comfy-bridge:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: dockerfile
     container_name: comfy-bridge
     
     # GPU support for NVIDIA GPUs (including Blackwell Pro)
@@ -61,7 +67,7 @@ services:
       - GRID_WORKER_NAME=${GRID_WORKER_NAME:-ComfyBridge-Worker}
       - COMFYUI_URL=http://localhost:8188
       - GRID_API_URL=${GRID_API_URL:-https://api.aipowergrid.io/api}
-      - GRID_NSFW=${GRID_NSFW:-false}
+      - GRID_NSFW=${GRID_NSFW:-true}
       - GRID_THREADS=${GRID_THREADS:-2}
       - GRID_MAX_PIXELS=${GRID_MAX_PIXELS:-1048576}
       - WORKFLOW_FILE=${WORKFLOW_FILE:-}
@@ -70,6 +76,7 @@ services:
       - COMFYUI_EXTRA_ARGS=${COMFYUI_EXTRA_ARGS:-}
       - HUGGING_FACE_API_KEY=${HUGGING_FACE_API_KEY:-}
       - CIVITAI_API_KEY=${CIVITAI_API_KEY:-}
+      - DEBUG=${DEBUG:-true}
     
     # Ports
     ports:
