@@ -103,15 +103,61 @@ class APIClient:
             
         except httpx.HTTPStatusError as e:
             error_text = e.response.text
+            parsed_error = None
             try:
-                error_json = e.response.json()
-                logger.error(f"Failed to submit result for job {job_id}: {e.response.status_code}")
-                logger.error(f"Error response: {json.dumps(error_json, indent=2)}")
+                parsed_error = e.response.json()
             except (ValueError, json.JSONDecodeError):
-                logger.error(f"Failed to submit result for job {job_id}: {e.response.status_code} - {error_text}")
+                parsed_error = None
+
+            if (
+                e.response.status_code == 400
+                and isinstance(parsed_error, dict)
+                and parsed_error.get("rc") == "AbortedGen"
+            ):
+                logger.error(
+                    "Job %s was aborted upstream due to slow processing (AbortedGen). "
+                    "Dropping the result and continuing. Message: %s",
+                    job_id,
+                    parsed_error.get("message", "Unknown reason"),
+                )
+                self._job_cache.pop(job_id, None)
+                return
+
+            if isinstance(parsed_error, dict):
+                logger.error(
+                    f"Failed to submit result for job {job_id}: {e.response.status_code}"
+                )
+                logger.error(f"Error response: {json.dumps(parsed_error, indent=2)}")
+            else:
+                logger.error(
+                    f"Failed to submit result for job {job_id}: {e.response.status_code} - {error_text}"
+                )
             
             # Log payload info for debugging (without the large base64)
             payload_debug = {k: v for k, v in payload.items() if k != "generation"}
             payload_debug["generation"] = f"<base64 data, length: {len(payload.get('generation', ''))}>"
             logger.debug(f"Payload sent: {json.dumps(payload_debug, indent=2)}")
+            raise
+
+    async def get_request_status(self, job_id: str) -> Dict[str, Any]:
+        """
+        Fetch the current status for a previously-submitted request.  Primarily
+        used for debugging to verify that the Horde accepted our payload.
+        """
+        if not job_id:
+            raise ValueError("job_id is required for request status checks.")
+
+        try:
+            response = await self.client.get(
+                f"/v2/generate/status/{job_id}", headers=self.headers
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as exc:
+            logger.debug(
+                "Status check for job %s failed [%s]: %s",
+                job_id,
+                exc.response.status_code if exc.response else "unknown",
+                exc.response.text if exc.response else exc,
+            )
             raise

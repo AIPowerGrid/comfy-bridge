@@ -1,8 +1,5 @@
 import { NextResponse } from 'next/server';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-
-const execAsync = promisify(exec);
+import { loadModelsData } from '../models/models-service';
 
 // Force dynamic rendering - don't cache this route
 export const dynamic = 'force-dynamic';
@@ -14,21 +11,22 @@ export async function GET() {
     const gpuInfo = await response.json();
     
     // Get installed models to calculate VRAM usage
-    let modelsData = { models: {} };
+    let modelsData: Record<string, any> = {};
     try {
-      const modelsResponse = await fetch('http://localhost:5000/api/models');
-      modelsData = await modelsResponse.json();
+      modelsData = await loadModelsData();
     } catch (error) {
       console.warn('Could not fetch models data:', error);
     }
     
     // Calculate VRAM used by installed models
     let vramUsedGb = 0;
-    if (modelsData.models) {
-      for (const model of Object.values(modelsData.models) as any[]) {
-        if (model.installed) {
-          vramUsedGb += model.vram_required_gb || 0;
-        }
+    const modelEntries = modelsData?.models
+      ? Object.values(modelsData.models)
+      : Object.values(modelsData || {});
+    
+    for (const model of modelEntries as any[]) {
+      if (model && typeof model === 'object' && model.installed) {
+        vramUsedGb += model.vram_required_gb || 0;
       }
     }
     

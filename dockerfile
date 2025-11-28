@@ -57,6 +57,15 @@ RUN --mount=type=cache,target=/root/.cache/git \
         pip3 install --timeout 120 -r requirements.txt; \
     fi
 
+# Install ComfyUI-WanMoeKSampler custom node extension (provides SplitSigmasAtT)
+RUN --mount=type=cache,target=/root/.cache/git \
+    --mount=type=cache,target=/root/.cache/pip \
+    git clone --depth 1 https://github.com/stduhpf/ComfyUI-WanMoeKSampler.git ComfyUI-WanMoeKSampler && \
+    cd ComfyUI-WanMoeKSampler && \
+    if [ -f requirements.txt ]; then \
+        pip3 install --timeout 120 -r requirements.txt; \
+    fi
+
 # Create directories for ComfyUI models and outputs
 WORKDIR /app
 RUN mkdir -p \

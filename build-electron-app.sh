@@ -7,7 +7,45 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
+ROOT_DIR="$(pwd)"
+COMPOSE_FILE="$ROOT_DIR/docker-compose.yml"
+
+if [ ! -f "$COMPOSE_FILE" ]; then
+    echo "ERROR: Could not find docker-compose.yml at $COMPOSE_FILE"
+    echo "Run this script from the comfy-bridge repository root."
+    exit 1
+fi
+
 echo ""
+echo "Starting full stack via docker compose..."
+echo ""
+
+if ! command -v docker &> /dev/null; then
+    echo "ERROR: Docker is not installed or not in PATH."
+    echo "Install Docker Desktop or the Docker Engine CLI."
+    exit 1
+fi
+
+USE_LEGACY_COMPOSE=0
+if docker compose version > /dev/null 2>&1; then
+    :
+elif docker-compose version > /dev/null 2>&1; then
+    USE_LEGACY_COMPOSE=1
+else
+    echo "ERROR: Neither 'docker compose' nor 'docker-compose' commands are available."
+    exit 1
+fi
+
+if [ "$USE_LEGACY_COMPOSE" -eq 0 ]; then
+    docker compose -f "$COMPOSE_FILE" up -d --build
+else
+    docker-compose -f "$COMPOSE_FILE" up -d --build
+fi
+
+echo ""
+echo "Docker compose stack is running."
+echo ""
+
 echo "Building Electron desktop app..."
 echo ""
 

@@ -420,7 +420,7 @@
         "file_type": "text_encoders"
       },
       {
-        "path": "wan2.2_vae.safetensors",
+        "path": "wan_2.1_vae.safetensors",
         "file_type": "vae"
       },
       {
@@ -486,7 +486,7 @@
         "file_type": "text_encoders"
       },
       {
-        "path": "wan2.2_vae.safetensors",
+        "path": "wan_2.1_vae.safetensors",
         "file_type": "vae"
       },
       {
