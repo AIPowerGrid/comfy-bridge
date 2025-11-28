@@ -10,7 +10,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/model_2_1.ckpt?download=true",
-    "filename": "model_2_1.ckpt"
+    "filename": "model_2_1.ckpt",
+    "files": [
+      {
+        "path": "model_2_1.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "stable_diffusion": {
     "type": "checkpoints",
@@ -23,7 +29,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/model_1_5.ckpt?download=true",
-    "filename": "model_1_5.ckpt"
+    "filename": "model_1_5.ckpt",
+    "files": [
+      {
+        "path": "model_1_5.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Realistic Vision": {
     "type": "checkpoints",
@@ -36,7 +48,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/RealisticVision.ckpt?download=true",
-    "filename": "RealisticVision.ckpt"
+    "filename": "RealisticVision.ckpt",
+    "files": [
+      {
+        "path": "RealisticVision.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Epic Diffusion": {
     "type": "checkpoints",
@@ -49,7 +67,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/EpicDiffusion.ckpt?download=true",
-    "filename": "EpicDiffusion.ckpt"
+    "filename": "EpicDiffusion.ckpt",
+    "files": [
+      {
+        "path": "EpicDiffusion.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Deliberate": {
     "type": "checkpoints",
@@ -62,7 +86,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/Deliberate.ckpt?download=true",
-    "filename": "Deliberate.ckpt"
+    "filename": "Deliberate.ckpt",
+    "files": [
+      {
+        "path": "Deliberate.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Unstable Ink Dream": {
     "type": "checkpoints",
@@ -75,7 +105,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/unstableinkdream.ckpt?download=true",
-    "filename": "unstableinkdream.ckpt"
+    "filename": "unstableinkdream.ckpt",
+    "files": [
+      {
+        "path": "unstableinkdream.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Anything v3": {
     "type": "checkpoints",
@@ -88,7 +124,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/AnythingV3.ckpt?download=true",
-    "filename": "AnythingV3.ckpt"
+    "filename": "AnythingV3.ckpt",
+    "files": [
+      {
+        "path": "AnythingV3.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Movie Diffusion": {
     "type": "checkpoints",
@@ -101,7 +143,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/movie-diffusion.ckpt?download=true",
-    "filename": "movie-diffusion.ckpt"
+    "filename": "movie-diffusion.ckpt",
+    "files": [
+      {
+        "path": "movie-diffusion.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "ICBINP - I Can't Believe It's Not Photography": {
     "type": "checkpoints",
@@ -114,7 +162,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/icbinpICantBelieveIts_newYear.safetensors?download=true",
-    "filename": "icbinp.safetensors"
+    "filename": "icbinp.safetensors",
+    "files": [
+      {
+        "path": "icbinp.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "SDXL 1.0": {
     "type": "checkpoints",
@@ -127,7 +181,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/sd_xl_base_1.0.safetensors?download=true",
-    "filename": "sd_xl_base_1.0.safetensors"
+    "filename": "sd_xl_base_1.0.safetensors",
+    "files": [
+      {
+        "path": "sd_xl_base_1.0.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "ICBINP XL": {
     "type": "checkpoints",
@@ -140,7 +200,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/ICBINP_XL_v6.safetensors",
-    "filename": "icbinp_xl.safetensors"
+    "filename": "icbinp_xl.safetensors",
+    "files": [
+      {
+        "path": "icbinp_xl.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Juggernaut XL": {
     "type": "checkpoints",
@@ -153,7 +219,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://civitai.com/api/download/models/348913?format=SafeTensor",
-    "filename": "juggernaut_xl.safetensors"
+    "filename": "juggernaut_xl.safetensors",
+    "files": [
+      {
+        "path": "juggernaut_xl.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Animagine XL": {
     "type": "checkpoints",
@@ -166,7 +238,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/cagliostrolab/animagine-xl-3.0/resolve/main/animagine-xl-3.0.safetensors?download=true",
-    "filename": "animagine_xl.safetensors"
+    "filename": "animagine_xl.safetensors",
+    "files": [
+      {
+        "path": "animagine_xl.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "DreamShaper XL": {
     "type": "checkpoints",
@@ -179,7 +257,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://civitai.com/api/download/models/354657?format=SafeTensor",
-    "filename": "dreamshaper_xl.safetensors"
+    "filename": "dreamshaper_xl.safetensors",
+    "files": [
+      {
+        "path": "dreamshaper_xl.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Stable Cascade 1.0": {
     "type": "checkpoints",
@@ -192,7 +276,17 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/stabilityai/stable-cascade/resolve/main/comfyui_checkpoints/stable_cascade_stage_b.safetensors?download=true",
-    "filename": "stable_cascade_stage_b.safetensors"
+    "filename": "stable_cascade_stage_b.safetensors",
+    "files": [
+      {
+        "path": "stable_cascade_stage_b.safetensors",
+        "file_type": "checkpoints"
+      },
+      {
+        "path": "stable_cascade_stage_c.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Flux.1-Schnell fp8 (Compact)": {
     "type": "checkpoints",
@@ -205,40 +299,70 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/flux1CompactCLIPAnd_Flux1SchnellFp8.safetensors",
-    "filename": "flux1CompactCLIPAnd_Flux1SchnellFp8.safetensors"
+    "filename": "flux1CompactCLIPAnd_Flux1SchnellFp8.safetensors",
+    "files": [
+      {
+        "path": "flux1CompactCLIPAnd_Flux1SchnellFp8.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "FLUX.1-dev": {
     "type": "checkpoints",
-    "description": "FLUX.1-dev is a development version of the FLUX model for high-quality image generation.",
+    "description": "FLUX.1-dev is a development version of the FLUX model for high-quality image generation. NOTE: This model requires HuggingFace authentication. Set HUGGING_FACE_API_KEY environment variable.",
     "size_mb": 0,
     "dependencies": [],
     "style": "generalist",
     "baseline": "flux_1",
     "version": "1.0",
     "nsfw": false,
-    "inpainting": false
+    "inpainting": false,
+    "url": "https://huggingface.co/black-forest-labs/FLUX.1-dev/resolve/main/flux1-dev.safetensors",
+    "filename": "flux1-dev.safetensors",
+    "files": [
+      {
+        "path": "flux1-dev.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "FLUX.1-schnell": {
     "type": "checkpoints",
-    "description": "FLUX.1-schnell is the fast version of the FLUX model for quick image generation.",
+    "description": "FLUX.1-schnell is the fast version of the FLUX model for quick image generation. NOTE: This model requires HuggingFace authentication. Set HUGGING_FACE_API_KEY environment variable.",
     "size_mb": 0,
     "dependencies": [],
     "style": "generalist",
     "baseline": "flux_1",
     "version": "1.0",
     "nsfw": false,
-    "inpainting": false
+    "inpainting": false,
+    "url": "https://huggingface.co/black-forest-labs/FLUX.1-schnell/resolve/main/flux1-schnell.safetensors",
+    "filename": "flux1-schnell.safetensors",
+    "files": [
+      {
+        "path": "flux1-schnell.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "FLUX.1-dev-Kontext-fp8-scaled": {
     "type": "checkpoints",
-    "description": "FLUX.1-dev Kontext FP8 scaled is the optimized fp8 scaled version of the img2img model for FLUX.1-dev that enables precise image editing and transformation.",
+    "description": "FLUX.1-dev Kontext FP8 scaled is the optimized fp8 scaled version of the img2img model for FLUX.1-dev that enables precise image editing and transformation. NOTE: This model requires HuggingFace authentication. Set HUGGING_FACE_API_KEY environment variable.",
     "size_mb": 0,
     "dependencies": [],
     "style": "generalist",
     "baseline": "flux_1",
     "version": "1.0",
     "nsfw": false,
-    "inpainting": true
+    "inpainting": true,
+    "url": "https://huggingface.co/black-forest-labs/FLUX.1-Kontext-dev/resolve/main/flux1-kontext-dev.safetensors?download=true",
+    "filename": "flux1-kontext-dev.safetensors",
+    "files": [
+      {
+        "path": "flux1-kontext-dev.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "flux.1-krea-dev": {
     "type": "checkpoints",
@@ -251,7 +375,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://civitai.com/api/download/models/2071474",
-    "filename": "flux1-krea-dev_fp8_scaled.safetensors"
+    "filename": "flux1-krea-dev_fp8_scaled.safetensors",
+    "files": [
+      {
+        "path": "flux1-krea-dev_fp8_scaled.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Chroma": {
     "type": "checkpoints",
@@ -264,7 +394,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/Clybius/Chroma-fp8-scaled/resolve/main/chroma-unlocked-v39.safetensors",
-    "filename": "chroma-unlocked-v39.safetensors"
+    "filename": "chroma-unlocked-v39.safetensors",
+    "files": [
+      {
+        "path": "chroma-unlocked-v39.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "wan2.2-t2v-a14b": {
     "type": "checkpoints",
@@ -275,7 +411,35 @@
     "baseline": "wan_2_2",
     "version": "2.2-A14B",
     "nsfw": true,
-    "inpainting": false
+    "inpainting": false,
+    "url": "https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+    "filename": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+    "files": [
+      {
+        "path": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+        "file_type": "text_encoders"
+      },
+      {
+        "path": "wan_2.1_vae.safetensors",
+        "file_type": "vae"
+      },
+      {
+        "path": "wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors",
+        "file_type": "diffusion_models"
+      },
+      {
+        "path": "wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors",
+        "file_type": "diffusion_models"
+      },
+      {
+        "path": "wan2.2_t2v_lightx2v_4steps_lora_v1.1_high_noise.safetensors",
+        "file_type": "loras"
+      },
+      {
+        "path": "wan2.2_t2v_lightx2v_4steps_lora_v1.1_low_noise.safetensors",
+        "file_type": "loras"
+      }
+    ]
   },
   "wan2.2_ti2v_5B": {
     "type": "checkpoints",
@@ -288,7 +452,21 @@
     "nsfw": false,
     "inpainting": true,
     "url": "https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/diffusion_models/wan2.2_ti2v_5B_fp16.safetensors",
-    "filename": "wan2.2_ti2v_5B_fp16.safetensors"
+    "filename": "wan2.2_ti2v_5B_fp16.safetensors",
+    "files": [
+      {
+        "path": "wan2.2_ti2v_5B_fp16.safetensors",
+        "file_type": "diffusion_models"
+      },
+      {
+        "path": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+        "file_type": "text_encoders"
+      },
+      {
+        "path": "wan2.2_vae.safetensors",
+        "file_type": "vae"
+      }
+    ]
   },
   "wan2.2-t2v-a14b-hq": {
     "type": "checkpoints",
@@ -299,7 +477,46 @@
     "baseline": "wan_2_2",
     "version": "2.2-A14B-HQ",
     "nsfw": true,
-    "inpainting": false
+    "inpainting": false,
+    "url": "https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+    "filename": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+    "files": [
+      {
+        "path": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+        "file_type": "text_encoders"
+      },
+      {
+        "path": "wan_2.1_vae.safetensors",
+        "file_type": "vae"
+      },
+      {
+        "path": "wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors",
+        "file_type": "diffusion_models"
+      },
+      {
+        "path": "wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors",
+        "file_type": "diffusion_models"
+      }
+    ]
+  },
+  "ltxv": {
+    "type": "checkpoints",
+    "description": "LTX-Video is the first DiT-based video generation model capable of generating high-quality videos in real-time. It produces 30 FPS videos at a 1216\u00d7704 resolution faster than they can be watched. Trained on a large-scale dataset of diverse videos, the model generates high-resolution videos with realistic and varied content. This entry uses the ltxv-13b-0.9.8-dev model for highest quality output. NOTE: This model requires HuggingFace authentication. Set HUGGING_FACE_API_KEY environment variable.",
+    "size_mb": 47683,
+    "dependencies": [],
+    "style": "video",
+    "baseline": "ltx_video",
+    "version": "0.9.8-dev",
+    "nsfw": false,
+    "inpainting": false,
+    "url": "https://huggingface.co/Lightricks/LTX-Video/resolve/main/ltxv-13b-0.9.8-dev.safetensors?download=true",
+    "filename": "ltxv-13b-0.9.8-dev.safetensors",
+    "files": [
+      {
+        "path": "ltxv-13b-0.9.8-dev.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "AIPG_RED": {
     "type": "checkpoints",
@@ -312,7 +529,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/ProfessorFT/AIPG_RED/resolve/main/AIPG%20RED.safetensors?download=true",
-    "filename": "AIPG_RED.safetensors"
+    "filename": "AIPG_RED.safetensors",
+    "files": [
+      {
+        "path": "AIPG_RED.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "waifu_diffusion": {
     "type": "checkpoints",
@@ -325,7 +548,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/waifu-diffusion.ckpt?download=true",
-    "filename": "waifu-diffusion.ckpt"
+    "filename": "waifu-diffusion.ckpt",
+    "files": [
+      {
+        "path": "waifu-diffusion.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Furry Epoch": {
     "type": "checkpoints",
@@ -338,7 +567,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/furry-diffusion.ckpt?download=true",
-    "filename": "furry-diffusion.ckpt"
+    "filename": "furry-diffusion.ckpt",
+    "files": [
+      {
+        "path": "furry-diffusion.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Yiffy": {
     "type": "checkpoints",
@@ -351,7 +586,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/yiffy.ckpt?download=true",
-    "filename": "yiffy.ckpt"
+    "filename": "yiffy.ckpt",
+    "files": [
+      {
+        "path": "yiffy.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Robo-Diffusion": {
     "type": "checkpoints",
@@ -364,7 +605,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/robo_diffusion.ckpt?download=true",
-    "filename": "robo_diffusion.ckpt"
+    "filename": "robo_diffusion.ckpt",
+    "files": [
+      {
+        "path": "robo_diffusion.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Classic Animation Diffusion": {
     "type": "checkpoints",
@@ -377,7 +624,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/classic-anim-diffusion.ckpt?download=true",
-    "filename": "classic-anim-diffusion.ckpt"
+    "filename": "classic-anim-diffusion.ckpt",
+    "files": [
+      {
+        "path": "classic-anim-diffusion.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Comic-Diffusion": {
     "type": "checkpoints",
@@ -390,7 +643,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/comic-diffusion-v2.ckpt?download=true",
-    "filename": "comic-diffusion-v2.ckpt"
+    "filename": "comic-diffusion-v2.ckpt",
+    "files": [
+      {
+        "path": "comic-diffusion-v2.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Microworlds": {
     "type": "checkpoints",
@@ -403,7 +662,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/microworld_PublicPrompts.ckpt?download=true",
-    "filename": "microworld_PublicPrompts.ckpt"
+    "filename": "microworld_PublicPrompts.ckpt",
+    "files": [
+      {
+        "path": "microworld_PublicPrompts.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Zeipher Female Model": {
     "type": "checkpoints",
@@ -416,7 +681,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/f222.ckpt?download=true",
-    "filename": "f222.ckpt"
+    "filename": "f222.ckpt",
+    "files": [
+      {
+        "path": "f222.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Papercut Diffusion": {
     "type": "checkpoints",
@@ -429,7 +700,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/PaperCut_v1.ckpt?download=true",
-    "filename": "PaperCut_v1.ckpt"
+    "filename": "PaperCut_v1.ckpt",
+    "files": [
+      {
+        "path": "PaperCut_v1.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "AIO Pixel Art": {
     "type": "checkpoints",
@@ -442,7 +719,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/AIO-Pixel-Art.ckpt?download=true",
-    "filename": "AIO-Pixel-Art.ckpt"
+    "filename": "AIO-Pixel-Art.ckpt",
+    "files": [
+      {
+        "path": "AIO-Pixel-Art.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "JWST Deep Space Diffusion": {
     "type": "checkpoints",
@@ -455,7 +738,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/JWST-Deep-Space.ckpt?download=true",
-    "filename": "JWST-Deep-Space.ckpt"
+    "filename": "JWST-Deep-Space.ckpt",
+    "files": [
+      {
+        "path": "JWST-Deep-Space.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "App Icon Diffusion": {
     "type": "checkpoints",
@@ -468,7 +757,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/app-icon-diffusion-2k.ckpt?download=true",
-    "filename": "app-icon-diffusion-2k.ckpt"
+    "filename": "app-icon-diffusion-2k.ckpt",
+    "files": [
+      {
+        "path": "app-icon-diffusion-2k.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Mega Merge Diffusion": {
     "type": "checkpoints",
@@ -481,7 +776,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/mega-merge-diffusion-a.ckpt?download=true",
-    "filename": "mega-merge-diffusion-a.ckpt"
+    "filename": "mega-merge-diffusion-a.ckpt",
+    "files": [
+      {
+        "path": "mega-merge-diffusion-a.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Anything Diffusion": {
     "type": "checkpoints",
@@ -494,7 +795,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/Anything-Diffusion.ckpt?download=true",
-    "filename": "Anything-Diffusion.ckpt"
+    "filename": "Anything-Diffusion.ckpt",
+    "files": [
+      {
+        "path": "Anything-Diffusion.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Dungeons and Diffusion": {
     "type": "checkpoints",
@@ -507,7 +814,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/Dungeons-and-Diffusion.ckpt?download=true",
-    "filename": "Dungeons-and-Diffusion.ckpt"
+    "filename": "Dungeons-and-Diffusion.ckpt",
+    "files": [
+      {
+        "path": "Dungeons-and-Diffusion.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Nitro Diffusion": {
     "type": "checkpoints",
@@ -520,7 +833,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/nitroDiffusion.ckpt?download=true",
-    "filename": "nitroDiffusion.ckpt"
+    "filename": "nitroDiffusion.ckpt",
+    "files": [
+      {
+        "path": "nitroDiffusion.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "vectorartz": {
     "type": "checkpoints",
@@ -533,7 +852,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/Vectorartz.ckpt?download=true",
-    "filename": "Vectorartz.ckpt"
+    "filename": "Vectorartz.ckpt",
+    "files": [
+      {
+        "path": "Vectorartz.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Ghibli Diffusion": {
     "type": "checkpoints",
@@ -546,7 +871,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/ghibli-diffusion.ckpt?download=true",
-    "filename": "ghibli-diffusion.ckpt"
+    "filename": "ghibli-diffusion.ckpt",
+    "files": [
+      {
+        "path": "ghibli-diffusion.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Hentai Diffusion": {
     "type": "checkpoints",
@@ -559,7 +890,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/hentai-diffusion.ckpt?download=true",
-    "filename": "hentai-diffusion.ckpt"
+    "filename": "hentai-diffusion.ckpt",
+    "files": [
+      {
+        "path": "hentai-diffusion.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Inkpunk Diffusion": {
     "type": "checkpoints",
@@ -572,7 +909,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/inkpunk-diffusion.ckpt?download=true",
-    "filename": "inkpunk-diffusion.ckpt"
+    "filename": "inkpunk-diffusion.ckpt",
+    "files": [
+      {
+        "path": "inkpunk-diffusion.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Fantasy Card Diffusion": {
     "type": "checkpoints",
@@ -585,7 +928,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/fantasy-card-diffusion.ckpt?download=true",
-    "filename": "fantasy-card-diffusion.ckpt"
+    "filename": "fantasy-card-diffusion.ckpt",
+    "files": [
+      {
+        "path": "fantasy-card-diffusion.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Midjourney PaintArt": {
     "type": "checkpoints",
@@ -598,7 +947,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/mdjrny-pntrt.ckpt?download=true",
-    "filename": "mdjrny-pntrt.ckpt"
+    "filename": "mdjrny-pntrt.ckpt",
+    "files": [
+      {
+        "path": "mdjrny-pntrt.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "RPG": {
     "type": "checkpoints",
@@ -611,7 +966,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://civitai.com/api/download/models/124626?type=Model&format=SafeTensor&size=pruned&fp=fp16",
-    "filename": "rpg_v5.safetensors"
+    "filename": "rpg_v5.safetensors",
+    "files": [
+      {
+        "path": "rpg_v5.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Poison": {
     "type": "checkpoints",
@@ -624,7 +985,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/poison.ckpt?download=true",
-    "filename": "poison.ckpt"
+    "filename": "poison.ckpt",
+    "files": [
+      {
+        "path": "poison.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Eimis Anime Diffusion": {
     "type": "checkpoints",
@@ -637,7 +1004,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/eimis_anime-diffusion.ckpt?download=true",
-    "filename": "eimis_anime-diffusion.ckpt"
+    "filename": "eimis_anime-diffusion.ckpt",
+    "files": [
+      {
+        "path": "eimis_anime-diffusion.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Dreamlike Diffusion": {
     "type": "checkpoints",
@@ -650,7 +1023,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/dreamlike-diffusion.ckpt?download=true",
-    "filename": "dreamlike-diffusion.ckpt"
+    "filename": "dreamlike-diffusion.ckpt",
+    "files": [
+      {
+        "path": "dreamlike-diffusion.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Analog Diffusion": {
     "type": "checkpoints",
@@ -663,7 +1042,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/analog-diffusion.ckpt?download=true",
-    "filename": "analog-diffusion.ckpt"
+    "filename": "analog-diffusion.ckpt",
+    "files": [
+      {
+        "path": "analog-diffusion.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Double Exposure Diffusion": {
     "type": "checkpoints",
@@ -676,7 +1061,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/dublex-diffusion.ckpt?download=true",
-    "filename": "dublex-diffusion.ckpt"
+    "filename": "dublex-diffusion.ckpt",
+    "files": [
+      {
+        "path": "dublex-diffusion.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Seek.art MEGA": {
     "type": "checkpoints",
@@ -689,7 +1080,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/seek-art-mega.ckpt?download=true",
-    "filename": "seek-art-mega.ckpt"
+    "filename": "seek-art-mega.ckpt",
+    "files": [
+      {
+        "path": "seek-art-mega.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "ACertainThing": {
     "type": "checkpoints",
@@ -702,7 +1099,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/ACertainThing.ckpt?download=true",
-    "filename": "ACertainThing.ckpt"
+    "filename": "ACertainThing.ckpt",
+    "files": [
+      {
+        "path": "ACertainThing.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "GTA5 Artwork Diffusion": {
     "type": "checkpoints",
@@ -715,7 +1118,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/GTA5_Artwork_Diffusion.ckpt?download=true",
-    "filename": "GTA5_Artwork_Diffusion.ckpt"
+    "filename": "GTA5_Artwork_Diffusion.ckpt",
+    "files": [
+      {
+        "path": "GTA5_Artwork_Diffusion.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Trinart Characters": {
     "type": "checkpoints",
@@ -728,7 +1137,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/Trinart_Characters.ckpt?download=true",
-    "filename": "Trinart_Characters.ckpt"
+    "filename": "Trinart_Characters.ckpt",
+    "files": [
+      {
+        "path": "Trinart_Characters.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Dreamlike Photoreal": {
     "type": "checkpoints",
@@ -741,7 +1156,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/Dreamlike_Photoreal.ckpt?download=true",
-    "filename": "Dreamlike_Photoreal.ckpt"
+    "filename": "Dreamlike_Photoreal.ckpt",
+    "files": [
+      {
+        "path": "Dreamlike_Photoreal.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "DnD Item": {
     "type": "checkpoints",
@@ -754,7 +1175,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/DnDItem.ckpt?download=true",
-    "filename": "DnDItem.ckpt"
+    "filename": "DnDItem.ckpt",
+    "files": [
+      {
+        "path": "DnDItem.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "ModernArt Diffusion": {
     "type": "checkpoints",
@@ -767,7 +1194,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/ModernArt_Diffusion.ckpt?download=true",
-    "filename": "ModernArt_Diffusion.ckpt"
+    "filename": "ModernArt_Diffusion.ckpt",
+    "files": [
+      {
+        "path": "ModernArt_Diffusion.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "HASDX": {
     "type": "checkpoints",
@@ -780,7 +1213,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/HASDX.ckpt?download=true",
-    "filename": "HASDX.ckpt"
+    "filename": "HASDX.ckpt",
+    "files": [
+      {
+        "path": "HASDX.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Liberty": {
     "type": "checkpoints",
@@ -793,7 +1232,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/liberty.ckpt?download=true",
-    "filename": "liberty.ckpt"
+    "filename": "liberty.ckpt",
+    "files": [
+      {
+        "path": "liberty.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "ProtoGen": {
     "type": "checkpoints",
@@ -806,7 +1251,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/ProtoGen.ckpt?download=true",
-    "filename": "ProtoGen.ckpt"
+    "filename": "ProtoGen.ckpt",
+    "files": [
+      {
+        "path": "ProtoGen.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "3DKX": {
     "type": "checkpoints",
@@ -819,7 +1270,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/3DKX.ckpt?download=true",
-    "filename": "3DKX.ckpt"
+    "filename": "3DKX.ckpt",
+    "files": [
+      {
+        "path": "3DKX.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "DreamLikeSamKuvshinov": {
     "type": "checkpoints",
@@ -832,7 +1289,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/DreamLikeSamKuvshinov.ckpt?download=true",
-    "filename": "DreamLikeSamKuvshinov.ckpt"
+    "filename": "DreamLikeSamKuvshinov.ckpt",
+    "files": [
+      {
+        "path": "DreamLikeSamKuvshinov.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Healy's Anime Blend": {
     "type": "checkpoints",
@@ -845,7 +1308,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/Healys.ckpt?download=true",
-    "filename": "Healys.ckpt"
+    "filename": "Healys.ckpt",
+    "files": [
+      {
+        "path": "Healys.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Sci-Fi Diffusion": {
     "type": "checkpoints",
@@ -858,7 +1327,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/Sci-Fi_Diffusion.ckpt?download=true",
-    "filename": "Sci-Fi_Diffusion.ckpt"
+    "filename": "Sci-Fi_Diffusion.ckpt",
+    "files": [
+      {
+        "path": "Sci-Fi_Diffusion.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "PPP": {
     "type": "checkpoints",
@@ -871,7 +1346,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/PPP.ckpt?download=true",
-    "filename": "PPP.ckpt"
+    "filename": "PPP.ckpt",
+    "files": [
+      {
+        "path": "PPP.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Anygen": {
     "type": "checkpoints",
@@ -884,7 +1365,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/Anygen.ckpt?download=true",
-    "filename": "Anygen.ckpt"
+    "filename": "Anygen.ckpt",
+    "files": [
+      {
+        "path": "Anygen.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "DucHaiten": {
     "type": "checkpoints",
@@ -897,7 +1384,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/DucHaiten.safetensors?download=true",
-    "filename": "DucHaiten.safetensors"
+    "filename": "DucHaiten.safetensors",
+    "files": [
+      {
+        "path": "DucHaiten.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Dreamshaper": {
     "type": "checkpoints",
@@ -910,7 +1403,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/Dreamshaper.safetensors?download=true",
-    "filename": "Dreamshaper.safetensors"
+    "filename": "Dreamshaper.safetensors",
+    "files": [
+      {
+        "path": "Dreamshaper.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Lawlas's yiff mix": {
     "type": "checkpoints",
@@ -923,7 +1422,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/Lawlas-yiffmix.ckpt?download=true",
-    "filename": "Lawlas-yiffmix.ckpt"
+    "filename": "Lawlas-yiffmix.ckpt",
+    "files": [
+      {
+        "path": "Lawlas-yiffmix.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "DGSpitzer Art Diffusion": {
     "type": "checkpoints",
@@ -936,7 +1441,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/DGSpitzer_art_diffusion.ckpt?download=true",
-    "filename": "DGSpitzer_art_diffusion.ckpt"
+    "filename": "DGSpitzer_art_diffusion.ckpt",
+    "files": [
+      {
+        "path": "DGSpitzer_art_diffusion.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "BPModel": {
     "type": "checkpoints",
@@ -949,7 +1460,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/BPModel.ckpt?download=true",
-    "filename": "BPModel.ckpt"
+    "filename": "BPModel.ckpt",
+    "files": [
+      {
+        "path": "BPModel.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Dan Mumford Style": {
     "type": "checkpoints",
@@ -962,7 +1479,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/DanMumford.ckpt?download=true",
-    "filename": "DanMumford.ckpt"
+    "filename": "DanMumford.ckpt",
+    "files": [
+      {
+        "path": "DanMumford.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Edge Of Realism": {
     "type": "checkpoints",
@@ -975,7 +1498,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/edgeOfRealism.safetensors?download=true",
-    "filename": "edgeOfRealism.safetensors"
+    "filename": "edgeOfRealism.safetensors",
+    "files": [
+      {
+        "path": "edgeOfRealism.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "CharHelper": {
     "type": "checkpoints",
@@ -988,7 +1517,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/CharHelper.ckpt?download=true",
-    "filename": "CharHelper.ckpt"
+    "filename": "CharHelper.ckpt",
+    "files": [
+      {
+        "path": "CharHelper.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Pokemon3D": {
     "type": "checkpoints",
@@ -1001,7 +1536,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/Pokemon3D.ckpt?download=true",
-    "filename": "Pokemon3D.ckpt"
+    "filename": "Pokemon3D.ckpt",
+    "files": [
+      {
+        "path": "Pokemon3D.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Counterfeit": {
     "type": "checkpoints",
@@ -1014,7 +1555,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/Counterfeit.safetensors?download=true",
-    "filename": "Counterfeit.safetensors"
+    "filename": "Counterfeit.safetensors",
+    "files": [
+      {
+        "path": "Counterfeit.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Openniji": {
     "type": "checkpoints",
@@ -1027,7 +1574,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/OpenNiji.ckpt?download=true",
-    "filename": "OpenNiji.ckpt"
+    "filename": "OpenNiji.ckpt",
+    "files": [
+      {
+        "path": "OpenNiji.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Pastel Mix": {
     "type": "checkpoints",
@@ -1040,7 +1593,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/PastelMix.ckpt?download=true",
-    "filename": "PastelMix.ckpt"
+    "filename": "PastelMix.ckpt",
+    "files": [
+      {
+        "path": "PastelMix.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Pulp Vector Art": {
     "type": "checkpoints",
@@ -1053,7 +1612,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/pulp_vectorart.ckpt?download=true",
-    "filename": "pulp_vectorart.ckpt"
+    "filename": "pulp_vectorart.ckpt",
+    "files": [
+      {
+        "path": "pulp_vectorart.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Vector Art": {
     "type": "checkpoints",
@@ -1066,7 +1631,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/vector_art.ckpt?download=true",
-    "filename": "vector_art.ckpt"
+    "filename": "vector_art.ckpt",
+    "files": [
+      {
+        "path": "vector_art.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "GorynichMix": {
     "type": "checkpoints",
@@ -1079,7 +1650,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/GorynichMix.ckpt?download=true",
-    "filename": "GorynichMix.ckpt"
+    "filename": "GorynichMix.ckpt",
+    "files": [
+      {
+        "path": "GorynichMix.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Laolei New Berry Protogen Mix": {
     "type": "checkpoints",
@@ -1092,7 +1669,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/LNBPM.ckpt?download=true",
-    "filename": "LNBPM.ckpt"
+    "filename": "LNBPM.ckpt",
+    "files": [
+      {
+        "path": "LNBPM.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "URPM": {
     "type": "checkpoints",
@@ -1105,7 +1688,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/URPM.ckpt?download=true",
-    "filename": "URPM.ckpt"
+    "filename": "URPM.ckpt",
+    "files": [
+      {
+        "path": "URPM.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Cheese Daddys Landscape Mix": {
     "type": "checkpoints",
@@ -1118,7 +1707,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/CDLandscapeMix.ckpt?download=true",
-    "filename": "CDLandscapeMix.ckpt"
+    "filename": "CDLandscapeMix.ckpt",
+    "files": [
+      {
+        "path": "CDLandscapeMix.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Project Unreal Engine 5": {
     "type": "checkpoints",
@@ -1131,7 +1726,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/ProjectUnreal5.ckpt?download=true",
-    "filename": "ProjectUnreal5.ckpt"
+    "filename": "ProjectUnreal5.ckpt",
+    "files": [
+      {
+        "path": "ProjectUnreal5.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "VinteProtogenMix": {
     "type": "checkpoints",
@@ -1144,7 +1745,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/VinteProtogenMix.ckpt?download=true",
-    "filename": "VinteProtogenMix.ckpt"
+    "filename": "VinteProtogenMix.ckpt",
+    "files": [
+      {
+        "path": "VinteProtogenMix.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Woop-Woop Photo": {
     "type": "checkpoints",
@@ -1157,7 +1764,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/WoopWoop-Photo.ckpt?download=true",
-    "filename": "WoopWoop-Photo.ckpt"
+    "filename": "WoopWoop-Photo.ckpt",
+    "files": [
+      {
+        "path": "WoopWoop-Photo.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Abyss OrangeMix": {
     "type": "checkpoints",
@@ -1170,7 +1783,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/AbyssOrangeMix.ckpt?download=true",
-    "filename": "AbyssOrangeMix.ckpt"
+    "filename": "AbyssOrangeMix.ckpt",
+    "files": [
+      {
+        "path": "AbyssOrangeMix.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "CyriousMix": {
     "type": "checkpoints",
@@ -1183,7 +1802,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/CyriousMix.ckpt?download=true",
-    "filename": "CyriousMix.ckpt"
+    "filename": "CyriousMix.ckpt",
+    "files": [
+      {
+        "path": "CyriousMix.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "ChilloutMix": {
     "type": "checkpoints",
@@ -1196,7 +1821,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/ChilloutMix.ckpt?download=true",
-    "filename": "ChilloutMix.ckpt"
+    "filename": "ChilloutMix.ckpt",
+    "files": [
+      {
+        "path": "ChilloutMix.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Microcritters": {
     "type": "checkpoints",
@@ -1209,7 +1840,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/Microcritters.ckpt?download=true",
-    "filename": "Microcritters.ckpt"
+    "filename": "Microcritters.ckpt",
+    "files": [
+      {
+        "path": "Microcritters.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "AbyssOrangeMix-AfterDark": {
     "type": "checkpoints",
@@ -1222,7 +1859,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/AbyssOrangeMix-AfterDark.ckpt?download=true",
-    "filename": "AbyssOrangeMix-AfterDark.ckpt"
+    "filename": "AbyssOrangeMix-AfterDark.ckpt",
+    "files": [
+      {
+        "path": "AbyssOrangeMix-AfterDark.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Grapefruit Hentai": {
     "type": "checkpoints",
@@ -1235,7 +1878,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/Grapefruit.ckpt?download=true",
-    "filename": "Grapefruit.ckpt"
+    "filename": "Grapefruit.ckpt",
+    "files": [
+      {
+        "path": "Grapefruit.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Experience": {
     "type": "checkpoints",
@@ -1248,7 +1897,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/eXp.ckpt?download=true",
-    "filename": "eXp.ckpt"
+    "filename": "eXp.ckpt",
+    "files": [
+      {
+        "path": "eXp.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Kenshi": {
     "type": "checkpoints",
@@ -1261,7 +1916,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/Kenshi.ckpt?download=true",
-    "filename": "Kenshi.ckpt"
+    "filename": "Kenshi.ckpt",
+    "files": [
+      {
+        "path": "Kenshi.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "DucHaiten Classic Anime": {
     "type": "checkpoints",
@@ -1274,7 +1935,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/DucHaiten_classic.ckpt?download=true",
-    "filename": "DucHaiten_classic.ckpt"
+    "filename": "DucHaiten_classic.ckpt",
+    "files": [
+      {
+        "path": "DucHaiten_classic.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Rev Animated": {
     "type": "checkpoints",
@@ -1287,7 +1954,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/Rev-animated.safetensors?download=true",
-    "filename": "Rev-animated.safetensors"
+    "filename": "Rev-animated.safetensors",
+    "files": [
+      {
+        "path": "Rev-animated.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "526Mix-Animated": {
     "type": "checkpoints",
@@ -1300,7 +1973,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/526mixAnimated.safetensors?download=true",
-    "filename": "526mixAnimated.safetensors"
+    "filename": "526mixAnimated.safetensors",
+    "files": [
+      {
+        "path": "526mixAnimated.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Colorful": {
     "type": "checkpoints",
@@ -1313,7 +1992,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/colorful.ckpt?download=true",
-    "filename": "colorful.ckpt"
+    "filename": "colorful.ckpt",
+    "files": [
+      {
+        "path": "colorful.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Anime Pencil Diffusion": {
     "type": "checkpoints",
@@ -1326,7 +2011,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/AnimePencilArt.ckpt?download=true",
-    "filename": "AnimePencilArt.ckpt"
+    "filename": "AnimePencilArt.ckpt",
+    "files": [
+      {
+        "path": "AnimePencilArt.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "UMI Olympus": {
     "type": "checkpoints",
@@ -1339,7 +2030,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/Olympus.ckpt?download=true",
-    "filename": "Olympus.ckpt"
+    "filename": "Olympus.ckpt",
+    "files": [
+      {
+        "path": "Olympus.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "HRL": {
     "type": "checkpoints",
@@ -1352,7 +2049,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/HRL.ckpt?download=true",
-    "filename": "HRL.ckpt"
+    "filename": "HRL.ckpt",
+    "files": [
+      {
+        "path": "HRL.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Uhmami": {
     "type": "checkpoints",
@@ -1365,7 +2068,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/Uhmami.ckpt?download=true",
-    "filename": "Uhmami.ckpt"
+    "filename": "Uhmami.ckpt",
+    "files": [
+      {
+        "path": "Uhmami.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Neurogen": {
     "type": "checkpoints",
@@ -1378,7 +2087,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/neurogen.safetensors?download=true",
-    "filename": "neurogen.safetensors"
+    "filename": "neurogen.safetensors",
+    "files": [
+      {
+        "path": "neurogen.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "NeverEnding Dream": {
     "type": "checkpoints",
@@ -1391,7 +2106,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/neverendingDream.safetensors?download=true",
-    "filename": "neverendingDream.safetensors"
+    "filename": "neverendingDream.safetensors",
+    "files": [
+      {
+        "path": "neverendingDream.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Protogen Anime": {
     "type": "checkpoints",
@@ -1404,7 +2125,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/Protogen_Anime.safetensors?download=true",
-    "filename": "Protogen_Anime.safetensors"
+    "filename": "Protogen_Anime.safetensors",
+    "files": [
+      {
+        "path": "Protogen_Anime.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Graphic-Art": {
     "type": "checkpoints",
@@ -1417,7 +2144,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/graphic-art.ckpt?download=true",
-    "filename": "graphic-art.ckpt"
+    "filename": "graphic-art.ckpt",
+    "files": [
+      {
+        "path": "graphic-art.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Illuminati Diffusion": {
     "type": "checkpoints",
@@ -1430,7 +2163,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/Illuminati.ckpt?download=true",
-    "filename": "Illuminati.ckpt"
+    "filename": "Illuminati.ckpt",
+    "files": [
+      {
+        "path": "Illuminati.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "SD-Silicon": {
     "type": "checkpoints",
@@ -1443,7 +2182,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/SD-Silicon.ckpt?download=true",
-    "filename": "SD-Silicon.ckpt"
+    "filename": "SD-Silicon.ckpt",
+    "files": [
+      {
+        "path": "SD-Silicon.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "RealBiter": {
     "type": "checkpoints",
@@ -1456,7 +2201,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/RealBiter.ckpt?download=true",
-    "filename": "RealBiter.ckpt"
+    "filename": "RealBiter.ckpt",
+    "files": [
+      {
+        "path": "RealBiter.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "FaeTastic": {
     "type": "checkpoints",
@@ -1469,7 +2220,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/FaeTastic.ckpt?download=true",
-    "filename": "FaeTastic.ckpt"
+    "filename": "FaeTastic.ckpt",
+    "files": [
+      {
+        "path": "FaeTastic.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Realism Engine": {
     "type": "checkpoints",
@@ -1482,7 +2239,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/RealismEngine.ckpt?download=true",
-    "filename": "RealismEngine.ckpt"
+    "filename": "RealismEngine.ckpt",
+    "files": [
+      {
+        "path": "RealismEngine.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Jim Eidomode": {
     "type": "checkpoints",
@@ -1495,7 +2258,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/JimEidomode.ckpt?download=true",
-    "filename": "JimEidomode.ckpt"
+    "filename": "JimEidomode.ckpt",
+    "files": [
+      {
+        "path": "JimEidomode.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Dungeons n Waifus": {
     "type": "checkpoints",
@@ -1508,7 +2277,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/DnW.ckpt?download=true",
-    "filename": "DnW.ckpt"
+    "filename": "DnW.ckpt",
+    "files": [
+      {
+        "path": "DnW.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "iCoMix": {
     "type": "checkpoints",
@@ -1521,7 +2296,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/icomix.ckpt?download=true",
-    "filename": "icomix.ckpt"
+    "filename": "icomix.ckpt",
+    "files": [
+      {
+        "path": "icomix.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Pretty 2.5D": {
     "type": "checkpoints",
@@ -1534,7 +2315,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/pretty25D.ckpt?download=true",
-    "filename": "pretty25D.ckpt"
+    "filename": "pretty25D.ckpt",
+    "files": [
+      {
+        "path": "pretty25D.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "ExpMix Line": {
     "type": "checkpoints",
@@ -1547,7 +2334,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/expmix.ckpt?download=true",
-    "filename": "expmix.ckpt"
+    "filename": "expmix.ckpt",
+    "files": [
+      {
+        "path": "expmix.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Disco Elysium": {
     "type": "checkpoints",
@@ -1560,7 +2353,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/discoElysium.ckpt?download=true",
-    "filename": "discoElysium.ckpt"
+    "filename": "discoElysium.ckpt",
+    "files": [
+      {
+        "path": "discoElysium.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Something": {
     "type": "checkpoints",
@@ -1573,7 +2372,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/Something.ckpt?download=true",
-    "filename": "Something.ckpt"
+    "filename": "Something.ckpt",
+    "files": [
+      {
+        "path": "Something.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Aurora": {
     "type": "checkpoints",
@@ -1586,7 +2391,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/aurora.safetensors?download=true",
-    "filename": "aurora.safetensors"
+    "filename": "aurora.safetensors",
+    "files": [
+      {
+        "path": "aurora.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Char": {
     "type": "checkpoints",
@@ -1599,7 +2410,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/Char.ckpt?download=true",
-    "filename": "Char.ckpt"
+    "filename": "Char.ckpt",
+    "files": [
+      {
+        "path": "Char.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "CamelliaMix 2.5D": {
     "type": "checkpoints",
@@ -1612,7 +2429,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/camelliamix25D.safetensors?download=true",
-    "filename": "camelliamix25D.safetensors"
+    "filename": "camelliamix25D.safetensors",
+    "files": [
+      {
+        "path": "camelliamix25D.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Perfect World": {
     "type": "checkpoints",
@@ -1625,7 +2448,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/PerfectWorld.ckpt?download=true",
-    "filename": "PerfectWorld.ckpt"
+    "filename": "PerfectWorld.ckpt",
+    "files": [
+      {
+        "path": "PerfectWorld.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Ether Real Mix": {
     "type": "checkpoints",
@@ -1638,7 +2467,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://civitai.com/api/download/models/538928?type=Model&format=SafeTensor&size=pruned&fp=fp16",
-    "filename": "etherRealMix_etherRealMix4.safetensors"
+    "filename": "etherRealMix_etherRealMix4.safetensors",
+    "files": [
+      {
+        "path": "etherRealMix_etherRealMix4.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Lyriel": {
     "type": "checkpoints",
@@ -1651,7 +2486,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/lyriel.safetensors?download=true",
-    "filename": "lyriel.safetensors"
+    "filename": "lyriel.safetensors",
+    "files": [
+      {
+        "path": "lyriel.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "DnD Map Generator": {
     "type": "checkpoints",
@@ -1664,7 +2505,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/dndMapGenerator.safetensors?download=true",
-    "filename": "dndMapGenerator.safetensors"
+    "filename": "dndMapGenerator.safetensors",
+    "files": [
+      {
+        "path": "dndMapGenerator.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "BRA": {
     "type": "checkpoints",
@@ -1677,7 +2524,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/braBeautifulRealistic.safetensors?download=true",
-    "filename": "braBeautifulRealistic.safetensors"
+    "filename": "braBeautifulRealistic.safetensors",
+    "files": [
+      {
+        "path": "braBeautifulRealistic.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "MoonMix Fantasy": {
     "type": "checkpoints",
@@ -1690,7 +2543,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/moonmix_fantasy.safetensors?download=true",
-    "filename": "moonmix_fantasy.safetensors"
+    "filename": "moonmix_fantasy.safetensors",
+    "files": [
+      {
+        "path": "moonmix_fantasy.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "BB95 Furry Mix": {
     "type": "checkpoints",
@@ -1703,7 +2562,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/bb95FurryMix.safetensors?download=true",
-    "filename": "bb95FurryMix.safetensors"
+    "filename": "bb95FurryMix.safetensors",
+    "files": [
+      {
+        "path": "bb95FurryMix.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "BB95 Furry Mix v14": {
     "type": "checkpoints",
@@ -1716,7 +2581,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/bb95FurryMix_v14.safetensors",
-    "filename": "bb95FurryMix_v14.safetensors"
+    "filename": "bb95FurryMix_v14.safetensors",
+    "files": [
+      {
+        "path": "bb95FurryMix_v14.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "MeinaMix": {
     "type": "checkpoints",
@@ -1729,7 +2600,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/meinamix.safetensors?download=true",
-    "filename": "meinamix.safetensors"
+    "filename": "meinamix.safetensors",
+    "files": [
+      {
+        "path": "meinamix.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Mistoon Amethyst": {
     "type": "checkpoints",
@@ -1742,7 +2619,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/mistoonAmethyst.safetensors?download=true",
-    "filename": "mistoonAmethyst.safetensors"
+    "filename": "mistoonAmethyst.safetensors",
+    "files": [
+      {
+        "path": "mistoonAmethyst.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Art Of Mtg": {
     "type": "checkpoints",
@@ -1755,7 +2638,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/ArtOfMtg.ckpt?download=true",
-    "filename": "ArtOfMtg.ckpt"
+    "filename": "ArtOfMtg.ckpt",
+    "files": [
+      {
+        "path": "ArtOfMtg.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Galena Redux": {
     "type": "checkpoints",
@@ -1768,7 +2657,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/galenaREDUX.safetensors?download=true",
-    "filename": "galenaREDUX.safetensors"
+    "filename": "galenaREDUX.safetensors",
+    "files": [
+      {
+        "path": "galenaREDUX.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Analog Madness": {
     "type": "checkpoints",
@@ -1781,7 +2676,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/analogMadness.safetensors?download=true",
-    "filename": "analogMadness.safetensors"
+    "filename": "analogMadness.safetensors",
+    "files": [
+      {
+        "path": "analogMadness.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Henmix Real": {
     "type": "checkpoints",
@@ -1794,7 +2695,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/henmixReal.safetensors?download=true",
-    "filename": "henmixReal.safetensors"
+    "filename": "henmixReal.safetensors",
+    "files": [
+      {
+        "path": "henmixReal.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Elysium Anime": {
     "type": "checkpoints",
@@ -1807,7 +2714,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/Elysium_Anime.safetensors?download=true",
-    "filename": "Elysium_Anime.safetensors"
+    "filename": "Elysium_Anime.safetensors",
+    "files": [
+      {
+        "path": "Elysium_Anime.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "majicMIX realistic": {
     "type": "checkpoints",
@@ -1820,7 +2733,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/majicmixRealistic.safetensors?download=true",
-    "filename": "majicmixRealistic.safetensors"
+    "filename": "majicmixRealistic.safetensors",
+    "files": [
+      {
+        "path": "majicmixRealistic.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "GhostMix": {
     "type": "checkpoints",
@@ -1833,7 +2752,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/ghostmix.safetensors?download=true",
-    "filename": "ghostmix.safetensors"
+    "filename": "ghostmix.safetensors",
+    "files": [
+      {
+        "path": "ghostmix.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Hassaku": {
     "type": "checkpoints",
@@ -1846,7 +2771,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/hassakuHentaiModel.safetensors?download=true",
-    "filename": "hassakuHentaiModel.safetensors"
+    "filename": "hassakuHentaiModel.safetensors",
+    "files": [
+      {
+        "path": "hassakuHentaiModel.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Dark Sushi Mix": {
     "type": "checkpoints",
@@ -1859,7 +2790,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/darkSushiMix.safetensors?download=true",
-    "filename": "darkSushiMix.safetensors"
+    "filename": "darkSushiMix.safetensors",
+    "files": [
+      {
+        "path": "darkSushiMix.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "CyberRealistic": {
     "type": "checkpoints",
@@ -1872,7 +2809,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/cyberrealistic.safetensors?download=true",
-    "filename": "cyberrealistic.safetensors"
+    "filename": "cyberrealistic.safetensors",
+    "files": [
+      {
+        "path": "cyberrealistic.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Realistic Vision Inpainting": {
     "type": "checkpoints",
@@ -1885,7 +2828,13 @@
     "nsfw": true,
     "inpainting": true,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/RealisticVision_Inpainting.safetensors?download=true",
-    "filename": "RealisticVision_Inpainting.safetensors"
+    "filename": "RealisticVision_Inpainting.safetensors",
+    "files": [
+      {
+        "path": "RealisticVision_Inpainting.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Deliberate Inpainting": {
     "type": "checkpoints",
@@ -1898,7 +2847,13 @@
     "nsfw": true,
     "inpainting": true,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/Deliberate_Inpainting.safetensors?download=true",
-    "filename": "Deliberate_Inpainting.safetensors"
+    "filename": "Deliberate_Inpainting.safetensors",
+    "files": [
+      {
+        "path": "Deliberate_Inpainting.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "stable_diffusion_inpainting": {
     "type": "checkpoints",
@@ -1911,7 +2866,13 @@
     "nsfw": false,
     "inpainting": true,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/sd-v1-5-inpainting.ckpt?download=true",
-    "filename": "sd-v1-5-inpainting.ckpt"
+    "filename": "sd-v1-5-inpainting.ckpt",
+    "files": [
+      {
+        "path": "sd-v1-5-inpainting.ckpt",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Disney Pixar Cartoon Type A": {
     "type": "checkpoints",
@@ -1924,7 +2885,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/disneyPixarCartoon.safetensors?download=true",
-    "filename": "disneyPixarCartoon.safetensors"
+    "filename": "disneyPixarCartoon.safetensors",
+    "files": [
+      {
+        "path": "disneyPixarCartoon.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Babes": {
     "type": "checkpoints",
@@ -1937,7 +2904,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/babes.safetensors?download=true",
-    "filename": "babes.safetensors"
+    "filename": "babes.safetensors",
+    "files": [
+      {
+        "path": "babes.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "DreamShaper Inpainting": {
     "type": "checkpoints",
@@ -1950,7 +2923,13 @@
     "nsfw": true,
     "inpainting": true,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/dreamshaper_inpainting.safetensors?download=true",
-    "filename": "dreamshaper_inpainting.safetensors"
+    "filename": "dreamshaper_inpainting.safetensors",
+    "files": [
+      {
+        "path": "dreamshaper_inpainting.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "A-Zovya RPG Inpainting": {
     "type": "checkpoints",
@@ -1963,7 +2942,13 @@
     "nsfw": false,
     "inpainting": true,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/aZovyaRPG_Inpainting.safetensors?download=true",
-    "filename": "aZovyaRPG_Inpainting.safetensors"
+    "filename": "aZovyaRPG_Inpainting.safetensors",
+    "files": [
+      {
+        "path": "aZovyaRPG_Inpainting.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "BweshMix": {
     "type": "checkpoints",
@@ -1976,7 +2961,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/bweshmix.safetensors?download=true",
-    "filename": "bweshmix.safetensors"
+    "filename": "bweshmix.safetensors",
+    "files": [
+      {
+        "path": "bweshmix.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Cetus-Mix": {
     "type": "checkpoints",
@@ -1989,7 +2980,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/cetusMix.safetensors?download=true",
-    "filename": "cetusMix.safetensors"
+    "filename": "cetusMix.safetensors",
+    "files": [
+      {
+        "path": "cetusMix.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Real Dos Mix": {
     "type": "checkpoints",
@@ -2002,7 +2999,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/realdosmix.safetensors?download=true",
-    "filename": "realdosmix.safetensors"
+    "filename": "realdosmix.safetensors",
+    "files": [
+      {
+        "path": "realdosmix.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Realisian": {
     "type": "checkpoints",
@@ -2015,7 +3018,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/realisian.safetensors?download=true",
-    "filename": "realisian.safetensors"
+    "filename": "realisian.safetensors",
+    "files": [
+      {
+        "path": "realisian.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Epic Diffusion Inpainting": {
     "type": "checkpoints",
@@ -2028,7 +3037,13 @@
     "nsfw": false,
     "inpainting": true,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/EpicDiffusion_Inpainting.safetensors?download=true",
-    "filename": "EpicDiffusion_Inpainting.safetensors"
+    "filename": "EpicDiffusion_Inpainting.safetensors",
+    "files": [
+      {
+        "path": "EpicDiffusion_Inpainting.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Anything Diffusion Inpainting": {
     "type": "checkpoints",
@@ -2041,7 +3056,13 @@
     "nsfw": false,
     "inpainting": true,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/Anything-Diffusion_Inpainting.safetensors?download=true",
-    "filename": "Anything-Diffusion_Inpainting.safetensors"
+    "filename": "Anything-Diffusion_Inpainting.safetensors",
+    "files": [
+      {
+        "path": "Anything-Diffusion_Inpainting.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Fluffusion": {
     "type": "checkpoints",
@@ -2054,7 +3075,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/fluffusion.safetensors?download=true",
-    "filename": "fluffusion.safetensors"
+    "filename": "fluffusion.safetensors",
+    "files": [
+      {
+        "path": "fluffusion.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Anything v5": {
     "type": "checkpoints",
@@ -2067,7 +3094,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/AnythingV5.safetensors?download=true",
-    "filename": "AnythingV5.safetensors"
+    "filename": "AnythingV5.safetensors",
+    "files": [
+      {
+        "path": "AnythingV5.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "ToonYou": {
     "type": "checkpoints",
@@ -2080,7 +3113,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/toonyou.safetensors?download=true",
-    "filename": "toonyou.safetensors"
+    "filename": "toonyou.safetensors",
+    "files": [
+      {
+        "path": "toonyou.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Reliberate": {
     "type": "checkpoints",
@@ -2093,7 +3132,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/reliberate.safetensors?download=true",
-    "filename": "reliberate.safetensors"
+    "filename": "reliberate.safetensors",
+    "files": [
+      {
+        "path": "reliberate.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "SweetBoys 2D": {
     "type": "checkpoints",
@@ -2106,7 +3151,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/sweetboys2d.safetensors?download=true",
-    "filename": "sweetboys2d.safetensors"
+    "filename": "sweetboys2d.safetensors",
+    "files": [
+      {
+        "path": "sweetboys2d.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "iCoMix Inpainting": {
     "type": "checkpoints",
@@ -2119,7 +3170,13 @@
     "nsfw": false,
     "inpainting": true,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/icomix_Inpainting.safetensors?download=true",
-    "filename": "icomix_Inpainting.safetensors"
+    "filename": "icomix_Inpainting.safetensors",
+    "files": [
+      {
+        "path": "icomix_Inpainting.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "AnyLoRA": {
     "type": "checkpoints",
@@ -2132,7 +3189,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/anylora.safetensors?download=true",
-    "filename": "anylora.safetensors"
+    "filename": "anylora.safetensors",
+    "files": [
+      {
+        "path": "anylora.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Western Animation Diffusion": {
     "type": "checkpoints",
@@ -2145,7 +3208,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/westernAnimationDiffusion.safetensors?download=true",
-    "filename": "westernAnimationDiffusion.safetensors"
+    "filename": "westernAnimationDiffusion.safetensors",
+    "files": [
+      {
+        "path": "westernAnimationDiffusion.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Deliberate 3.0": {
     "type": "checkpoints",
@@ -2158,7 +3227,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/deliberate_v3.safetensors?download=true",
-    "filename": "deliberate_v3.safetensors"
+    "filename": "deliberate_v3.safetensors",
+    "files": [
+      {
+        "path": "deliberate_v3.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Photon": {
     "type": "checkpoints",
@@ -2171,7 +3246,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://civitai.com/api/download/models/90072?type=Model&format=SafeTensor&size=pruned&fp=fp16",
-    "filename": "photon.safetensors"
+    "filename": "photon.safetensors",
+    "files": [
+      {
+        "path": "photon.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "AbsoluteReality": {
     "type": "checkpoints",
@@ -2184,7 +3265,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://civitai.com/api/download/models/132760?type=Model&format=SafeTensor&size=pruned&fp=fp16",
-    "filename": "absolutereality.safetensors"
+    "filename": "absolutereality.safetensors",
+    "files": [
+      {
+        "path": "absolutereality.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Fustercluck": {
     "type": "checkpoints",
@@ -2197,7 +3284,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/fustercluck.safetensors?download=true",
-    "filename": "fustercluck.safetensors"
+    "filename": "fustercluck.safetensors",
+    "files": [
+      {
+        "path": "fustercluck.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "AlbedoBase XL (SDXL)": {
     "type": "checkpoints",
@@ -2210,7 +3303,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/albedo_base_xl.safetensors?download=true",
-    "filename": "albedo_base_xl.safetensors"
+    "filename": "albedo_base_xl.safetensors",
+    "files": [
+      {
+        "path": "albedo_base_xl.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Pony Diffusion XL": {
     "type": "checkpoints",
@@ -2223,7 +3322,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://civitai.com/api/download/models/290640?format=SafeTensor",
-    "filename": "pony_diffusion_xl.safetensors"
+    "filename": "pony_diffusion_xl.safetensors",
+    "files": [
+      {
+        "path": "pony_diffusion_xl.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "SwamPonyXL": {
     "type": "checkpoints",
@@ -2236,7 +3341,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/swamponyxl.safetensors",
-    "filename": "swamponyxl.safetensors"
+    "filename": "swamponyxl.safetensors",
+    "files": [
+      {
+        "path": "swamponyxl.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "AMPonyXL": {
     "type": "checkpoints",
@@ -2249,7 +3360,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/amponyxl.safetensors?download=true",
-    "filename": "amponyxl.safetensors"
+    "filename": "amponyxl.safetensors",
+    "files": [
+      {
+        "path": "amponyxl.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Blank Canvas XL": {
     "type": "checkpoints",
@@ -2262,7 +3379,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://civitai.com/api/download/models/315557",
-    "filename": "blank_canvas_xl.safetensors"
+    "filename": "blank_canvas_xl.safetensors",
+    "files": [
+      {
+        "path": "blank_canvas_xl.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Anime Illust Diffusion XL": {
     "type": "checkpoints",
@@ -2275,7 +3398,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/anime_illust_diffusion_xl.safetensors?download=true",
-    "filename": "anime_illust_diffusion_xl.safetensors"
+    "filename": "anime_illust_diffusion_xl.safetensors",
+    "files": [
+      {
+        "path": "anime_illust_diffusion_xl.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "DreamShaper XL Turbo v2.1": {
     "type": "checkpoints",
@@ -2299,7 +3428,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/cheyenne.safetensors?download=true",
-    "filename": "cheyenne.safetensors"
+    "filename": "cheyenne.safetensors",
+    "files": [
+      {
+        "path": "cheyenne.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Unstable Diffusers XL": {
     "type": "checkpoints",
@@ -2312,7 +3447,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/Yamer-AI/SDXL_Unstable_Diffusers/resolve/main/Unstable%20Diffusers%20V11%20%2B%20RunDiffusion.safetensors?download=true",
-    "filename": "unstable_diffusers_xl.safetensors"
+    "filename": "unstable_diffusers_xl.safetensors",
+    "files": [
+      {
+        "path": "unstable_diffusers_xl.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "AAM XL": {
     "type": "checkpoints",
@@ -2325,7 +3466,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://civitai.com/api/download/models/303526?type=Model&format=SafeTensor&size=full&fp=fp16",
-    "filename": "aam_xl.safetensors"
+    "filename": "aam_xl.safetensors",
+    "files": [
+      {
+        "path": "aam_xl.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Quiet Goodnight XL": {
     "type": "checkpoints",
@@ -2338,7 +3485,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://civitai.com/api/download/models/375465?type=Model&format=SafeTensor&size=pruned&fp=fp16",
-    "filename": "qg_xl.safetensors"
+    "filename": "qg_xl.safetensors",
+    "files": [
+      {
+        "path": "qg_xl.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Flux.1-Schnell fp16 (Compact)": {
     "type": "checkpoints",
@@ -2351,7 +3504,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://civitai.com/api/download/models/716322?type=Model&format=SafeTensor&size=full",
-    "filename": "flux1CompactCLIPAnd_Flux1SchnellFp16.safetensors"
+    "filename": "flux1CompactCLIPAnd_Flux1SchnellFp16.safetensors",
+    "files": [
+      {
+        "path": "flux1CompactCLIPAnd_Flux1SchnellFp16.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Flux.1-Krea-dev Uncensored (fp8+CLIP+VAE)": {
     "type": "checkpoints",
@@ -2364,7 +3523,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://civitai.com/api/download/models/2071474",
-    "filename": "flux1KreaDev_fp8ClipWithVAE.safetensors"
+    "filename": "flux1KreaDev_fp8ClipWithVAE.safetensors",
+    "files": [
+      {
+        "path": "flux1KreaDev_fp8ClipWithVAE.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Pony Realism": {
     "type": "checkpoints",
@@ -2377,7 +3542,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/ponyRealism_v21MainVAE.safetensors",
-    "filename": "ponyRealism_v21MainVAE.safetensors"
+    "filename": "ponyRealism_v21MainVAE.safetensors",
+    "files": [
+      {
+        "path": "ponyRealism_v21MainVAE.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "WAI-ANI-NSFW-PONYXL": {
     "type": "checkpoints",
@@ -2390,7 +3561,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://civitai.com/api/download/models/827519?type=Model&format=SafeTensor&size=pruned&fp=fp16",
-    "filename": "waiANINSFWPONYXL_v80.safetensors"
+    "filename": "waiANINSFWPONYXL_v80.safetensors",
+    "files": [
+      {
+        "path": "waiANINSFWPONYXL_v80.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Ultraspice": {
     "type": "checkpoints",
@@ -2403,7 +3580,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://civitai.com/api/download/models/626054?type=Model&format=SafeTensor&size=pruned&fp=fp16",
-    "filename": "ultraspice_v23.safetensors"
+    "filename": "ultraspice_v23.safetensors",
+    "files": [
+      {
+        "path": "ultraspice_v23.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Flat-2D Animerge": {
     "type": "checkpoints",
@@ -2416,7 +3599,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://civitai.com/api/download/models/266360?type=Model&format=SafeTensor&size=pruned&fp=fp16",
-    "filename": "flat2DAnimerge_v45Sharp.safetensors"
+    "filename": "flat2DAnimerge_v45Sharp.safetensors",
+    "files": [
+      {
+        "path": "flat2DAnimerge_v45Sharp.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "BlenderMix Pony": {
     "type": "checkpoints",
@@ -2429,7 +3618,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://civitai.com/api/download/models/541561?type=Model&format=SafeTensor&size=full&fp=fp16",
-    "filename": "blendermix_v20.safetensors"
+    "filename": "blendermix_v20.safetensors",
+    "files": [
+      {
+        "path": "blendermix_v20.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "DucHaiten GameArt (Unreal) Pony": {
     "type": "checkpoints",
@@ -2442,7 +3637,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://civitai.com/api/download/models/692973?type=Model&format=SafeTensor&size=pruned&fp=fp16",
-    "filename": "duchaitenGameart_unrealengineV10.safetensors"
+    "filename": "duchaitenGameart_unrealengineV10.safetensors",
+    "files": [
+      {
+        "path": "duchaitenGameart_unrealengineV10.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "TUNIX Pony": {
     "type": "checkpoints",
@@ -2455,7 +3656,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://civitai.com/api/download/models/621563?type=Model&format=SafeTensor&size=full&fp=fp16",
-    "filename": "tunix3DStylizedPony_v10VAE.safetensors"
+    "filename": "tunix3DStylizedPony_v10VAE.safetensors",
+    "files": [
+      {
+        "path": "tunix3DStylizedPony_v10VAE.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "WAI-CUTE Pony": {
     "type": "checkpoints",
@@ -2468,7 +3675,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/waiCUTE_v80.safetensors",
-    "filename": "waiCUTE_v80.safetensors"
+    "filename": "waiCUTE_v80.safetensors",
+    "files": [
+      {
+        "path": "waiCUTE_v80.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Prefect Pony": {
     "type": "checkpoints",
@@ -2481,7 +3694,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/prefectPonyXL_v3.safetensors",
-    "filename": "prefectPonyXL_v3.safetensors"
+    "filename": "prefectPonyXL_v3.safetensors",
+    "files": [
+      {
+        "path": "prefectPonyXL_v3.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "MHXL - Aventis Horizon": {
     "type": "checkpoints",
@@ -2494,7 +3713,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/mhxlAventisHorizon_v30.safetensors",
-    "filename": "mhxlAventisHorizon_v30.safetensors"
+    "filename": "mhxlAventisHorizon_v30.safetensors",
+    "files": [
+      {
+        "path": "mhxlAventisHorizon_v30.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Nova Furry Pony": {
     "type": "checkpoints",
@@ -2507,7 +3732,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/novaFurryPony_v60.safetensors",
-    "filename": "novaFurryPony_v60.safetensors"
+    "filename": "novaFurryPony_v60.safetensors",
+    "files": [
+      {
+        "path": "novaFurryPony_v60.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "Nova Anime XL": {
     "type": "checkpoints",
@@ -2520,7 +3751,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/novaAnimeXL_illustriousV10.safetensors",
-    "filename": "novaAnimeXL_illustriousV10.safetensors"
+    "filename": "novaAnimeXL_illustriousV10.safetensors",
+    "files": [
+      {
+        "path": "novaAnimeXL_illustriousV10.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "White Pony Diffusion 4": {
     "type": "checkpoints",
@@ -2533,7 +3770,13 @@
     "nsfw": true,
     "inpainting": false,
     "url": "https://huggingface.co/mirroring/horde_models/resolve/main/whitePonyDiffusion4_whitepony4Classic.safetensors",
-    "filename": "whitePonyDiffusion4_whitepony4Classic.safetensors"
+    "filename": "whitePonyDiffusion4_whitepony4Classic.safetensors",
+    "files": [
+      {
+        "path": "whitePonyDiffusion4_whitepony4Classic.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "HiDream-I1-Dev": {
     "type": "checkpoints",
@@ -2546,7 +3789,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/Comfy-Org/HiDream-I1_ComfyUI/resolve/main/split_files/diffusion_models/hidream_i1_dev_fp8.safetensors",
-    "filename": "hidream_i1_dev_fp8.safetensors"
+    "filename": "hidream_i1_dev_fp8.safetensors",
+    "files": [
+      {
+        "path": "hidream_i1_dev_fp8.safetensors",
+        "file_type": "diffusion_models"
+      }
+    ]
   },
   "Chroma-fp8-scaled": {
     "type": "checkpoints",
@@ -2559,7 +3808,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/Clybius/Chroma-fp8-scaled/resolve/main/chroma-unlocked-v27_float8_e4m3fn_scaled_stochastic.safetensors",
-    "filename": "chroma-unlocked-v27_float8_e4m3fn_scaled_stochastic.safetensors"
+    "filename": "chroma-unlocked-v27_float8_e4m3fn_scaled_stochastic.safetensors",
+    "files": [
+      {
+        "path": "chroma-unlocked-v27_float8_e4m3fn_scaled_stochastic.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "wan_2.1": {
     "type": "checkpoints",
@@ -2572,7 +3827,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/vrgamedevgirl84/Wan14BT2VFusioniX/resolve/main/Wan14BT2VFusioniX_fp16_.safetensors",
-    "filename": "Wan14BT2VFusioniX_fp16_.safetensors"
+    "filename": "Wan14BT2VFusioniX_fp16_.safetensors",
+    "files": [
+      {
+        "path": "Wan14BT2VFusioniX_fp16_.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "control_canny_sd2": {
     "type": "checkpoints",
@@ -2585,7 +3846,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/Haidra-Org/horde-fallback-image-models/resolve/main/diff_control_sd21_canny_fp16.safetensors",
-    "filename": "diff_control_sd21_canny_fp16.safetensors"
+    "filename": "diff_control_sd21_canny_fp16.safetensors",
+    "files": [
+      {
+        "path": "diff_control_sd21_canny_fp16.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "control_depth_sd2": {
     "type": "checkpoints",
@@ -2598,7 +3865,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/Haidra-Org/horde-fallback-image-models/resolve/main/diff_control_sd21_depth_fp16.safetensors",
-    "filename": "diff_control_sd21_depth_fp16.safetensors"
+    "filename": "diff_control_sd21_depth_fp16.safetensors",
+    "files": [
+      {
+        "path": "diff_control_sd21_depth_fp16.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "control_hed_sd2": {
     "type": "checkpoints",
@@ -2611,7 +3884,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/Haidra-Org/horde-fallback-image-models/resolve/main/diff_control_sd21_hed_fp16.safetensors",
-    "filename": "diff_control_sd21_hed_fp16.safetensors"
+    "filename": "diff_control_sd21_hed_fp16.safetensors",
+    "files": [
+      {
+        "path": "diff_control_sd21_hed_fp16.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "control_openpose_sd2": {
     "type": "checkpoints",
@@ -2624,7 +3903,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/Haidra-Org/horde-fallback-image-models/resolve/main/control_openpose_fp21.safetensors",
-    "filename": "control_openpose_fp21.safetensors"
+    "filename": "control_openpose_fp21.safetensors",
+    "files": [
+      {
+        "path": "control_openpose_fp21.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "control_fakescribbles_sd2": {
     "type": "checkpoints",
@@ -2637,7 +3922,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/Haidra-Org/horde-fallback-image-models/resolve/main/control_scribble_fp21.safetensors",
-    "filename": "control_scribble_fp21.safetensors"
+    "filename": "control_scribble_fp21.safetensors",
+    "files": [
+      {
+        "path": "control_scribble_fp21.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "control_scribble_sd2": {
     "type": "checkpoints",
@@ -2650,7 +3941,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/Haidra-Org/horde-fallback-image-models/resolve/main/control_scribble_fp21.safetensors",
-    "filename": "control_scribble_fp21.safetensors"
+    "filename": "control_scribble_fp21.safetensors",
+    "files": [
+      {
+        "path": "control_scribble_fp21.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "control_canny": {
     "type": "checkpoints",
@@ -2663,7 +3960,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/kohya-ss/ControlNet-diff-modules/resolve/main/diff_control_sd15_canny_fp16.safetensors",
-    "filename": "diff_control_sd15_canny_fp16.safetensors"
+    "filename": "diff_control_sd15_canny_fp16.safetensors",
+    "files": [
+      {
+        "path": "diff_control_sd15_canny_fp16.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "control_depth": {
     "type": "checkpoints",
@@ -2676,7 +3979,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/kohya-ss/ControlNet-diff-modules/resolve/main/diff_control_sd15_depth_fp16.safetensors",
-    "filename": "diff_control_sd15_depth_fp16.safetensors"
+    "filename": "diff_control_sd15_depth_fp16.safetensors",
+    "files": [
+      {
+        "path": "diff_control_sd15_depth_fp16.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "control_hed": {
     "type": "checkpoints",
@@ -2689,7 +3998,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/kohya-ss/ControlNet-diff-modules/resolve/main/diff_control_sd15_hed_fp16.safetensors",
-    "filename": "diff_control_sd15_hed_fp16.safetensors"
+    "filename": "diff_control_sd15_hed_fp16.safetensors",
+    "files": [
+      {
+        "path": "diff_control_sd15_hed_fp16.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "control_hough": {
     "type": "checkpoints",
@@ -2702,7 +4017,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/kohya-ss/ControlNet-diff-modules/resolve/main/diff_control_sd15_mlsd_fp16.safetensors",
-    "filename": "control_mlsd_fp16.safetensors"
+    "filename": "control_mlsd_fp16.safetensors",
+    "files": [
+      {
+        "path": "control_mlsd_fp16.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "control_mlsd": {
     "type": "checkpoints",
@@ -2715,7 +4036,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/kohya-ss/ControlNet-diff-modules/resolve/main/diff_control_sd15_mlsd_fp16.safetensors",
-    "filename": "control_mlsd_fp16.safetensors"
+    "filename": "control_mlsd_fp16.safetensors",
+    "files": [
+      {
+        "path": "control_mlsd_fp16.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "control_normal": {
     "type": "checkpoints",
@@ -2728,7 +4055,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/kohya-ss/ControlNet-diff-modules/resolve/main/diff_control_sd15_normal_fp16.safetensors",
-    "filename": "control_normal_fp16.safetensors"
+    "filename": "control_normal_fp16.safetensors",
+    "files": [
+      {
+        "path": "control_normal_fp16.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "control_openpose": {
     "type": "checkpoints",
@@ -2741,7 +4074,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/kohya-ss/ControlNet-diff-modules/resolve/main/diff_control_sd15_openpose_fp16.safetensors",
-    "filename": "control_openpose_fp16.safetensors"
+    "filename": "control_openpose_fp16.safetensors",
+    "files": [
+      {
+        "path": "control_openpose_fp16.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "control_fakescribbles": {
     "type": "checkpoints",
@@ -2754,7 +4093,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/kohya-ss/ControlNet-diff-modules/resolve/main/diff_control_sd15_scribble_fp16.safetensors",
-    "filename": "control_scribble_fp16.safetensors"
+    "filename": "control_scribble_fp16.safetensors",
+    "files": [
+      {
+        "path": "control_scribble_fp16.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "control_scribble": {
     "type": "checkpoints",
@@ -2767,7 +4112,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/kohya-ss/ControlNet-diff-modules/resolve/main/diff_control_sd15_scribble_fp16.safetensors",
-    "filename": "control_scribble_fp16.safetensors"
+    "filename": "control_scribble_fp16.safetensors",
+    "files": [
+      {
+        "path": "control_scribble_fp16.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "control_seg": {
     "type": "checkpoints",
@@ -2780,7 +4131,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/kohya-ss/ControlNet-diff-modules/resolve/main/diff_control_sd15_seg_fp16.safetensors",
-    "filename": "control_seg_fp16.safetensors"
+    "filename": "control_seg_fp16.safetensors",
+    "files": [
+      {
+        "path": "control_seg_fp16.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "control_qr": {
     "type": "checkpoints",
@@ -2793,7 +4150,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/monster-labs/control_v1p_sd15_qrcode_monster/resolve/main/v2/control_v1p_sd15_qrcode_monster_v2.safetensors?download=true",
-    "filename": "control_v1p_sd15_qrcode_monster_v2.safetensors"
+    "filename": "control_v1p_sd15_qrcode_monster_v2.safetensors",
+    "files": [
+      {
+        "path": "control_v1p_sd15_qrcode_monster_v2.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "control_qr_sdxl": {
     "type": "checkpoints",
@@ -2806,7 +4169,13 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/monster-labs/control_v1p_sdxl_qrcode_monster/resolve/main/diffusion_pytorch_model.safetensors",
-    "filename": "control_v1p_sdxl_qrcode_monster.safetensors"
+    "filename": "control_v1p_sdxl_qrcode_monster.safetensors",
+    "files": [
+      {
+        "path": "control_v1p_sdxl_qrcode_monster.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "layer_diffuse_sd15": {
     "type": "checkpoints",
@@ -2819,7 +4188,17 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/LayerDiffusion/layerdiffusion-v1/resolve/main/layer_sd15_vae_transparent_decoder.safetensors",
-    "filename": "layer_sd15_vae_transparent_decoder.safetensors"
+    "filename": "layer_sd15_vae_transparent_decoder.safetensors",
+    "files": [
+      {
+        "path": "layer_sd15_vae_transparent_decoder.safetensors",
+        "file_type": "checkpoints"
+      },
+      {
+        "path": "layer_sd15_transparent_attn.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "layer_diffuse_sdxl": {
     "type": "checkpoints",
@@ -2832,6 +4211,16 @@
     "nsfw": false,
     "inpainting": false,
     "url": "https://huggingface.co/LayerDiffusion/layerdiffusion-v1/resolve/main/vae_transparent_decoder.safetensors",
-    "filename": "vae_transparent_decoder.safetensors"
+    "filename": "vae_transparent_decoder.safetensors",
+    "files": [
+      {
+        "path": "vae_transparent_decoder.safetensors",
+        "file_type": "checkpoints"
+      },
+      {
+        "path": "layer_xl_transparent_conv.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   }
 }

@@ -4,14 +4,16 @@
 FROM nvidia/cuda:12.8.0-runtime-ubuntu22.04 AS base
 
 # Set environment variables
+# Note: PIP_NO_CACHE_DIR removed to allow cache mounts for faster rebuilds
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Install system dependencies with apt cache mount
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
     python3.10 \
     python3-pip \
     python3-dev \
@@ -31,13 +33,41 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 RUN mkdir -p /app/ComfyUI /app/comfy-bridge
 
-# Install ComfyUI
-WORKDIR /app/ComfyUI
-RUN git clone https://github.com/comfyanonymous/ComfyUI.git . && \
-    grep -v -E "^(torch|torchvision|torchaudio)([=<>].*)?$" requirements.txt > /tmp/requirements_no_torch.txt && \
-    pip3 install --no-cache-dir --timeout 120 -r /tmp/requirements_no_torch.txt
+# Install ComfyUI with git cache mount
+WORKDIR /app
+ARG COMFYUI_VERSION=main
+RUN --mount=type=cache,target=/root/.cache/git \
+    rm -rf ComfyUI && \
+    git clone --depth 1 https://github.com/comfyanonymous/ComfyUI.git ComfyUI && \
+    (cd ComfyUI && git checkout ${COMFYUI_VERSION} 2>/dev/null || true) && \
+    cd ComfyUI && \
+    grep -v -E "^(torch|torchvision|torchaudio)([=<>].*)?$" requirements.txt > /tmp/requirements_no_torch.txt
+
+# Install ComfyUI dependencies with pip cache mount
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip3 install --timeout 120 -r /tmp/requirements_no_torch.txt
+
+# Install ComfyUI-WanVideoWrapper custom node extension with git and pip cache mounts
+WORKDIR /app/ComfyUI/custom_nodes
+RUN --mount=type=cache,target=/root/.cache/git \
+    --mount=type=cache,target=/root/.cache/pip \
+    git clone --depth 1 https://github.com/Kijai/ComfyUI-WanVideoWrapper.git ComfyUI-WanVideoWrapper && \
+    cd ComfyUI-WanVideoWrapper && \
+    if [ -f requirements.txt ]; then \
+        pip3 install --timeout 120 -r requirements.txt; \
+    fi
+
+# Install ComfyUI-WanMoeKSampler custom node extension (provides SplitSigmasAtT)
+RUN --mount=type=cache,target=/root/.cache/git \
+    --mount=type=cache,target=/root/.cache/pip \
+    git clone --depth 1 https://github.com/stduhpf/ComfyUI-WanMoeKSampler.git ComfyUI-WanMoeKSampler && \
+    cd ComfyUI-WanMoeKSampler && \
+    if [ -f requirements.txt ]; then \
+        pip3 install --timeout 120 -r requirements.txt; \
+    fi
 
 # Create directories for ComfyUI models and outputs
+WORKDIR /app
 RUN mkdir -p \
     /app/ComfyUI/models/checkpoints \
     /app/ComfyUI/models/diffusion_models \
@@ -50,11 +80,12 @@ RUN mkdir -p \
     /app/ComfyUI/output \
     /app/ComfyUI/temp
 
-# Install comfy-bridge
+# Install comfy-bridge with pip cache mount
 WORKDIR /app/comfy-bridge
 COPY requirements.txt pyproject.toml ./
-RUN pip3 install --no-cache-dir -r requirements.txt && \
-    pip3 install --no-cache-dir .
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip3 install -r requirements.txt && \
+    pip3 install .
 
 # Copy comfy-bridge code
 COPY comfy_bridge ./comfy_bridge
@@ -67,10 +98,11 @@ RUN chmod +x get_gpu_info.py download_models_from_catalog.py gpu_info_api.py dow
 COPY docker-entrypoint.sh /app/
 RUN chmod +x /app/docker-entrypoint.sh
 
-# Install PyTorch 2.7+ with CUDA 12.8 for Blackwell GPU support (sm_120)
-# PyTorch 2.7.0+ includes Blackwell support via CUDA 12.8
-RUN pip3 uninstall -y torch torchvision torchaudio 2>/dev/null || true && \
-    pip3 install --no-cache-dir --upgrade --force-reinstall --index-url https://download.pytorch.org/whl/cu128 torch==2.9.1 torchvision==0.24.1 torchaudio==2.9.1 && \
+# Install PyTorch 2.9.1 with CUDA 12.8 for Blackwell GPU support (sm_120)
+# Use cache mount for pip to persist PyTorch wheels (900MB+ download)
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip3 uninstall -y torch torchvision torchaudio 2>/dev/null || true && \
+    pip3 install --upgrade --force-reinstall --index-url https://download.pytorch.org/whl/cu128 torch==2.9.1 torchvision==0.24.1 torchaudio==2.9.1 && \
     python3 -c "import torch, torchvision, torchaudio; print(f'PyTorch {torch.__version__} installed for CUDA {torch.version.cuda}'); print(f'torchvision {torchvision.__version__}'); print(f'torchaudio {torchaudio.__version__}')" 
 
 # Create non-root user

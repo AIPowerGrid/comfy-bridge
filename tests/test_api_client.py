@@ -130,8 +130,25 @@ class TestAPIClient:
         mock_response = MagicMock()
         mock_response.status_code = 500
         mock_response.text = "Internal Server Error"
+        mock_response.json.side_effect = ValueError("Not JSON")
 
         error = httpx.HTTPStatusError("Server Error", request=MagicMock(), response=mock_response)
+        api_client.client.post = AsyncMock(side_effect=error)
+
+        with pytest.raises(httpx.HTTPStatusError):
+            await api_client.submit_result(payload)
+
+    @pytest.mark.asyncio
+    async def test_submit_result_http_error_with_json(self, api_client):
+        """Test submit_result with HTTP error containing JSON response."""
+        payload = {"id": "job-123", "generation": "base64-data", "state": "ok"}
+
+        mock_response = MagicMock()
+        mock_response.status_code = 400
+        mock_response.text = "Bad Request"
+        mock_response.json.return_value = {"error": "Invalid payload"}
+
+        error = httpx.HTTPStatusError("Bad Request", request=MagicMock(), response=mock_response)
         api_client.client.post = AsyncMock(side_effect=error)
 
         with pytest.raises(httpx.HTTPStatusError):

@@ -1,8 +1,9 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import DownloadProgressPanel from './DownloadProgressPanel';
+import type { ModelDownloadState } from '@/lib/downloadState';
 
 interface ModelDetailViewProps {
   catalog: any;
@@ -99,7 +100,8 @@ export default function ModelDetailView({
 }: ModelDetailViewProps) {
   const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; modelName: string }>({ isOpen: false, modelName: '' });
   const [downloadingModels, setDownloadingModels] = useState<Set<string>>(new Set());
-  const [downloadProgress, setDownloadProgress] = useState<{ [key: string]: { progress: number; message: string; speed?: string; eta?: string; current_file?: string; files?: any[] } }>({});
+  const [downloadProgress, setDownloadProgress] = useState<{ [key: string]: ModelDownloadState }>({});
+  const [dismissedDownloads, setDismissedDownloads] = useState<Set<string>>(new Set());
   const [hostingModels, setHostingModels] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -129,37 +131,20 @@ export default function ModelDetailView({
         if (data.models && isMounted) {
           // Update download progress with full state including files
           setDownloadProgress(prev => {
-            const newProgress = { ...prev };
+            const newProgress: { [key: string]: ModelDownloadState } = { ...prev };
             for (const [modelId, state] of Object.entries(data.models)) {
-              const modelState = state as any;
-              if (modelState.is_downloading || modelState.files?.length > 0) {
-                newProgress[modelId] = {
-                  progress: modelState.progress || 0,
-                  message: modelState.message || '',
-                  speed: modelState.speed || '',
-                  eta: modelState.eta || '',
-                  files: modelState.files || [],
-                  current_file: modelState.current_file
-                };
-                
-                // Check if download is complete (100% and no longer downloading)
-                if (!modelState.is_downloading && modelState.progress >= 100) {
-                  console.log(`Download complete for ${modelId}, cleaning up...`);
-                  // Remove from downloading set and progress after a delay
-                  setTimeout(() => {
-                    setDownloadingModels(prevSet => {
-                      const newSet = new Set(prevSet);
-                      newSet.delete(modelId);
-                      return newSet;
-                    });
-                    setDownloadProgress(prevProg => {
-                      const newProg = { ...prevProg };
-                      delete newProg[modelId];
-                      return newProg;
-                    });
-                  }, 3000); // 3 second delay to show success
-                }
-              }
+              const modelState = state as ModelDownloadState;
+              if (!modelState) continue;
+
+              const existing = prev[modelId];
+              newProgress[modelId] = {
+                ...existing,
+                ...modelState,
+                files: (modelState.files && modelState.files.length > 0)
+                  ? modelState.files
+                  : existing?.files || []
+              };
+
             }
             return newProgress;
           });
@@ -188,6 +173,7 @@ export default function ModelDetailView({
           ...(searchTerm && { search: searchTerm }),
           ...(styleFilter !== 'all' && { styleFilter }),
           ...(nsfwFilter !== 'all' && { nsfwFilter }),
+          ...(filter !== 'all' && { filter }),
           sortField,
           sortDirection
         });
@@ -203,43 +189,69 @@ export default function ModelDetailView({
     };
 
     fetchCatalog();
-  }, [currentPage, itemsPerPage, searchTerm, styleFilter, nsfwFilter, sortField, sortDirection]);
+  }, [currentPage, itemsPerPage, searchTerm, styleFilter, nsfwFilter, filter, sortField, sortDirection]);
 
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, styleFilter, nsfwFilter]);
+  }, [searchTerm, styleFilter, nsfwFilter, filter]);
 
   // Sync global download status with local state (for backwards compatibility)
   useEffect(() => {
     if (downloadStatus?.models && typeof downloadStatus.models === 'object') {
-      // New format - per-model status
       Object.entries(downloadStatus.models).forEach(([modelId, state]: [string, any]) => {
-        if (state.is_downloading) {
+        const modelState = state as ModelDownloadState;
+        if (!modelState) return;
+
+        if (modelState.is_downloading) {
           setDownloadingModels(prev => new Set(prev).add(modelId));
-          setDownloadProgress(prev => ({
+          setDismissedDownloads(prev => {
+            if (!prev.has(modelId)) return prev;
+            const next = new Set(prev);
+            next.delete(modelId);
+            return next;
+          });
+        }
+
+        setDownloadProgress(prev => {
+          const existing = prev[modelId];
+          return {
             ...prev,
             [modelId]: {
-              progress: state.progress || 0,
-              message: state.message || `Downloading ${modelId}...`,
-              speed: state.speed,
-              eta: state.eta,
+              ...existing,
+              ...modelState,
+              files: (modelState.files && modelState.files.length > 0)
+                ? modelState.files
+                : existing?.files || []
             }
-          }));
-        }
+          };
+        });
       });
     } else if (downloadStatus?.is_downloading && downloadStatus?.current_model) {
       // Legacy format - single model
       const modelId = downloadStatus.current_model;
       setDownloadingModels(prev => new Set(prev).add(modelId));
+      setDismissedDownloads(prev => {
+        if (!prev.has(modelId)) return prev;
+        const next = new Set(prev);
+        next.delete(modelId);
+        return next;
+      });
       setDownloadProgress(prev => ({
         ...prev,
         [modelId]: {
+          ...(prev[modelId] || {
+            is_downloading: true,
+            files: [],
+            total_files: 0,
+            completed_files: 0
+          }),
+          is_downloading: true,
           progress: downloadStatus.progress || 0,
           message: `Downloading ${modelId}...`,
-          speed: downloadStatus.speed,
-          eta: downloadStatus.eta
-        }
+          speed: downloadStatus.speed || '',
+          eta: downloadStatus.eta || ''
+        } as ModelDownloadState
       }));
     } else if (!downloadStatus?.is_downloading) {
       // Only clear if no models are downloading
@@ -268,22 +280,61 @@ export default function ModelDetailView({
 
   const models = localCatalog?.models || catalog?.models || [];
   const pagination = localCatalog?.pagination || null;
-  
-  // Apply client-side filters (compatibility and installed status)
-  const filteredModels = models.filter((model: any) => {
-    // Apply capability filter
-    if (filter === 'compatible') {
-      const maxVram = gpuInfo?.gpus?.[0]?.vram_available_gb || gpuInfo?.total_memory_gb || 0;
-      return model.vram_required_gb <= maxVram;
+  const downloadEntries = Object.entries(downloadProgress);
+  const visibleDownloads = downloadEntries.filter(([modelId, state]) => {
+    if (!state) return false;
+    if (state.is_downloading) {
+      return true;
     }
-    
-    // Apply installed filter
-    if (filter === 'installed') {
-      return model.installed === true;
-    }
-    
-    return true;
+    return !dismissedDownloads.has(modelId);
   });
+  const hasVisibleDownloads = visibleDownloads.length > 0;
+
+  useEffect(() => {
+    if (dismissedDownloads.size === 0) {
+      return;
+    }
+
+    const activeIds = new Set(Object.keys(downloadProgress));
+    let needsUpdate = false;
+    const next = new Set(dismissedDownloads);
+
+    dismissedDownloads.forEach(modelId => {
+      if (!activeIds.has(modelId)) {
+        next.delete(modelId);
+        needsUpdate = true;
+      }
+    });
+
+    if (needsUpdate) {
+      setDismissedDownloads(next);
+    }
+  }, [downloadProgress, dismissedDownloads]);
+
+  useEffect(() => {
+    const activeIds = new Set<string>();
+    Object.entries(downloadProgress).forEach(([modelId, state]) => {
+      if (state?.is_downloading) {
+        activeIds.add(modelId);
+      }
+    });
+
+    setDownloadingModels(prev => {
+      if (prev.size === activeIds.size) {
+        let identical = true;
+        for (const id of activeIds) {
+          if (!prev.has(id)) {
+            identical = false;
+            break;
+          }
+        }
+        if (identical) {
+          return prev;
+        }
+      }
+      return activeIds;
+    });
+  }, [downloadProgress]);
 
   const handleUninstall = (modelId: string) => {
     setConfirmModal({ isOpen: true, modelName: modelId });
@@ -302,9 +353,40 @@ export default function ModelDetailView({
     setConfirmModal({ isOpen: false, modelName: '' });
   };
 
+  const handleDismissDownload = useCallback((modelId: string) => {
+    setDismissedDownloads(prev => {
+      if (prev.has(modelId)) {
+        return prev;
+      }
+      const next = new Set(prev);
+      next.add(modelId);
+      return next;
+    });
+  }, []);
+
   const handleDownload = async (modelId: string) => {
     setDownloadingModels(prev => new Set(prev).add(modelId));
-    setDownloadProgress(prev => ({ ...prev, [modelId]: { progress: 0, message: 'Starting download...' } }));
+    setDownloadProgress(prev => ({
+      ...prev,
+      [modelId]: {
+        ...(prev[modelId] || {
+          files: [],
+          total_files: 0,
+          completed_files: 0
+        }),
+        is_downloading: true,
+        progress: 0,
+        speed: '',
+        eta: '',
+        message: 'Starting download...'
+      } as ModelDownloadState
+    }));
+    setDismissedDownloads(prev => {
+      if (!prev.has(modelId)) return prev;
+      const next = new Set(prev);
+      next.delete(modelId);
+      return next;
+    });
     
     try {
       const response = await fetch('/api/models/download', {
@@ -344,57 +426,73 @@ export default function ModelDetailView({
               // Add to downloading set if not already there
               if (targetModel !== modelId) {
                 setDownloadingModels(prev => new Set(prev).add(targetModel));
+                setDismissedDownloads(prev => {
+                  if (!prev.has(targetModel)) return prev;
+                  const next = new Set(prev);
+                  next.delete(targetModel);
+                  return next;
+                });
               }
               
-              if (data.type === 'progress') {
+              if (data.type === 'status' && data.state) {
+                const state = data.state as ModelDownloadState;
                 setDownloadProgress(prev => ({
                   ...prev,
                   [targetModel]: {
-                    progress: data.progress || 0,
-                    message: data.message,
-                    speed: data.speed,
-                    eta: data.eta
+                    ...(prev[targetModel] || {
+                      files: [],
+                      total_files: 0,
+                      completed_files: 0
+                    }),
+                    ...state,
+                    files: (state.files && state.files.length > 0)
+                      ? state.files
+                      : prev[targetModel]?.files || []
                   }
                 }));
               } else if (data.type === 'start') {
                 setDownloadProgress(prev => ({
                   ...prev,
                   [targetModel]: {
+                    ...(prev[targetModel] || {
+                      files: [],
+                      total_files: 0,
+                      completed_files: 0
+                    }),
+                    is_downloading: true,
                     progress: 0,
                     message: data.message || 'Starting download...',
-                  }
+                    speed: '',
+                    eta: ''
+                  } as ModelDownloadState
                 }));
               } else if (data.type === 'success' || data.type === 'info') {
                 setDownloadProgress(prev => ({
                   ...prev,
                   [targetModel]: {
-                    progress: prev[targetModel]?.progress || 0,
-                    message: data.message,
-                  }
+                    ...(prev[targetModel] || {
+                      files: [],
+                      total_files: 0,
+                      completed_files: 0
+                    }),
+                    message: data.message || prev[targetModel]?.message || ''
+                  } as ModelDownloadState
                 }));
               } else if (data.type === 'complete') {
                 setDownloadProgress(prev => ({
                   ...prev,
                   [targetModel]: {
+                    ...(prev[targetModel] || {
+                      files: [],
+                      total_files: 0,
+                      completed_files: 0
+                    }),
+                    is_downloading: false,
                     progress: 100,
-                    message: 'Download complete!',
-                  }
+                    message: 'Download complete!'
+                  } as ModelDownloadState
                 }));
-                
-                // Remove from downloading set after a delay
-                setTimeout(() => {
-                  setDownloadingModels(prev => {
-                    const newSet = new Set(prev);
-                    newSet.delete(targetModel);
-                    return newSet;
-                  });
-                  setDownloadProgress(prev => {
-                    const newProgress = { ...prev };
-                    delete newProgress[targetModel];
-                    return newProgress;
-                  });
-                }, 2000);
-                
+
                 // Refresh catalog to show installed model
                 if (data.success) {
                   await onDownloadAndHost(targetModel);
@@ -412,7 +510,16 @@ export default function ModelDetailView({
       console.error('Download error:', error);
       setDownloadProgress(prev => ({
         ...prev,
-        [modelId]: { progress: 0, message: `Error: ${error instanceof Error ? error.message : 'Unknown error'}` }
+        [modelId]: {
+          ...(prev[modelId] || {
+            files: [],
+            total_files: 0,
+            completed_files: 0
+          }),
+          is_downloading: false,
+          progress: 0,
+          message: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
+        } as ModelDownloadState
       }));
       
       // Remove from downloading set after showing error
@@ -610,31 +717,30 @@ export default function ModelDetailView({
       </div>
 
       {/* Active Downloads Panel - Enhanced with Per-File Tracking */}
-      {Object.keys(downloadProgress).length > 0 && (
+      {hasVisibleDownloads && (
         <div className="mb-6 space-y-4">
           <h2 className="text-xl font-bold text-white flex items-center gap-2">
             <svg className="w-6 h-6 text-aipg-orange animate-spin" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
-            Active Downloads ({Object.keys(downloadProgress).length})
+            Active Downloads ({visibleDownloads.length})
           </h2>
           
-          {Object.entries(downloadProgress).map(([modelId, progress]) => {
-            // Convert old progress format to new ModelDownloadState format
-            const downloadState = {
+          {visibleDownloads.map(([modelId, state]) => {
+            const downloadState: ModelDownloadState = state || {
               is_downloading: true,
-              progress: progress.progress || 0,
-              speed: progress.speed || '',
-              eta: progress.eta || '',
-              current_file: progress.current_file,
-              message: progress.message,
-              files: progress.files || [],  // Use files if available, otherwise empty
-              total_files: progress.files?.length || 0,
-              completed_files: progress.files?.filter((f: any) => f.status === 'completed').length || 0
+              progress: 0,
+              speed: '',
+              eta: '',
+              message: '',
+              files: [],
+              total_files: 0,
+              completed_files: 0
             };
-            
+          
             const modelName = modelId.replace(/-/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
+            const isCompleted = !downloadState.is_downloading && downloadState.progress >= 100;
             
             return (
               <DownloadProgressPanel
@@ -644,6 +750,8 @@ export default function ModelDetailView({
                 downloadState={downloadState}
                 onCancelFile={handleCancelFile}
                 onCancelAll={handleCancelAllFiles}
+                onDismiss={handleDismissDownload}
+                isCompleted={isCompleted}
               />
             );
           })}
@@ -749,10 +857,10 @@ export default function ModelDetailView({
               <div className="col-span-1 flex items-center justify-center">
                 <input
                   type="checkbox"
-                  checked={selectedModels.size === filteredModels.length && filteredModels.length > 0}
+                  checked={selectedModels.size === models.length && models.length > 0}
                   onChange={(e) => {
                     if (e.target.checked) {
-                      setSelectedModels(new Set(filteredModels.map((m: any) => m.id)));
+                      setSelectedModels(new Set(models.map((m: any) => m.id)));
                     } else {
                       setSelectedModels(new Set());
                     }
@@ -807,7 +915,7 @@ export default function ModelDetailView({
 
         {/* Table Body */}
         <div className="divide-y divide-gray-700">
-          {filteredModels.map((model: any, index: number) => {
+          {models.map((model: any, index: number) => {
             const maxVram = gpuInfo?.gpus?.[0]?.vram_available_gb || gpuInfo?.total_memory_gb || 0;
             const isCompatible = model.vram_required_gb <= maxVram;
             const isHosting = hostingModels.has(model.id) || model.hosting || false;
@@ -992,7 +1100,7 @@ export default function ModelDetailView({
           })}
         </div>
 
-        {filteredModels.length === 0 && !loading && (
+        {models.length === 0 && !loading && (
           <div className="text-center py-12 text-gray-500">
             <p className="text-xl mb-2">No models found</p>
             <p>Try changing the filter or search term</p>

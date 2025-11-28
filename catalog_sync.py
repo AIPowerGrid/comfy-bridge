@@ -37,6 +37,16 @@ def sync_catalog_from_git(repo_path: str) -> bool:
         os.chdir(repo_path)
         
         try:
+            # Ensure Git trusts this path even if ownership differs (bind mounts)
+            try:
+                subprocess.run(
+                    ['git', 'config', '--global', '--add', 'safe.directory', repo_path],
+                    check=False,
+                    capture_output=True,
+                    text=True
+                )
+            except Exception:
+                pass
             # Try to pull latest changes, but don't fail if it's read-only
             try:
                 result = subprocess.run(['git', 'pull'], capture_output=True, text=True, check=True)
@@ -227,7 +237,7 @@ def validate_catalog(catalog_file: str) -> bool:
                 print(f"Model {model_id} must be an object")
                 return False
             
-            required_fields = ['name', 'type']
+            required_fields = ['type']
             for field in required_fields:
                 if field not in model_config:
                     print(f"Model {model_id} missing required field: {field}")
@@ -252,6 +262,9 @@ def sync_catalog() -> bool:
         catalog_file = Path(config['repository_path']) / config['catalog_file']
         if catalog_file.exists():
             return validate_catalog(str(catalog_file))
+        fallback_catalog = Path(config['repository_path']).parent / "comfy-bridge" / config['catalog_file']
+        if fallback_catalog.exists():
+            return validate_catalog(str(fallback_catalog))
     
     # Fallback to URL sync if git fails
     catalog_url = os.environ.get('CATALOG_URL')
