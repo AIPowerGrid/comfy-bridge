@@ -89,15 +89,34 @@ export async function getContainerLogs(containerName: string, lines: number = 10
   }
 }
 
-export async function restartDockerContainers(containerNames: string[]): Promise<boolean> {
+export async function restartDockerContainers(): Promise<{
+  stdout: string;
+  stderr: string;
+  command: string;
+  composeDir: string;
+}> {
   try {
-    for (const containerName of containerNames) {
-      await restartContainer(containerName);
-    }
-    return true;
-  } catch (error) {
+    // Get the compose directory (usually the project root)
+    const composeDir = process.cwd();
+
+    // Run docker-compose restart to restart all containers
+    const command = 'docker-compose restart';
+    const { stdout, stderr } = await execAsync(command, { cwd: composeDir });
+
+    return {
+      stdout: stdout || '',
+      stderr: stderr || '',
+      command,
+      composeDir,
+    };
+  } catch (error: any) {
     console.error('Failed to restart docker containers:', error);
-    return false;
+    throw {
+      stdout: '',
+      stderr: error?.stderr || error?.message || 'Unknown error',
+      command: 'docker-compose restart',
+      composeDir: process.cwd(),
+    };
   }
 }
 
