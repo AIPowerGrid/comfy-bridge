@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 
 export interface Toast {
   id: string;
-  type: 'success' | 'error' | 'info';
+  type: 'success' | 'error' | 'info' | 'warning';
   message: string;
   duration?: number;
 }
@@ -44,6 +44,10 @@ export function useToast() {
     return addToast({ type: 'info', message, duration });
   }, [addToast]);
 
+  const showWarning = useCallback((message: string, duration?: number) => {
+    return addToast({ type: 'warning', message, duration });
+  }, [addToast]);
+
   return {
     toasts,
     addToast,
@@ -51,5 +55,6 @@ export function useToast() {
     showSuccess,
     showError,
     showInfo,
+    showWarning,
   };
 }
