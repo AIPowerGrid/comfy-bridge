@@ -19,6 +19,10 @@ export interface ModelCatalog {
   installed_count: number;
 }
 
+export async function loadModelsData(): Promise<ModelCatalog> {
+  return getModelCatalog();
+}
+
 export async function getModelCatalog(): Promise<ModelCatalog> {
   try {
     const configPath = process.env.MODEL_CONFIGS_PATH || '/app/comfy-bridge/model_configs.json';

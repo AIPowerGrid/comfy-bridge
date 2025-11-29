@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { startDownload, updateProgress, completeDownload, updateDownloadMessage, failDownload, FileDownloadState, updateFileProgress, setFileStatus, setProcessId, getDownloadState } from '@/lib/downloadState';
+import { startDownload as createDownloadState } from '@/lib/downloadState';
 import { downloadsApiUrl } from '@/lib/serverEnv';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -49,7 +50,7 @@ export async function POST(request: Request): Promise<Response> {
     }
     
     // Start download state tracking with files
-    startDownload(models[0], files);
+    createDownloadState(models[0], files);
     
         // Call the comfy-bridge API to download models
         const stream = new ReadableStream({

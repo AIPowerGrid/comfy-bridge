@@ -89,6 +89,18 @@ export async function getContainerLogs(containerName: string, lines: number = 10
   }
 }
 
+export async function restartDockerContainers(containerNames: string[]): Promise<boolean> {
+  try {
+    for (const containerName of containerNames) {
+      await restartContainer(containerName);
+    }
+    return true;
+  } catch (error) {
+    console.error('Failed to restart docker containers:', error);
+    return false;
+  }
+}
+
 export async function isDockerRunning(): Promise<boolean> {
   try {
     await execAsync('docker info');
