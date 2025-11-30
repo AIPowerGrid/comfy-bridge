@@ -3,19 +3,29 @@ import { useState, useCallback } from 'react';
 export interface Toast {
   id: string;
   type: 'success' | 'error' | 'info' | 'warning';
+  title: string;
   message: string;
   duration?: number;
 }
 
+type ToastInput = {
+  type: Toast['type'];
+  title: string;
+  message?: string;
+  duration?: number;
+};
+
 export function useToast() {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  const addToast = useCallback((toast: Omit<Toast, 'id'>) => {
+  const addToast = useCallback((toast: ToastInput) => {
     const id = Math.random().toString(36).substring(2, 9);
     const newToast: Toast = {
       id,
-      duration: 5000,
-      ...toast,
+      type: toast.type,
+      title: toast.title,
+      message: toast.message ?? '',
+      duration: toast.duration ?? 5000,
     };
 
     setToasts((prev) => [...prev, newToast]);
@@ -48,8 +58,8 @@ export function useToast() {
       duration = maybeDuration;
     }
 
-    const message = detail ? `${title}: ${detail}` : title;
-    return addToast({ type, message, duration });
+    const message = detail ?? '';
+    return addToast({ type, title, message, duration });
   }, [addToast]);
 
   const showSuccess = useCallback((title: string, detailOrDuration?: string | number, maybeDuration?: number) => {
