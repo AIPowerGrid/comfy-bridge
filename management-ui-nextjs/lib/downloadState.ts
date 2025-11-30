@@ -9,6 +9,20 @@ export interface FileDownloadState {
   downloaded_mb: number;
 }
 
+export interface ModelDownloadState {
+  is_downloading?: boolean;
+  progress: number;
+  total_files: number;
+  completed_files: number;
+  message?: string;
+  speed?: string;
+  eta?: string;
+  files: FileDownloadState[];
+  error_message?: string;
+  status?: 'pending' | 'downloading' | 'completed' | 'failed';
+  processId?: number;
+}
+
 export interface DownloadProgress {
   id: string;
   modelId: string;
