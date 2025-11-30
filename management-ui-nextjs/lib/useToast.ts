@@ -32,21 +32,41 @@ export function useToast() {
     setToasts((prev) => prev.filter((toast) => toast.id !== id));
   }, []);
 
-  const showSuccess = useCallback((message: string, duration?: number) => {
-    return addToast({ type: 'success', message, duration });
+  const buildToast = useCallback((
+    type: Toast['type'],
+    title: string,
+    detailOrDuration?: string | number,
+    maybeDuration?: number
+  ) => {
+    let detail: string | undefined;
+    let duration: number | undefined;
+
+    if (typeof detailOrDuration === 'number') {
+      duration = detailOrDuration;
+    } else {
+      detail = detailOrDuration;
+      duration = maybeDuration;
+    }
+
+    const message = detail ? `${title}: ${detail}` : title;
+    return addToast({ type, message, duration });
   }, [addToast]);
 
-  const showError = useCallback((message: string, duration?: number) => {
-    return addToast({ type: 'error', message, duration });
-  }, [addToast]);
+  const showSuccess = useCallback((title: string, detailOrDuration?: string | number, maybeDuration?: number) => {
+    return buildToast('success', title, detailOrDuration, maybeDuration);
+  }, [buildToast]);
 
-  const showInfo = useCallback((message: string, duration?: number) => {
-    return addToast({ type: 'info', message, duration });
-  }, [addToast]);
+  const showError = useCallback((title: string, detailOrDuration?: string | number, maybeDuration?: number) => {
+    return buildToast('error', title, detailOrDuration, maybeDuration);
+  }, [buildToast]);
 
-  const showWarning = useCallback((message: string, duration?: number) => {
-    return addToast({ type: 'warning', message, duration });
-  }, [addToast]);
+  const showInfo = useCallback((title: string, detailOrDuration?: string | number, maybeDuration?: number) => {
+    return buildToast('info', title, detailOrDuration, maybeDuration);
+  }, [buildToast]);
+
+  const showWarning = useCallback((title: string, detailOrDuration?: string | number, maybeDuration?: number) => {
+    return buildToast('warning', title, detailOrDuration, maybeDuration);
+  }, [buildToast]);
 
   return {
     toasts,
