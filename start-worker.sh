@@ -155,7 +155,7 @@ fi
 echo "[6/6] Starting worker containers..."
 export DOCKER_BUILDKIT=1
 export COMPOSE_DOCKER_CLI_BUILD=1
-docker-compose up -d
+docker-compose up -d --build
 
 if [ $? -ne 0 ]; then
     echo ""
