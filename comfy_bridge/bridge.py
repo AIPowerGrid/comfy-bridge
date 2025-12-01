@@ -127,7 +127,7 @@ class ComfyUIBridge:
             r2_upload_url = job.get("r2_upload")
             if media_type == "video" and r2_upload_url:
                 logger.info("Uploading video to R2...")
-                await self.r2_uploader.upload_video(r2_upload_url, media_bytes)
+                await self.r2_uploader.upload_video(r2_upload_url, media_bytes, filename, media_type)
             
             # Build and submit payload
             payload = self.payload_builder.build_payload(

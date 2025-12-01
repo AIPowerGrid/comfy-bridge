@@ -14,6 +14,13 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 import time
 
+WAN_VAE_OVERRIDES = {
+    # Force Wan 2.2 workflows to use the matching 2.2 VAE
+    "wan2.2-t2v-a14b": "wan2.2_vae.safetensors",
+    "wan2.2-t2v-a14b-hq": "wan2.2_vae.safetensors",
+    "wan2.2_ti2v_5B": "wan2.2_vae.safetensors",
+}
+
 def load_catalog_config() -> Dict[str, Any]:
     """Load catalog configuration from environment"""
     return {
@@ -188,6 +195,9 @@ def convert_comprehensive_catalog(repo_path: str) -> bool:
                     # Add to simple catalog
                     simple_catalog[model_id] = simple_model
         
+        # Apply post-processing overrides for known problematic entries
+        apply_catalog_overrides(simple_catalog)
+
         # Write simple catalog
         output_path = Path(repo_path).parent / 'comfy-bridge' / 'model_configs.json'
         with open(output_path, 'w') as f:
@@ -323,6 +333,25 @@ def main():
     
     # Run periodic sync
     run_periodic_sync()
+
+def apply_catalog_overrides(catalog: Dict[str, Any]) -> None:
+    """Apply hard-coded fixes for models that need local overrides."""
+
+    def ensure_vae_entry(model: Dict[str, Any], filename: str) -> None:
+        files_list = model.setdefault("files", [])
+        filtered = [
+            entry for entry in files_list
+            if not (isinstance(entry, dict) and entry.get("file_type") == "vae")
+        ]
+        filtered.append({"path": filename, "file_type": "vae"})
+        model["files"] = filtered
+
+    for model_id, vae_filename in WAN_VAE_OVERRIDES.items():
+        model = catalog.get(model_id)
+        if not model:
+            continue
+        ensure_vae_entry(model, vae_filename)
+
 
 if __name__ == '__main__':
     main()
