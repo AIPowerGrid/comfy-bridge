@@ -1,36 +1,78 @@
 import json
 import os
+import copy
 import httpx
 import uuid
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple, List
 from .utils import generate_seed
 from .model_mapper import get_workflow_file
 from .config import Settings
+from .wan_assets import ensure_wan_symlinks
 
 logger = logging.getLogger(__name__)
 
 
 def detect_workflow_model_type(workflow: Dict[str, Any]) -> str:
     """Detect the model type (flux, wanvideo, sdxl, etc.) from workflow nodes"""
-    for node_id, node_data in workflow.items():
-        if not isinstance(node_data, dict):
-            continue
-        
-        class_type = node_data.get("class_type", "")
-        
-        # WanVideo workflows use WanVideo-specific nodes
-        if class_type in ["WanVideoModelLoader", "WanVideoVAELoader", "WanVideoSampler", 
-                          "WanVideoTextEmbedBridge", "WanVideoEmptyEmbeds", "WanVideoDecode"]:
-            return "wanvideo"
-        
-        # Flux workflows use DualCLIPLoader + UNETLoader + VAELoader
-        if class_type == "DualCLIPLoader":
-            return "flux"
-        
-        # SDXL workflows use CheckpointLoaderSimple
-        if class_type == "CheckpointLoaderSimple":
-            return "sdxl"
+    # Handle ComfyUI native format (has "nodes" array)
+    if isinstance(workflow, dict) and "nodes" in workflow:
+        nodes = workflow.get("nodes", [])
+        for node in nodes:
+            if not isinstance(node, dict):
+                continue
+            
+            class_type = node.get("type", "")
+            
+            # WanVideo workflows use WanVideo-specific or Hunyuan latent nodes
+            if class_type in [
+                "WanVideoModelLoader",
+                "WanVideoVAELoader",
+                "WanVideoSampler",
+                "WanVideoTextEmbedBridge",
+                "WanVideoEmptyEmbeds",
+                "WanVideoDecode",
+                "EmptyHunyuanLatentVideo",
+                "Wan22ImageToVideoLatent",
+            ]:
+                return "wanvideo"
+            
+            # Flux workflows use DualCLIPLoader + UNETLoader + VAELoader
+            if class_type == "DualCLIPLoader":
+                return "flux"
+            
+            # SDXL workflows use CheckpointLoaderSimple
+            if class_type == "CheckpointLoaderSimple":
+                return "sdxl"
+    
+    # Handle simple format (direct node objects)
+    else:
+        for node_id, node_data in workflow.items():
+            if not isinstance(node_data, dict):
+                continue
+            
+            class_type = node_data.get("class_type", "")
+            
+            # WanVideo workflows use WanVideo-specific or Hunyuan latent nodes
+            if class_type in [
+                "WanVideoModelLoader",
+                "WanVideoVAELoader",
+                "WanVideoSampler",
+                "WanVideoTextEmbedBridge",
+                "WanVideoEmptyEmbeds",
+                "WanVideoDecode",
+                "EmptyHunyuanLatentVideo",
+                "Wan22ImageToVideoLatent",
+            ]:
+                return "wanvideo"
+            
+            # Flux workflows use DualCLIPLoader + UNETLoader + VAELoader
+            if class_type == "DualCLIPLoader":
+                return "flux"
+            
+            # SDXL workflows use CheckpointLoaderSimple
+            if class_type == "CheckpointLoaderSimple":
+                return "sdxl"
     
     # Default to unknown if we can't detect
     return "unknown"
@@ -57,6 +99,21 @@ def is_model_compatible(model_name: str, model_type: str) -> bool:
     return False
 
 
+def _force_video_processing(job: Dict[str, Any], model_type: str) -> None:
+    """Video models cannot run through img2img flow – force img2vid semantics."""
+    if model_type != "wanvideo":
+        return
+
+    current_processing = job.get("source_processing")
+    if current_processing != "img2vid":
+        job["source_processing"] = "img2vid"
+        logger.info(
+            "Overriding source_processing for WanVideo job %s: %s -> img2vid",
+            job.get("id", "unknown"),
+            current_processing or "unset",
+        )
+
+
 async def validate_and_fix_model_filenames(
     workflow: Dict[str, Any], 
     available_models: Dict[str, Any]
@@ -65,8 +122,10 @@ async def validate_and_fix_model_filenames(
     
     Only replaces models with compatible model types (e.g., Flux with Flux, WanVideo with WanVideo).
     Fails if no compatible models are available.
+    
+    Handles both ComfyUI native format (nodes array) and simple format (dict of nodes).
     """
-    fixed_workflow = json.loads(json.dumps(workflow))  # Deep copy
+    fixed_workflow = copy.deepcopy(workflow)
     fixes_applied = []
     model_type = detect_workflow_model_type(workflow)
     
@@ -74,22 +133,111 @@ async def validate_and_fix_model_filenames(
     
     if model_type == "unknown":
         logger.warning("Could not detect workflow model type - proceeding with validation anyway")
+    if model_type == "wanvideo":
+        ensure_wan_symlinks()
     
-    for node_id, node_data in fixed_workflow.items():
-        if not isinstance(node_data, dict):
-            continue
+    # Helper to fetch loader options safely
+    def _get_loader_options(loader_key: str, sub_key: Optional[str] = None) -> List[str]:
+        raw = available_models.get(loader_key)
+        if not raw:
+            logger.warning(f"No loader data returned for {loader_key} - skipping strict validation for this loader")
+            return []
+        if sub_key and isinstance(raw, dict):
+            return raw.get(sub_key, []) or []
+        if isinstance(raw, list):
+            return raw
+        return []
+
+    # Handle ComfyUI native format (has "nodes" array)
+    if isinstance(workflow, dict) and "nodes" in workflow:
+        nodes = fixed_workflow.get("nodes", [])
+        for node in nodes:
+            if not isinstance(node, dict):
+                continue
             
-        class_type = node_data.get("class_type", "")
-        inputs = node_data.get("inputs", {})
+            node_id = node.get("id")
+            class_type = node.get("type", "")
+            
+            # Skip validation for WanVideo models in native format - they're handled differently
+            if model_type == "wanvideo":
+                continue
+            
+            # Handle Flux models in native format
+            if class_type == "DualCLIPLoader" and model_type == "flux":
+                widgets = node.get("widgets_values", [])
+                if isinstance(widgets, list) and len(widgets) >= 2:
+                    # widgets_values: [clip_name1, clip_name2, ...]
+                    clip1_options = _get_loader_options("DualCLIPLoader", "clip_name1")
+                    clip2_options = _get_loader_options("DualCLIPLoader", "clip_name2")
+                    
+                    if model_type == "flux":
+                        clip1_options = [m for m in clip1_options if is_model_compatible(m, "flux")]
+                        clip2_options = [m for m in clip2_options if is_model_compatible(m, "flux")]
+                    
+                    if not clip1_options:
+                        logger.debug("No clip_name1 options available for DualCLIPLoader - keeping existing value")
+                    elif widgets[0] not in clip1_options:
+                        old_clip1 = widgets[0]
+                        widgets[0] = clip1_options[0]
+                        fixes_applied.append(f"Node {node_id} clip_name1: {old_clip1} -> {widgets[0]}")
+                    
+                    if len(widgets) >= 2:
+                        if not clip2_options:
+                            logger.debug("No clip_name2 options available for DualCLIPLoader - keeping existing value")
+                        elif widgets[1] not in clip2_options:
+                            old_clip2 = widgets[1]
+                            widgets[1] = clip2_options[0]
+                            fixes_applied.append(f"Node {node_id} clip_name2: {old_clip2} -> {widgets[1]}")
+                    
+                    node["widgets_values"] = widgets
+            
+            elif class_type == "UNETLoader" and model_type == "flux":
+                widgets = node.get("widgets_values", [])
+                if isinstance(widgets, list) and len(widgets) >= 1:
+                    unet_options = _get_loader_options("UNETLoader")
+                    if model_type == "flux":
+                        unet_options = [m for m in unet_options if is_model_compatible(m, "flux")]
+                    
+                    if not unet_options:
+                        logger.debug("No UNETLoader options available - keeping existing value")
+                    elif widgets[0] not in unet_options:
+                        old_unet = widgets[0]
+                        widgets[0] = unet_options[0]
+                        fixes_applied.append(f"Node {node_id} unet_name: {old_unet} -> {widgets[0]}")
+                        node["widgets_values"] = widgets
+            
+            elif class_type == "VAELoader" and model_type == "flux":
+                widgets = node.get("widgets_values", [])
+                if isinstance(widgets, list) and len(widgets) >= 1:
+                    vae_options = _get_loader_options("VAELoader")
+                    if model_type == "flux":
+                        vae_options = [m for m in vae_options if is_model_compatible(m, "flux")]
+                    
+                    if not vae_options:
+                        logger.debug("No VAELoader options available - keeping existing value")
+                    elif widgets[0] not in vae_options:
+                        old_vae = widgets[0]
+                        widgets[0] = vae_options[0]
+                        fixes_applied.append(f"Node {node_id} vae_name: {old_vae} -> {widgets[0]}")
+                        node["widgets_values"] = widgets
+    
+    # Handle simple format (direct node objects)
+    else:
+        for node_id, node_data in fixed_workflow.items():
+            if not isinstance(node_data, dict):
+                continue
+                
+            class_type = node_data.get("class_type", "")
+            inputs = node_data.get("inputs", {})
         
         # Fix DualCLIPLoader (Flux models)
         if class_type == "DualCLIPLoader":
             if model_type != "flux":
                 logger.warning(f"Node {node_id}: DualCLIPLoader found but workflow type is {model_type} - may be incompatible")
             
-            dual_clip_models = available_models.get("DualCLIPLoader", {})
-            clip1_options = dual_clip_models.get("clip_name1", [])
-            clip2_options = dual_clip_models.get("clip_name2", [])
+            dual_clip_models = available_models.get("DualCLIPLoader") or {}
+            clip1_options = dual_clip_models.get("clip_name1", []) if isinstance(dual_clip_models, dict) else []
+            clip2_options = dual_clip_models.get("clip_name2", []) if isinstance(dual_clip_models, dict) else []
             
             # Filter to compatible models only
             if model_type == "flux":
@@ -100,13 +248,7 @@ async def validate_and_fix_model_filenames(
             if "clip_name1" in inputs:
                 current_clip1 = inputs.get("clip_name1")
                 if not clip1_options:
-                    error_msg = (
-                        f"Node {node_id}: No compatible Flux CLIP models available for DualCLIPLoader clip_name1. "
-                        f"Workflow requires '{current_clip1}' but no Flux-compatible models are installed. "
-                        f"Available models are for different model types (WanVideo, etc.)"
-                    )
-                    logger.error(error_msg)
-                    raise ValueError(error_msg)
+                    logger.debug("No clip_name1 options available for DualCLIPLoader – keeping workflow value")
                 elif current_clip1 not in clip1_options:
                     new_clip1 = clip1_options[0]
                     logger.warning(
@@ -120,13 +262,7 @@ async def validate_and_fix_model_filenames(
             if "clip_name2" in inputs:
                 current_clip2 = inputs.get("clip_name2")
                 if not clip2_options:
-                    error_msg = (
-                        f"Node {node_id}: No compatible Flux CLIP models available for DualCLIPLoader clip_name2. "
-                        f"Workflow requires '{current_clip2}' but no Flux-compatible models are installed. "
-                        f"Available models are for different model types (WanVideo, etc.)"
-                    )
-                    logger.error(error_msg)
-                    raise ValueError(error_msg)
+                    logger.debug("No clip_name2 options available for DualCLIPLoader – keeping workflow value")
                 elif current_clip2 not in clip2_options:
                     new_clip2 = clip2_options[0]
                     logger.warning(
@@ -141,7 +277,7 @@ async def validate_and_fix_model_filenames(
             if model_type != "flux":
                 logger.warning(f"Node {node_id}: UNETLoader found but workflow type is {model_type} - may be incompatible")
             
-            unet_options = available_models.get("UNETLoader", [])
+            unet_options = available_models.get("UNETLoader") or []
             
             # Filter to compatible models only
             if model_type == "flux":
@@ -150,13 +286,7 @@ async def validate_and_fix_model_filenames(
             if "unet_name" in inputs:
                 current_unet = inputs.get("unet_name")
                 if not unet_options:
-                    error_msg = (
-                        f"Node {node_id}: No compatible Flux UNET models available. "
-                        f"Workflow requires '{current_unet}' but no Flux-compatible models are installed. "
-                        f"Available models are for different model types (WanVideo, etc.)"
-                    )
-                    logger.error(error_msg)
-                    raise ValueError(error_msg)
+                    logger.debug("No UNETLoader options available – keeping workflow value")
                 elif current_unet not in unet_options:
                     new_unet = unet_options[0]
                     logger.warning(
@@ -171,7 +301,7 @@ async def validate_and_fix_model_filenames(
             if model_type != "flux":
                 logger.warning(f"Node {node_id}: VAELoader found but workflow type is {model_type} - may be incompatible")
             
-            vae_options = available_models.get("VAELoader", [])
+            vae_options = available_models.get("VAELoader") or []
             
             # Filter to compatible models only
             if model_type == "flux":
@@ -180,13 +310,7 @@ async def validate_and_fix_model_filenames(
             if "vae_name" in inputs:
                 current_vae = inputs.get("vae_name")
                 if not vae_options:
-                    error_msg = (
-                        f"Node {node_id}: No compatible Flux VAE models available. "
-                        f"Workflow requires '{current_vae}' but no Flux-compatible models are installed. "
-                        f"Available models are for different model types (WanVideo, etc.)"
-                    )
-                    logger.error(error_msg)
-                    raise ValueError(error_msg)
+                    logger.debug("No VAELoader options available – keeping workflow value")
                 elif current_vae not in vae_options:
                     new_vae = vae_options[0]
                     logger.warning(
@@ -212,6 +336,58 @@ def map_sampler_name(api_sampler: Optional[str]) -> Optional[str]:
     if api_sampler.startswith('k_'):
         return api_sampler[2:]
     return api_sampler
+
+
+def map_wanvideo_scheduler(scheduler: Optional[str]) -> str:
+    """Map scheduler values to valid WanVideoSampler schedulers.
+    
+    Valid schedulers: 'unipc', 'unipc/beta', 'dpm++', 'dpm++/beta', 'dpm++_sde', 
+    'dpm++_sde/beta', 'euler', 'euler/beta', 'longcat_distill_euler', 'deis', 
+    'lcm', 'lcm/beta', 'res_multistep', 'flowmatch_causvid', 'flowmatch_distill', 
+    'flowmatch_pusa', 'multitalk', 'sa_ode_stable', 'rcm'
+    
+    Default: 'unipc'
+    """
+    if not scheduler:
+        return "unipc"
+    
+    scheduler_lower = scheduler.lower()
+    
+    # Valid schedulers - return as-is
+    valid_schedulers = [
+        'unipc', 'unipc/beta', 'dpm++', 'dpm++/beta', 'dpm++_sde', 'dpm++_sde/beta',
+        'euler', 'euler/beta', 'longcat_distill_euler', 'deis', 'lcm', 'lcm/beta',
+        'res_multistep', 'flowmatch_causvid', 'flowmatch_distill', 'flowmatch_pusa',
+        'multitalk', 'sa_ode_stable', 'rcm'
+    ]
+    
+    if scheduler in valid_schedulers:
+        return scheduler
+    
+    # Map invalid schedulers to valid ones
+    scheduler_mapping = {
+        'dpmpp_3m_sde_gpu': 'dpm++_sde',
+        'dpmpp_3m_sde': 'dpm++_sde',
+        'dpmpp_2m_sde': 'dpm++_sde',
+        'dpmpp_sde': 'dpm++_sde',
+        'dpmpp_2m': 'dpm++',
+        'dpmpp_3m': 'dpm++',
+        'dpm_2m': 'dpm++',
+        'dpm_2m_sde': 'dpm++_sde',
+        'normal': 'unipc',
+        'karras': 'unipc',
+        'simple': 'unipc',
+        'exponential': 'unipc',
+    }
+    
+    mapped = scheduler_mapping.get(scheduler_lower)
+    if mapped:
+        logger.warning(f"Mapped invalid WanVideo scheduler '{scheduler}' to '{mapped}'")
+        return mapped
+    
+    # Default fallback
+    logger.warning(f"Unknown WanVideo scheduler '{scheduler}', using default 'unipc'")
+    return "unipc"
 
 
 async def download_image(url: str, filename: str) -> str:
@@ -255,14 +431,14 @@ def load_workflow_file(workflow_filename: str) -> Dict[str, Any]:
         if not os.path.exists(workflow_path):
             raise FileNotFoundError(f"Workflow file not found: {workflow_path}")
 
-    with open(workflow_path, "r") as f:
+    with open(workflow_path, "r", encoding="utf-8") as f:
         data = json.load(f)
         
     # Validate workflow has actual model file names, not placeholders
     _validate_workflow_model_names(data, workflow_filename)
     
     # Return a deep copy so callers can safely mutate without caching stale fields
-    return json.loads(json.dumps(data))
+    return copy.deepcopy(data)
 
 
 def _validate_workflow_model_names(workflow: Dict[str, Any], filename: str) -> None:
@@ -271,28 +447,39 @@ def _validate_workflow_model_names(workflow: Dict[str, Any], filename: str) -> N
         "CheckpointLoaderSimple": "ckpt_name",
         "UNETLoader": "unet_name",
         "CLIPLoader": "clip_name",
-        "VAELoader": "vae_name"
+        "VAELoader": "vae_name",
+        "WanVideoModelLoader": "model",
+        "WanVideoVAELoader": "model_name"
     }
     
     if isinstance(workflow, dict) and "nodes" in workflow:
+        # ComfyUI native format - nodes array
         nodes = workflow.get("nodes", [])
         for node in nodes:
             if not isinstance(node, dict):
                 continue
             class_type = node.get("type", "")
             if class_type in model_fields:
-                model_name = node.get("inputs", {}).get(model_fields[class_type], "")
-                if model_name in placeholders:
-                    logger.warning(f"Workflow {filename} has placeholder '{model_name}' - export from ComfyUI with actual model files")
+                # In ComfyUI native format, model names are in widgets_values[0], not inputs
+                # inputs is always a list/array in ComfyUI native format, never a dict
+                widgets = node.get("widgets_values", [])
+                if isinstance(widgets, list) and len(widgets) > 0:
+                    model_name = widgets[0]
+                    if isinstance(model_name, str) and model_name in placeholders:
+                        logger.warning(f"Workflow {filename} node {node.get('id')} has placeholder '{model_name}' - export from ComfyUI with actual model files")
     else:
+        # Simple format - direct node objects
         for node_id, node_data in workflow.items():
             if not isinstance(node_data, dict):
                 continue
             class_type = node_data.get("class_type", "")
             if class_type in model_fields:
-                model_name = node_data.get("inputs", {}).get(model_fields[class_type], "")
-                if model_name in placeholders:
-                    logger.warning(f"Workflow {filename} node {node_id} has placeholder '{model_name}' - export from ComfyUI with actual model files")
+                inputs = node_data.get("inputs", {})
+                if isinstance(inputs, dict):
+                    field_name = model_fields[class_type]
+                    model_name = inputs.get(field_name, "")
+                    if isinstance(model_name, str) and model_name in placeholders:
+                        logger.warning(f"Workflow {filename} node {node_id} has placeholder '{model_name}' - export from ComfyUI with actual model files")
 
 
 async def process_workflow(
@@ -307,7 +494,18 @@ async def process_workflow(
     logger.debug(f"Job negative_prompt: {payload.get('negative_prompt')}")
 
     # Make a deep copy to avoid modifying the original
-    processed_workflow = json.loads(json.dumps(workflow))
+    processed_workflow = copy.deepcopy(workflow)
+    model_type = detect_workflow_model_type(processed_workflow)
+    if model_type == "unknown":
+        model_name_lower = (job.get("model") or "").lower()
+        if "wan" in model_name_lower:
+            model_type = "wanvideo"
+        elif "flux" in model_name_lower:
+            model_type = "flux"
+        elif "sdxl" in model_name_lower or "xl" in model_name_lower:
+            model_type = "sdxl"
+    logger.debug(f"Processing workflow model type: {model_type}")
+    _force_video_processing(job, model_type)
 
     # Handle source image for img2img workflows
     source_image_filename = None
@@ -343,15 +541,42 @@ async def process_workflow(
     if not payload_scheduler and payload.get("karras") is not None:
         payload_scheduler = "karras" if payload.get("karras") else "normal"
     payload_denoise = payload.get("denoising_strength") or payload.get("denoise")
+    
+    # Validate payload values to prevent applying values that are too low
+    # Minimum thresholds for quality
+    MIN_STEPS = 10  # Minimum steps for reasonable quality
+    MIN_CFG = 3.0   # Minimum CFG for reasonable quality
+    
+    if payload_steps is not None and payload_steps < MIN_STEPS:
+        logger.warning(f"Payload steps ({payload_steps}) is below minimum ({MIN_STEPS}), ignoring payload value")
+        payload_steps = None
+    
+    if payload_cfg is not None and payload_cfg < MIN_CFG:
+        logger.warning(f"Payload cfg ({payload_cfg}) is below minimum ({MIN_CFG}), ignoring payload value")
+        payload_cfg = None
 
     def _apply_ksampler_dict(inputs: Dict[str, Any]) -> Dict[str, Any]:
+        # Only apply steps if payload value is higher than workflow default
         if payload_steps is not None and "steps" in inputs:
-            inputs["steps"] = payload_steps
+            current_steps = inputs.get("steps")
+            if current_steps is None or payload_steps >= current_steps:
+                inputs["steps"] = payload_steps
+            else:
+                logger.warning(f"KSampler: Ignoring payload steps {payload_steps} (workflow default {current_steps} is higher)")
+        # Only apply cfg if payload value is higher than workflow default
         if payload_cfg is not None:
             if "cfg" in inputs:
-                inputs["cfg"] = payload_cfg
+                current_cfg = inputs.get("cfg")
+                if current_cfg is None or payload_cfg >= current_cfg:
+                    inputs["cfg"] = payload_cfg
+                else:
+                    logger.warning(f"KSampler: Ignoring payload cfg {payload_cfg} (workflow default {current_cfg} is higher)")
             elif "cfg_scale" in inputs:
-                inputs["cfg_scale"] = payload_cfg
+                current_cfg = inputs.get("cfg_scale")
+                if current_cfg is None or payload_cfg >= current_cfg:
+                    inputs["cfg_scale"] = payload_cfg
+                else:
+                    logger.warning(f"KSampler: Ignoring payload cfg_scale {payload_cfg} (workflow default {current_cfg} is higher)")
         if payload_sampler:
             inputs["sampler_name"] = payload_sampler
         if payload_scheduler and "scheduler" in inputs:
@@ -366,10 +591,20 @@ async def process_workflow(
         if not isinstance(widgets, list):
             return widgets
         # seed is handled elsewhere; respect only advanced params here
+        # Only apply steps if payload value is higher than workflow default
         if payload_steps is not None and len(widgets) >= 2:
-            widgets[1] = payload_steps
+            current_steps = widgets[1] if len(widgets) > 1 else None
+            if current_steps is None or payload_steps >= current_steps:
+                widgets[1] = payload_steps
+            else:
+                logger.warning(f"KSampler widgets: Ignoring payload steps {payload_steps} (workflow default {current_steps} is higher)")
+        # Only apply cfg if payload value is higher than workflow default
         if payload_cfg is not None and len(widgets) >= 3:
-            widgets[2] = payload_cfg
+            current_cfg = widgets[2] if len(widgets) > 2 else None
+            if current_cfg is None or payload_cfg >= current_cfg:
+                widgets[2] = payload_cfg
+            else:
+                logger.warning(f"KSampler widgets: Ignoring payload cfg {payload_cfg} (workflow default {current_cfg} is higher)")
         if payload_sampler and len(widgets) >= 4:
             widgets[3] = payload_sampler
         if payload_scheduler and len(widgets) >= 5:
@@ -490,6 +725,130 @@ async def process_workflow(
                     widgets[0] = fps
                     node["widgets_values"] = widgets
                     logger.debug(f"Updated CreateVideo node fps to {fps}")
+            
+            # Handle UNETLoader nodes - model filename is in widgets_values[0] for ComfyUI native format
+            elif class_type == "UNETLoader":
+                # UNETLoader model filename is in widgets_values[0]
+                # The workflow files already have the correct model names, so we don't need to change them
+                # But we should validate they exist if needed
+                if isinstance(widgets, list) and len(widgets) >= 1:
+                    current_model = widgets[0]
+                    logger.debug(f"UNETLoader node {node.get('id')}: Using model '{current_model}'")
+                    # Keep the existing model name from the workflow
+                    node["widgets_values"] = widgets
+            
+            # Handle WanVideoSampler nodes - validate scheduler and apply parameters (ComfyUI native format)
+            elif class_type == "WanVideoSampler":
+                # In native format, scheduler might be in inputs dict
+                if isinstance(inputs, dict):
+                    node_id_str = str(node.get('id', 'unknown'))
+                    
+                    # Apply scheduler from payload if provided, otherwise validate workflow scheduler
+                    if payload_scheduler and "scheduler" in inputs:
+                        valid_scheduler = map_wanvideo_scheduler(payload_scheduler)
+                        logger.info(f"Node {node_id_str}: Applying scheduler from payload: '{payload_scheduler}' -> '{valid_scheduler}'")
+                        inputs["scheduler"] = valid_scheduler
+                    elif "scheduler" in inputs:
+                        current_scheduler = inputs.get("scheduler")
+                        valid_scheduler = map_wanvideo_scheduler(current_scheduler)
+                        if current_scheduler != valid_scheduler:
+                            logger.info(f"Node {node_id_str}: Validating workflow scheduler: '{current_scheduler}' -> '{valid_scheduler}'")
+                            inputs["scheduler"] = valid_scheduler
+                    
+                    # Apply parameters from payload - only if they're reasonable
+                    if payload_steps is not None and "steps" in inputs:
+                        old_steps = inputs.get("steps")
+                        # Only apply if payload steps is higher than workflow default
+                        if old_steps is None or payload_steps >= old_steps:
+                            inputs["steps"] = payload_steps
+                            logger.info(f"Node {node_id_str}: Applied steps: {old_steps} -> {payload_steps}")
+                        else:
+                            logger.warning(f"Node {node_id_str}: Ignoring payload steps {payload_steps} (workflow default {old_steps} is higher)")
+                    if payload_cfg is not None and "cfg" in inputs:
+                        old_cfg = inputs.get("cfg")
+                        # Only apply if payload cfg is higher than workflow default
+                        if old_cfg is None or payload_cfg >= old_cfg:
+                            inputs["cfg"] = payload_cfg
+                            logger.info(f"Node {node_id_str}: Applied cfg: {old_cfg} -> {payload_cfg}")
+                        else:
+                            logger.warning(f"Node {node_id_str}: Ignoring payload cfg {payload_cfg} (workflow default {old_cfg} is higher)")
+                    if payload.get("shift") is not None and "shift" in inputs:
+                        old_shift = inputs.get("shift")
+                        inputs["shift"] = payload.get("shift")
+                        logger.info(f"Node {node_id_str}: Applied shift: {old_shift} -> {payload.get('shift')}")
+                    if payload.get("riflex_freq_index") is not None and "riflex_freq_index" in inputs:
+                        old_riflex = inputs.get("riflex_freq_index")
+                        inputs["riflex_freq_index"] = payload.get("riflex_freq_index")
+                        logger.info(f"Node {node_id_str}: Applied riflex_freq_index: {old_riflex} -> {payload.get('riflex_freq_index')}")
+                    
+                    node["inputs"] = inputs
+            
+            # Handle BasicScheduler nodes - update steps and scheduler via widgets_values
+            elif class_type == "BasicScheduler":
+                # BasicScheduler widgets_values: [scheduler, steps, denoise]
+                if isinstance(widgets, list) and len(widgets) >= 3:
+                    current_steps = widgets[1] if len(widgets) > 1 else None
+                    scheduler_value = widgets[0] if widgets else None
+
+                    # Only adjust scheduler for non-WanVideo workflows. WanVideo pipelines manage
+                    # schedulers inside their dedicated sampler nodes.
+                    if model_type != "wanvideo":
+                        valid_basic_schedulers = [
+                            "simple", "sgm_uniform", "karras", "exponential",
+                            "ddim_uniform", "beta", "normal", "linear_quadratic",
+                            "kl_optimal"
+                        ]
+                        if payload_scheduler:
+                            if payload_scheduler in valid_basic_schedulers:
+                                widgets[0] = payload_scheduler
+                                logger.debug(f"BasicScheduler node {node.get('id')}: Applied scheduler '{payload_scheduler}'")
+                            else:
+                                logger.warning(
+                                    f"BasicScheduler node {node.get('id')}: Ignoring unsupported scheduler '{payload_scheduler}'"
+                                )
+                        elif scheduler_value not in valid_basic_schedulers:
+                            logger.warning(
+                                f"BasicScheduler node {node.get('id')}: Scheduler '{scheduler_value}' not supported by BasicScheduler, defaulting to 'simple'"
+                            )
+                            widgets[0] = "simple"
+
+                    # Only apply steps if payload value is reasonable and higher than current
+                    if payload_steps is not None:
+                        if current_steps is None or payload_steps >= current_steps:
+                            widgets[1] = payload_steps
+                            logger.info(f"BasicScheduler node {node.get('id')}: Updated steps from {current_steps} to {payload_steps}")
+                        else:
+                            logger.warning(f"BasicScheduler node {node.get('id')}: Ignoring payload steps {payload_steps} (workflow default {current_steps} is higher)")
+                    node["widgets_values"] = widgets
+            
+            # Handle SamplerCustom nodes - update cfg via widgets_values
+            elif class_type == "SamplerCustom":
+                # SamplerCustom widgets_values: [add_noise, noise_seed, seed_type, cfg]
+                if isinstance(widgets, list) and len(widgets) >= 4:
+                    current_cfg = widgets[3] if len(widgets) > 3 else None
+                    # Only apply cfg if payload value is reasonable and higher than current
+                    if payload_cfg is not None:
+                        if current_cfg is None or payload_cfg >= current_cfg:
+                            widgets[3] = payload_cfg
+                            logger.info(f"SamplerCustom node {node.get('id')}: Updated cfg from {current_cfg} to {payload_cfg}")
+                        else:
+                            logger.warning(f"SamplerCustom node {node.get('id')}: Ignoring payload cfg {payload_cfg} (workflow default {current_cfg} is higher)")
+                if isinstance(widgets, list) and len(widgets) >= 2:
+                    widgets[1] = seed  # Update noise_seed
+                    node["widgets_values"] = widgets
+            
+            # Handle WanVideoEmptyEmbeds nodes - update dimensions and frame count (ComfyUI native format)
+            elif class_type == "WanVideoEmptyEmbeds":
+                if isinstance(inputs, dict):
+                    if payload.get("width") and "width" in inputs:
+                        inputs["width"] = payload.get("width")
+                    if payload.get("height") and "height" in inputs:
+                        inputs["height"] = payload.get("height")
+                    if payload.get("length") or payload.get("video_length"):
+                        num_frames = payload.get("length") or payload.get("video_length")
+                        if "num_frames" in inputs:
+                            inputs["num_frames"] = num_frames
+                    node["inputs"] = inputs
 
             # Handle LoadImageOutput nodes for source images
             elif class_type == "LoadImageOutput":
@@ -674,8 +1033,157 @@ async def process_workflow(
                 if source_image_filename and "image" in inputs:
                     inputs["image"] = source_image_filename
                     logger.debug(f"Updated LoadImageOutput node {node_id} to use: {source_image_filename}")
+            
+            # Handle WanVideoSampler nodes - validate scheduler and apply parameters
+            elif class_type == "WanVideoSampler":
+                # Apply scheduler from payload if provided, otherwise validate workflow scheduler
+                if payload_scheduler and "scheduler" in inputs:
+                    valid_scheduler = map_wanvideo_scheduler(payload_scheduler)
+                    logger.info(f"Node {node_id}: Applying scheduler from payload: '{payload_scheduler}' -> '{valid_scheduler}'")
+                    inputs["scheduler"] = valid_scheduler
+                elif "scheduler" in inputs:
+                    # Validate workflow's scheduler even if payload doesn't provide one
+                    current_scheduler = inputs.get("scheduler")
+                    valid_scheduler = map_wanvideo_scheduler(current_scheduler)
+                    if current_scheduler != valid_scheduler:
+                        logger.info(f"Node {node_id}: Validating workflow scheduler: '{current_scheduler}' -> '{valid_scheduler}'")
+                        inputs["scheduler"] = valid_scheduler
+                
+                # Apply parameters from payload (only override if provided)
+                if payload_steps is not None and "steps" in inputs:
+                    old_steps = inputs.get("steps")
+                    inputs["steps"] = payload_steps
+                    logger.info(f"Node {node_id}: Applied steps: {old_steps} -> {payload_steps}")
+                if payload_cfg is not None and "cfg" in inputs:
+                    old_cfg = inputs.get("cfg")
+                    inputs["cfg"] = payload_cfg
+                    logger.info(f"Node {node_id}: Applied cfg: {old_cfg} -> {payload_cfg}")
+                if "seed" in inputs:
+                    inputs["seed"] = seed
+                if payload.get("shift") is not None and "shift" in inputs:
+                    old_shift = inputs.get("shift")
+                    inputs["shift"] = payload.get("shift")
+                    logger.info(f"Node {node_id}: Applied shift: {old_shift} -> {payload.get('shift')}")
+                if payload.get("riflex_freq_index") is not None and "riflex_freq_index" in inputs:
+                    old_riflex = inputs.get("riflex_freq_index")
+                    inputs["riflex_freq_index"] = payload.get("riflex_freq_index")
+                    logger.info(f"Node {node_id}: Applied riflex_freq_index: {old_riflex} -> {payload.get('riflex_freq_index')}")
+                node_data["inputs"] = inputs
+            
+            # Handle WanVideoEmptyEmbeds nodes - update dimensions and frame count
+            # NOTE: Text-to-video models (t2v) don't support img2img properly.
+            # Only image-to-video models (ti2v) can handle source images.
+            # VAEEncode outputs latents, not the image_embeds format that WanVideoSampler expects.
+            elif class_type == "WanVideoEmptyEmbeds":
+                # Check if this is an img2img job
+                if job.get("source_processing") == "img2img" and source_image_filename:
+                    model_name = job.get("model", "").lower()
+                    # Check if this is a text-to-video model (t2v) vs image-to-video (ti2v)
+                    if "t2v" in model_name and "ti2v" not in model_name:
+                        # This is a text-to-video only model - img2img won't work properly
+                        logger.warning(
+                            f"Model {job.get('model')} is text-to-video only (t2v), not image-to-video (ti2v). "
+                            f"Ignoring source image and using empty embeddings for text-to-video generation."
+                        )
+                        # Fall through to standard text-to-video handling
+                    else:
+                        # This might be an image-to-video model - but we still can't properly convert
+                        # WanVideoEmptyEmbeds to image embeddings without a proper encoder node
+                        logger.warning(
+                            f"img2img requested for WanVideo model, but WanVideoEmptyEmbeds cannot be "
+                            f"converted to image embeddings. Using empty embeddings (text-to-video mode)."
+                        )
+                        # Fall through to standard text-to-video handling
+                
+                # Standard text-to-video: update dimensions
+                if payload.get("width") and "width" in inputs:
+                    logger.debug(f"Node {node_id}: Setting width from {inputs.get('width')} to {payload.get('width')}")
+                    inputs["width"] = payload.get("width")
+                if payload.get("height") and "height" in inputs:
+                    logger.debug(f"Node {node_id}: Setting height from {inputs.get('height')} to {payload.get('height')}")
+                    inputs["height"] = payload.get("height")
+                if payload.get("length") or payload.get("video_length"):
+                    num_frames = payload.get("length") or payload.get("video_length")
+                    if "num_frames" in inputs:
+                        logger.debug(f"Node {node_id}: Setting num_frames from {inputs.get('num_frames')} to {num_frames}")
+                        inputs["num_frames"] = num_frames
+                node_data["inputs"] = inputs
 
     return processed_workflow
+
+
+def convert_native_workflow_to_simple(workflow: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Convert ComfyUI native workflow format (nodes array + links) to the simple prompt format.
+    This is required because the /prompt API expects the simple format.
+    """
+    if not isinstance(workflow, Dict) or "nodes" not in workflow:
+        return workflow
+
+    nodes = workflow.get("nodes", [])
+    links = workflow.get("links", [])
+
+    # Build lookup for link_id -> (source_node_id, source_slot_index)
+    link_map: Dict[Any, Tuple[str, int]] = {}
+    for link in links:
+        if not isinstance(link, list) or len(link) < 4:
+            continue
+        link_id = link[0]
+        from_node = link[1]
+        from_slot = link[2]
+        link_map[link_id] = (str(from_node), from_slot)
+
+    simple_prompt: Dict[str, Dict[str, Any]] = {}
+    skip_node_types = {"Note"}
+
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
+
+        node_id = node.get("id")
+        if node_id is None:
+            continue
+        node_id_str = str(node_id)
+        class_type = node.get("type")
+
+        if class_type in skip_node_types:
+            logger.debug(f"Skipping utility node '{class_type}' with id {node_id_str}")
+            continue
+
+        node_inputs: Dict[str, Any] = {}
+        widgets_values = node.get("widgets_values", [])
+        widget_index = 0
+
+        for input_entry in node.get("inputs", []):
+            if not isinstance(input_entry, dict):
+                continue
+
+            input_name = input_entry.get("name")
+            if not input_name:
+                continue
+
+            link_id = input_entry.get("link")
+            if link_id is not None and link_id in link_map:
+                node_inputs[input_name] = [link_map[link_id][0], link_map[link_id][1]]
+                continue
+
+            # If the input is not linked, attempt to pull from widgets_values
+            if widget_index < len(widgets_values):
+                node_inputs[input_name] = widgets_values[widget_index]
+                widget_index += 1
+            else:
+                # Fall back to default value if provided
+                node_inputs[input_name] = input_entry.get("value")
+
+        simple_prompt[node_id_str] = {
+            "class_type": class_type,
+            "inputs": node_inputs,
+        }
+
+        if "_meta" in node:
+            simple_prompt[node_id_str]["_meta"] = node["_meta"]
+
+    return simple_prompt
 
 
 async def build_workflow(job: Dict[str, Any]) -> Dict[str, Any]:

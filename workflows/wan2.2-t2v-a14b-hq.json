@@ -13,23 +13,23 @@
         "46",
         0
       ],
-      "steps": 38,
+      "steps": 40,
       "cfg": 7.5,
-      "shift": 4,
-      "seed": 898471028164125,
-      "scheduler": "dpmpp_3m_sde_gpu",
+      "shift": 12,
+      "seed": 987654321,
+      "scheduler": "unipc",
       "force_offload": true,
       "riflex_freq_index": 0,
       "rope_function": "comfy"
     },
     "class_type": "WanVideoSampler",
     "_meta": {
-      "title": "WanVideoSampler (Extreme Quality Optimized)"
+      "title": "WanVideoSampler (HQ)"
     }
   },
   "6": {
     "inputs": {
-      "text": "A high quality video",
+      "text": "hyper-detailed cinematic masterpiece, award-winning lighting, volumetric fog, intricate environment, 8k",
       "clip": [
         "38",
         0
@@ -42,7 +42,7 @@
   },
   "7": {
     "inputs": {
-      "text": "low quality, blurry, flicker, jitter, unstable motion, warped frames, incorrect reflections, noise, compression artifacts, oversharpen, deformed anatomy, bad motion smoothing, duplicate limbs, ghosting, bad depth, overexposed, undersaturated, gradient banding, texture crawling, temporal inconsistency, motionless frame, poor lighting, bad shadows, fog artifacts",
+      "text": "low quality, blurry, artifacts, repeating frames, bad anatomy, noisy, flicker",
       "clip": [
         "38",
         0
@@ -50,7 +50,7 @@
     },
     "class_type": "CLIPTextEncode",
     "_meta": {
-      "title": "CLIP Text Encode (Negative Prompt – Quality Focused)"
+      "title": "CLIP Text Encode (Negative Prompt)"
     }
   },
   "8": {
@@ -63,11 +63,11 @@
         "39",
         0
       ],
-      "enable_vae_tiling": false,
-      "tile_x": 512,
-      "tile_y": 512,
-      "tile_stride_x": 256,
-      "tile_stride_y": 256,
+      "enable_vae_tiling": true,
+      "tile_x": 448,
+      "tile_y": 448,
+      "tile_stride_x": 224,
+      "tile_stride_y": 224,
       "normalization": "default"
     },
     "class_type": "WanVideoDecode",
@@ -77,15 +77,15 @@
   },
   "22": {
     "inputs": {
-      "model": "wan2.2_ti2v_5B_fp16.safetensors",
-      "base_precision": "fp16",
-      "load_device": "main_device",
-      "quantization": "disabled",
+      "model": "wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors",
+      "base_precision": "bf16",
+      "load_device": "offload_device",
+      "quantization": "fp8_e4m3fn_scaled",
       "attention_mode": "sdpa"
     },
     "class_type": "WanVideoModelLoader",
     "_meta": {
-      "title": "WanVideoModelLoader (WAN2.2 T2V 5B FP16)"
+      "title": "WanVideoModelLoader"
     }
   },
   "38": {
@@ -96,17 +96,17 @@
     },
     "class_type": "CLIPLoader",
     "_meta": {
-      "title": "Load CLIP (WAN / UMT5 XXL)"
+      "title": "Load CLIP"
     }
   },
   "39": {
     "inputs": {
-      "model_name": "wan2.2_vae.safetensors",
+      "model_name": "wan_2.1_vae.safetensors",
       "precision": "bf16"
     },
     "class_type": "WanVideoVAELoader",
     "_meta": {
-      "title": "WanVideoVAELoader (WAN2.2 FP16 Optimized)"
+      "title": "Load Wan VAE"
     }
   },
   "46": {
@@ -127,18 +127,18 @@
   },
   "55": {
     "inputs": {
-      "width": 1024,
-      "height": 576,
-      "num_frames": 120
+      "width": 1536,
+      "height": 864,
+      "num_frames": 97
     },
     "class_type": "WanVideoEmptyEmbeds",
     "_meta": {
-      "title": "WanVideoEmptyEmbeds (HQ, 5s @ 24fps)"
+      "title": "WanVideoEmptyEmbeds"
     }
   },
   "57": {
     "inputs": {
-      "fps": 24,
+      "fps": 18,
       "images": [
         "8",
         0
@@ -146,7 +146,7 @@
     },
     "class_type": "CreateVideo",
     "_meta": {
-      "title": "Create Video (24 FPS Cinematic)"
+      "title": "Create Video"
     }
   },
   "58": {
@@ -165,3 +165,4 @@
     }
   }
 }
+

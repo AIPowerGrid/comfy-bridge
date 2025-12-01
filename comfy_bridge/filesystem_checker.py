@@ -8,6 +8,9 @@ from .config import Settings
 
 logger = logging.getLogger(__name__)
 
+# Constants
+MIN_VIDEO_SIZE_BYTES = 100 * 1024  # 100KB minimum for valid video file
+
 
 class FilesystemChecker:
     def __init__(self, output_dir: str = None):
@@ -50,7 +53,7 @@ class FilesystemChecker:
             media_bytes = f.read()
         
         # Validate file size
-        if len(media_bytes) < 100 * 1024:  # Less than 100KB
+        if len(media_bytes) < MIN_VIDEO_SIZE_BYTES:
             return None
         
         logger.info(f"Found complete video: {len(media_bytes)} bytes")
