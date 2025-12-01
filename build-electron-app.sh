@@ -51,40 +51,22 @@ echo ""
 
 cd management-ui-nextjs
 
-# Check if Node.js is installed
-if ! command -v node &> /dev/null; then
-    echo -e "${YELLOW}WARNING: Node.js is not installed${NC}"
-    echo "Install Node.js from https://nodejs.org/"
-    echo ""
-    echo "Skipping Electron app build..."
-    exit 0
-fi
-
-# Check if npm is installed
-if ! command -v npm &> /dev/null; then
-    echo -e "${YELLOW}WARNING: npm is not installed${NC}"
-    echo "Install Node.js (includes npm) from https://nodejs.org/"
-    echo ""
-    echo "Skipping Electron app build..."
-    exit 0
-fi
-
 echo "Installing dependencies..."
-npm install --silent || {
+docker run --rm -v "$(pwd):/app" -w /app node:20-alpine sh -c "npm install --silent" || {
     echo -e "${YELLOW}WARNING: Failed to install dependencies${NC}"
     echo "Skipping Electron app build..."
     exit 0
 }
 
 echo "Compiling Electron app..."
-npm run electron:compile || {
+docker run --rm -v "$(pwd):/app" -w /app node:20-alpine sh -c "npm run electron:compile" || {
     echo -e "${YELLOW}WARNING: Failed to compile Electron app${NC}"
     echo "Skipping Electron app build..."
     exit 0
 }
 
 echo "Building Electron executable..."
-npm run electron:pack || {
+docker run --rm -v "$(pwd):/app" -w /app node:20-alpine sh -c "npm run electron:pack" || {
     echo -e "${YELLOW}WARNING: Failed to build Electron app${NC}"
     echo "Skipping Electron app build..."
     exit 0
