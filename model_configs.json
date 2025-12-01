@@ -275,7 +275,35 @@
     "baseline": "wan_2_2",
     "version": "2.2-A14B",
     "nsfw": true,
-    "inpainting": false
+    "inpainting": false,
+    "url": "https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+    "filename": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+    "files": [
+      {
+        "path": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+        "file_type": "text_encoders"
+      },
+      {
+        "path": "wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors",
+        "file_type": "diffusion_models"
+      },
+      {
+        "path": "wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors",
+        "file_type": "diffusion_models"
+      },
+      {
+        "path": "wan2.2_t2v_lightx2v_4steps_lora_v1.1_high_noise.safetensors",
+        "file_type": "loras"
+      },
+      {
+        "path": "wan2.2_t2v_lightx2v_4steps_lora_v1.1_low_noise.safetensors",
+        "file_type": "loras"
+      },
+      {
+        "path": "wan2.2_vae.safetensors",
+        "file_type": "vae"
+      }
+    ]
   },
   "wan2.2_ti2v_5B": {
     "type": "checkpoints",
@@ -299,7 +327,46 @@
     "baseline": "wan_2_2",
     "version": "2.2-A14B-HQ",
     "nsfw": true,
-    "inpainting": false
+    "inpainting": false,
+    "url": "https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+    "filename": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+    "files": [
+      {
+        "path": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+        "file_type": "text_encoders"
+      },
+      {
+        "path": "wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors",
+        "file_type": "diffusion_models"
+      },
+      {
+        "path": "wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors",
+        "file_type": "diffusion_models"
+      },
+      {
+        "path": "wan2.2_vae.safetensors",
+        "file_type": "vae"
+      }
+    ]
+  },
+  "ltxv": {
+    "type": "checkpoints",
+    "description": "LTX-Video is the first DiT-based video generation model capable of generating high-quality videos in real-time. It produces 30 FPS videos at a 1216\u00d7704 resolution faster than they can be watched. Trained on a large-scale dataset of diverse videos, the model generates high-resolution videos with realistic and varied content. This entry uses the ltxv-13b-0.9.8-dev model for highest quality output. NOTE: This model requires HuggingFace authentication. Set HUGGING_FACE_API_KEY environment variable.",
+    "size_mb": 47683,
+    "dependencies": [],
+    "style": "video",
+    "baseline": "ltx_video",
+    "version": "0.9.8-dev",
+    "nsfw": false,
+    "inpainting": false,
+    "url": "https://huggingface.co/Lightricks/LTX-Video/resolve/main/ltxv-13b-0.9.8-dev.safetensors?download=true",
+    "filename": "ltxv-13b-0.9.8-dev.safetensors",
+    "files": [
+      {
+        "path": "ltxv-13b-0.9.8-dev.safetensors",
+        "file_type": "checkpoints"
+      }
+    ]
   },
   "AIPG_RED": {
     "type": "checkpoints",
