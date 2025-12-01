@@ -14,7 +14,6 @@ function createWindow(): void {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      enableRemoteModule: false,
     },
     icon: path.join(__dirname, '../public/aipg.ico'),
     titleBarStyle: 'default',
