@@ -1,10 +1,79 @@
 import { NextResponse } from 'next/server';
-import { startDownload, updateProgress, completeDownload, updateDownloadMessage, failDownload, FileDownloadState, updateFileProgress, setFileStatus, setProcessId, getDownloadState } from '@/lib/downloadState';
+import { startDownload, updateProgress, completeDownload, updateDownloadMessage, failDownload, FileDownloadState, updateFileProgress, setFileStatus, setProcessId, getDownloadState, getAllDownloads } from '@/lib/downloadState';
 import { downloadsApiUrl } from '@/lib/serverEnv';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
 export const dynamic = 'force-dynamic';
+
+export async function GET(request: Request) {
+  const url = new URL(request.url);
+  const pathname = url.pathname;
+
+  // Handle /api/models/download/status
+  if (pathname.endsWith('/status')) {
+    try {
+      const allDownloads = getAllDownloads();
+      return NextResponse.json({ models: allDownloads });
+    } catch (error) {
+      console.error('Error getting download status:', error);
+      return NextResponse.json({ error: 'Failed to get download status' }, { status: 500 });
+    }
+  }
+
+  // Handle /api/models/download/stream
+  if (pathname.endsWith('/stream')) {
+    // Return a simple SSE stream that can be used for polling
+    const stream = new ReadableStream({
+      start(controller) {
+        const encoder = new TextEncoder();
+
+        // Send initial status
+        const allDownloads = getAllDownloads();
+        const initialData = JSON.stringify({
+          type: 'status',
+          models: allDownloads,
+          timestamp: new Date().toISOString()
+        });
+        controller.enqueue(encoder.encode(`data: ${initialData}\n\n`));
+
+        // Keep the connection alive with periodic updates
+        const interval = setInterval(() => {
+          try {
+            const allDownloads = getAllDownloads();
+            const data = JSON.stringify({
+              type: 'status',
+              models: allDownloads,
+              timestamp: new Date().toISOString()
+            });
+            controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+          } catch (error) {
+            console.error('Error in stream:', error);
+            controller.close();
+            clearInterval(interval);
+          }
+        }, 2000); // Update every 2 seconds
+
+        // Clean up on close
+        request.signal.addEventListener('abort', () => {
+          clearInterval(interval);
+          controller.close();
+        });
+      }
+    });
+
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache, no-transform',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',
+      },
+    });
+  }
+
+  return NextResponse.json({ error: 'Endpoint not found' }, { status: 404 });
+}
 
 export async function POST(request: Request): Promise<Response> {
   try {
