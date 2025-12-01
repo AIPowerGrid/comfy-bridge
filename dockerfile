@@ -10,8 +10,10 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Install system dependencies with apt cache mount
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
     python3.10 \
     python3-pip \
     python3-dev \
@@ -31,11 +33,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 RUN mkdir -p /app/ComfyUI /app/comfy-bridge
 
-# Install ComfyUI
-# Using shallow clone for faster downloads (git cache handled by Docker layer cache)
+# Install ComfyUI with git cache mount
 WORKDIR /app
 ARG COMFYUI_VERSION=main
-RUN rm -rf ComfyUI && \
+RUN --mount=type=cache,target=/root/.cache/git \
+    rm -rf ComfyUI && \
     git clone --depth 1 https://github.com/comfyanonymous/ComfyUI.git ComfyUI && \
     (cd ComfyUI && git checkout ${COMFYUI_VERSION} 2>/dev/null || true) && \
     cd ComfyUI && \
@@ -45,10 +47,21 @@ RUN rm -rf ComfyUI && \
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip3 install --timeout 120 -r /tmp/requirements_no_torch.txt
 
-# Install ComfyUI-WanVideoWrapper custom node extension
+# Install ComfyUI-WanVideoWrapper custom node extension with git and pip cache mounts
 WORKDIR /app/ComfyUI/custom_nodes
-RUN git clone --depth 1 https://github.com/Kijai/ComfyUI-WanVideoWrapper.git ComfyUI-WanVideoWrapper && \
+RUN --mount=type=cache,target=/root/.cache/git \
+    --mount=type=cache,target=/root/.cache/pip \
+    git clone --depth 1 https://github.com/Kijai/ComfyUI-WanVideoWrapper.git ComfyUI-WanVideoWrapper && \
     cd ComfyUI-WanVideoWrapper && \
+    if [ -f requirements.txt ]; then \
+        pip3 install --timeout 120 -r requirements.txt; \
+    fi
+
+# Install ComfyUI-WanMoeKSampler custom node extension (provides SplitSigmasAtT)
+RUN --mount=type=cache,target=/root/.cache/git \
+    --mount=type=cache,target=/root/.cache/pip \
+    git clone --depth 1 https://github.com/stduhpf/ComfyUI-WanMoeKSampler.git ComfyUI-WanMoeKSampler && \
+    cd ComfyUI-WanMoeKSampler && \
     if [ -f requirements.txt ]; then \
         pip3 install --timeout 120 -r requirements.txt; \
     fi

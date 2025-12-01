@@ -12,7 +12,7 @@ class TestComfyUIBridge:
     def bridge(self):
         """Create a ComfyUIBridge instance for testing."""
         with patch('comfy_bridge.bridge.APIClient'), \
-             patch('comfy_bridge.bridge.httpx.AsyncClient'):
+             patch('comfy_bridge.api_client.httpx.AsyncClient'):
             return ComfyUIBridge()
 
     def test_init(self, bridge):

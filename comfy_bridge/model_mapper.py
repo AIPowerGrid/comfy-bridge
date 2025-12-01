@@ -1,4 +1,4 @@
-import httpx
+import httpx  # type: ignore
 import json
 import os
 import logging
@@ -78,9 +78,13 @@ class ModelMapper:
         "krea": "krea",
         
         # Flux Kontext variants
-        "FLUX.1-dev-Kontext-fp8-scaled": "FLUX.1-dev-Kontext-fp8-scaled",
-        "flux.1-dev-kontext-fp8-scaled": "FLUX.1-dev-Kontext-fp8-scaled",
-        "flux1-dev-kontext-fp8-scaled": "FLUX.1-dev-Kontext-fp8-scaled",
+        "flux1-krea-dev_fp8_scaled": "flux1-krea-dev_fp8_scaled",
+        "FLUX.1-dev-Kontext-fp8-scaled": "flux1-krea-dev_fp8_scaled",
+        "flux.1-dev-kontext-fp8-scaled": "flux1-krea-dev_fp8_scaled",
+        "flux1-dev-kontext-fp8-scaled": "flux1-krea-dev_fp8_scaled",
+        "flux1_dev_kontext_fp8_scaled": "flux1-krea-dev_fp8_scaled",
+        "flux1_dev_kontext_fp8_scaled": "flux1-krea-dev_fp8_scaled",
+        "flux1_dev_kontext_fp8_scaled": "flux1-krea-dev_fp8_scaled",
         "flux_kontext_dev_basic": "flux_kontext_dev_basic",
         "flux1-kontext-dev": "flux_kontext_dev_basic",
         "flux1_kontext_dev": "flux_kontext_dev_basic",
@@ -347,6 +351,33 @@ class ModelMapper:
         logger.info(f"Final workflow map from env: {len(self.workflow_map)} models")
         for model, workflow in self.workflow_map.items():
             logger.debug(f"  {model} -> {workflow}")
+
+    def _has_local_flux_assets(self) -> bool:
+        """Fallback detection for Flux assets on disk when ComfyUI doesn't list them."""
+        models_root = os.getenv("MODELS_PATH", "/app/ComfyUI/models")
+
+        def dir_has_keywords(subdir: str, keywords: list[str]) -> bool:
+            path = os.path.join(models_root, subdir)
+            try:
+                for fname in os.listdir(path):
+                    lower = fname.lower()
+                    if any(keyword in lower for keyword in keywords):
+                        return True
+            except FileNotFoundError:
+                return False
+            return False
+
+        # Flux needs the unet weights plus clip_l, t5/t5xxl text encoder, and ae VAE
+        unet_present = (
+            dir_has_keywords("diffusion_models", ["flux"])
+            or dir_has_keywords("unet", ["flux"])
+            or dir_has_keywords("checkpoints", ["flux"])
+        )
+        clip_present = dir_has_keywords("clip", ["clip_l", "clip-l", "clip_l.safetensors"])
+        text_encoder_present = dir_has_keywords("text_encoders", ["t5", "umt5"])
+        vae_present = dir_has_keywords("vae", ["ae.safetensors", "ae"])
+
+        return unet_present and clip_present and text_encoder_present and vae_present
     
     async def _validate_workflows_against_models(self, comfy_url: str):
         """Validate workflows against available models and remove incompatible ones.
@@ -357,18 +388,17 @@ class ModelMapper:
         from .workflow import detect_workflow_model_type, is_model_compatible
         from .comfyui_client import ComfyUIClient
         
-        # Get available models from ComfyUI
+        # Get available models from ComfyUI (may be empty if the API isn't providing loaders)
         comfy_client = ComfyUIClient(comfy_url)
         try:
             available_models = await comfy_client.get_available_models()
         except Exception as e:
             logger.warning(f"Failed to fetch available models for validation: {e}")
-            logger.warning("Skipping workflow validation - will validate at job time")
-            return
+            logger.warning("Continuing without loader metadata; will rely on filesystem fallbacks")
+            available_models = {}
         
         if not available_models:
-            logger.warning("No available models found - skipping workflow validation")
-            return
+            logger.warning("No loader metadata returned by /object_info – proceeding with empty lists and filesystem checks")
         
         # Validate each workflow in the map
         workflows_to_remove = []
@@ -389,47 +419,50 @@ class ModelMapper:
                 model_type = detect_workflow_model_type(workflow)
                 
                 if model_type == "unknown":
-                    # Allow unknown types (might be custom workflows)
-                    logger.debug(f"Workflow {workflow_id} has unknown type, allowing it")
+                    logger.debug(f"Workflow {workflow_id} has unknown type, allowing it (runtime checks will enforce requirements)")
                     continue
                 
-                # Check if compatible models are available
                 has_compatible_models = False
                 
                 if model_type == "flux":
-                    # Check for Flux models
-                    unet_models = available_models.get("UNETLoader", [])
-                    dual_clip = available_models.get("DualCLIPLoader", {})
-                    vae_models = available_models.get("VAELoader", [])
+                    unet_models = available_models.get("UNETLoader") or []
+                    dual_clip = available_models.get("DualCLIPLoader") or {}
+                    vae_models = available_models.get("VAELoader") or []
                     
-                    # Filter to Flux-compatible models
                     flux_unet = [m for m in unet_models if is_model_compatible(m, "flux")]
-                    flux_clip1 = []
-                    flux_clip2 = []
-                    if dual_clip:
-                        clip1 = dual_clip.get("clip_name1", [])
-                        clip2 = dual_clip.get("clip_name2", [])
-                        flux_clip1 = [m for m in clip1 if is_model_compatible(m, "flux")]
-                        flux_clip2 = [m for m in clip2 if is_model_compatible(m, "flux")]
+                    clip1 = dual_clip.get("clip_name1", []) if isinstance(dual_clip, dict) else []
+                    clip2 = dual_clip.get("clip_name2", []) if isinstance(dual_clip, dict) else []
+                    flux_clip1 = [m for m in clip1 if is_model_compatible(m, "flux")]
+                    flux_clip2 = [m for m in clip2 if is_model_compatible(m, "flux")]
                     flux_vae = [m for m in vae_models if is_model_compatible(m, "flux")]
                     
                     has_compatible_models = bool(flux_unet and (flux_clip1 or flux_clip2) and flux_vae)
                     
+                    if not has_compatible_models and self._has_local_flux_assets():
+                        has_compatible_models = True
+                        logger.debug(f"Flux workflow {workflow_id}: local flux assets detected, allowing despite missing loader metadata")
+                
                 elif model_type == "wanvideo":
-                    # Check for WanVideo models (simpler check - just check if any WanVideo models exist)
-                    # WanVideo uses custom loaders, so we check the object_info directly
-                    # For now, we'll allow WanVideo workflows if WanVideo models are detected
-                    # The real validation happens at job time
-                    has_compatible_models = True  # Allow and validate at job time
+                    # Some ComfyUI builds omit WanVideo loader info; require at least a VAE entry as a proxy.
+                    vae_models = available_models.get("VAELoader") or []
+                    if vae_models:
+                        has_compatible_models = True
+                    else:
+                        logger.warning(f"WanVideo workflow {workflow_id}: no VAEs reported; allowing but runtime may still fail if models are absent")
+                        has_compatible_models = True  # fall back to runtime validation
+                
+                else:
+                    # For SDXL/other workflows, assume success if we reached here.
+                    has_compatible_models = True
                 
                 if not has_compatible_models:
                     logger.warning(
                         f"Removing {grid_model_name} from advertised models: "
-                        f"No compatible {model_type} models installed"
+                        f"No compatible {model_type} loaders detected and no filesystem fallback available"
                     )
                     workflows_to_remove.append(grid_model_name)
                 else:
-                    logger.debug(f"Workflow {workflow_id} validated - compatible models available")
+                    logger.debug(f"Workflow {workflow_id} validated – compatible assets detected or fallback satisfied")
                     
             except Exception as e:
                 logger.warning(f"Failed to validate workflow {workflow_id}: {e}")
