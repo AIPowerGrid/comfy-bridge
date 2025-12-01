@@ -5,8 +5,9 @@ export interface FileDownloadState {
   progress: number;
   speed: string;
   eta: string;
-  status: 'queued' | 'downloading' | 'completed' | 'failed';
+  status: 'queued' | 'downloading' | 'completed' | 'failed' | 'error' | 'cancelled';
   downloaded_mb: number;
+  error_message?: string;
 }
 
 export interface ModelDownloadState {
@@ -90,7 +91,7 @@ class DownloadStateManager {
 export const downloadStateManager = new DownloadStateManager();
 
 // Additional methods for file management
-export function setFileStatus(modelId: string, fileName: string, status: 'queued' | 'downloading' | 'completed' | 'failed'): void {
+export function setFileStatus(modelId: string, fileName: string, status: 'queued' | 'downloading' | 'completed' | 'failed' | 'error' | 'cancelled'): void {
   const downloads = downloadStateManager.getDownloadsByModel(modelId);
   for (const download of downloads) {
     if (download.files) {
