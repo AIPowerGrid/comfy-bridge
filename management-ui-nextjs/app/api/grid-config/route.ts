@@ -1,9 +1,6 @@
 import { NextResponse } from 'next/server';
 import { promises as fs } from 'fs';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-
-const execAsync = promisify(exec);
+import { restartDockerContainers } from '@/lib/docker';
 
 export async function GET() {
   try {
@@ -81,11 +78,9 @@ export async function POST(request: Request) {
     try {
       console.log('Restarting containers to apply environment changes...');
       
-      // Restart containers using docker compose (newer syntax)
-      const restartCommand = 'docker compose restart';
-      const { stdout, stderr } = await execAsync(restartCommand);
+      const { stdout, stderr, command, composeDir } = await restartDockerContainers();
       
-      console.log('Container restart output:', stdout);
+      console.log(`Container restart output (${command} @ ${composeDir}):`, stdout);
       if (stderr) {
         console.warn('Container restart warnings:', stderr);
       }
@@ -95,16 +90,16 @@ export async function POST(request: Request) {
         message: 'Grid configuration saved and containers restarted successfully',
         fullWorkerName,
         restartOutput: stdout,
+        restartCommand: command,
       });
     } catch (restartError: any) {
       console.error('Failed to restart containers:', restartError);
       
-      // Still return success for the config save, but warn about restart failure
       return NextResponse.json({
         success: true,
         message: 'Grid configuration saved, but container restart failed. Please restart manually.',
         fullWorkerName,
-        restartError: restartError.message,
+        restartError: restartError?.stderr || restartError?.message,
         warning: 'Please restart containers manually to apply changes',
       });
     }

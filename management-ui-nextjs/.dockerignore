@@ -6,3 +6,8 @@ README.md
 *.md
 .env*
 
+# Never send local model caches / persistent data to the build context
+persistent_volumes/
+**/*.safetensors
+**/*.ckpt
+

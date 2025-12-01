@@ -1,7 +1,9 @@
+import json
 import logging
 import httpx
 from typing import Dict, Any
 from .config import Settings
+from .workflow import convert_native_workflow_to_simple
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +15,31 @@ class ComfyUIClient:
         self.client = httpx.AsyncClient(base_url=self.base_url, timeout=timeout)
     
     async def submit_workflow(self, workflow: Dict[str, Any]) -> str:
-        logger.debug(f"Submitting workflow to ComfyUI ({len(workflow)} nodes)")
+        # Validate workflow structure before submission
+        try:
+            self._validate_workflow_structure(workflow)
+        except ValueError as e:
+            logger.error(f"Workflow validation failed: {e}")
+            # Log the workflow structure for debugging
+            if isinstance(workflow, dict) and "nodes" in workflow:
+                nodes = workflow.get("nodes", [])
+                logger.error(f"Workflow has {len(nodes)} nodes")
+                for i, node in enumerate(nodes[:5]):  # Log first 5 nodes
+                    logger.error(f"Node {i}: id={node.get('id')}, type={node.get('type')}")
+            raise
+        
+        # Convert ComfyUI native format to simple format if needed
+        workflow = self._convert_workflow_format(workflow)
+        
+        node_count = len(workflow) if isinstance(workflow, dict) and "nodes" not in workflow else len(workflow.get("nodes", []))
+        logger.debug(f"Submitting workflow to ComfyUI ({node_count} nodes)")
+        
+        # Additional validation: check for any '#id' strings in the JSON
+        workflow_str = json.dumps(workflow)
+        if '"#id"' in workflow_str or "'#id'" in workflow_str:
+            logger.error("Found '#id' string in workflow JSON - this will cause ComfyUI errors")
+            logger.error(f"Workflow snippet: {workflow_str[:500]}")
+            raise ValueError("Workflow contains invalid '#id' placeholder - this indicates a workflow processing error")
         
         resp = await self.client.post("/prompt", json={"prompt": workflow})
         if resp.status_code != 200:
@@ -119,6 +145,92 @@ class ComfyUIClient:
         except Exception as e:
             logger.error(f"Failed to fetch available models: {e}", exc_info=True)
             return {}
+    
+    def _validate_workflow_structure(self, workflow: Dict[str, Any]) -> None:
+        """Validate workflow structure and ensure all nodes have required properties"""
+        # Handle ComfyUI native format (has "nodes" array)
+        if isinstance(workflow, dict) and "nodes" in workflow:
+            nodes = workflow.get("nodes", [])
+            valid_node_ids = set()
+            
+            # First pass: collect all valid node IDs
+            for node in nodes:
+                if not isinstance(node, dict):
+                    continue
+                node_id = node.get("id")
+                if node_id is not None:
+                    valid_node_ids.add(node_id)
+                    valid_node_ids.add(str(node_id))
+            
+            # Second pass: validate nodes
+            for node in nodes:
+                if not isinstance(node, dict):
+                    continue
+                
+                node_id = node.get("id")
+                node_type = node.get("type")
+                
+                # Check for invalid node IDs
+                if node_id == "#id" or str(node_id) == "#id":
+                    raise ValueError(f"Invalid node ID found: '#id'. Node must have a valid numeric ID.")
+                
+                # Ensure node has type/class_type
+                if not node_type:
+                    raise ValueError(f"Node {node_id} is missing 'type' property (class_type)")
+                
+                # Validate node connections/links don't reference invalid nodes
+                inputs = node.get("inputs", [])
+                if isinstance(inputs, list):
+                    for input_item in inputs:
+                        if isinstance(input_item, dict):
+                            link = input_item.get("link")
+                            if link is not None and (link == "#id" or str(link) == "#id"):
+                                raise ValueError(f"Node {node_id} has invalid link reference '#id'")
+                        elif isinstance(input_item, list) and len(input_item) > 0:
+                            ref_id = input_item[0]
+                            if ref_id == "#id" or str(ref_id) == "#id":
+                                raise ValueError(f"Node {node_id} has invalid node reference '#id' in inputs")
+            
+            # Validate links array
+            links = workflow.get("links", [])
+            for link in links:
+                if isinstance(link, list) and len(link) >= 2:
+                    # Link format: [link_id, from_node, from_slot, to_node, to_slot, type]
+                    from_node = link[1] if len(link) > 1 else None
+                    to_node = link[3] if len(link) > 3 else None
+                    
+                    if from_node == "#id" or str(from_node) == "#id":
+                        raise ValueError(f"Link {link[0] if len(link) > 0 else 'unknown'} has invalid from_node '#id'")
+                    if to_node == "#id" or str(to_node) == "#id":
+                        raise ValueError(f"Link {link[0] if len(link) > 0 else 'unknown'} has invalid to_node '#id'")
+                    
+                    # Check if referenced nodes exist
+                    if from_node is not None and from_node not in valid_node_ids and str(from_node) not in valid_node_ids:
+                        logger.warning(f"Link references non-existent from_node {from_node}")
+                    if to_node is not None and to_node not in valid_node_ids and str(to_node) not in valid_node_ids:
+                        logger.warning(f"Link references non-existent to_node {to_node}")
+        
+        # Handle simple format (direct node objects)
+        else:
+            for node_id, node_data in workflow.items():
+                if not isinstance(node_data, dict):
+                    continue
+                
+                # Check for invalid node IDs
+                if node_id == "#id" or str(node_id) == "#id":
+                    raise ValueError(f"Invalid node ID found: '#id'. Node must have a valid ID.")
+                
+                # Ensure node has class_type
+                if not node_data.get("class_type"):
+                    raise ValueError(f"Node {node_id} is missing 'class_type' property")
+    
+    def _convert_workflow_format(self, workflow: Dict[str, Any]) -> Dict[str, Any]:
+        """Convert ComfyUI native format to simple format if needed, or return as-is"""
+        if isinstance(workflow, dict) and "nodes" in workflow:
+            converted = convert_native_workflow_to_simple(workflow)
+            logger.debug(f"Converted native workflow to simple format with {len(converted)} nodes")
+            return converted
+        return workflow
     
     async def close(self):
         await self.client.aclose()

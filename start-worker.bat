@@ -1,6 +1,14 @@
 @echo off
 setlocal enabledelayedexpansion
 
+REM Check for admin privileges
+net session >nul 2>&1
+if errorlevel 1 (
+    echo Requesting administrator privileges...
+    powershell -Command "Start-Process -FilePath '%~f0' -Verb RunAs"
+    exit /b
+)
+
 cd /d "%~dp0"
 
 echo.
@@ -10,7 +18,7 @@ echo ========================================
 echo.
 
 REM Check disk space (50GB minimum)
-echo [1/4] Checking disk space...
+echo [1/5] Checking disk space...
 for /f "delims=" %%a in ('powershell -Command "$drive = (Get-Location).Drive.Root; $free = (Get-PSDrive -PSProvider FileSystem | Where-Object {$_.Root -eq $drive}).Free; [math]::Round($free / 1GB, 0)"') do set FREE_SPACE_GB=%%a
 
 if "%FREE_SPACE_GB%"=="" (
@@ -29,7 +37,7 @@ if "%FREE_SPACE_GB%"=="" (
 )
 
 REM Check Docker installation
-echo [2/4] Checking Docker installation...
+echo [2/5] Checking Docker installation...
 where docker >nul 2>&1
 if errorlevel 1 (
     echo.
@@ -48,7 +56,7 @@ if errorlevel 1 (
 echo    Docker found
 
 REM Check Docker is running
-echo [3/4] Checking Docker is running...
+echo [3/5] Checking Docker is running...
 docker info >nul 2>&1
 if errorlevel 1 (
     echo.
@@ -83,7 +91,7 @@ if errorlevel 1 (
 )
 
 REM Check .env file
-echo [4/4] Checking configuration...
+echo [4/5] Checking configuration...
 if not exist .env (
     echo.
     echo ERROR: .env file not found
@@ -97,10 +105,24 @@ if not exist .env (
 )
 echo    Configuration file found
 
-REM Start containers
-echo.
-echo Starting worker containers...
-docker-compose up -d
+REM Clean up old volumes that don't match configuration
+echo [5/6] Cleaning up old volumes...
+docker volume ls -q | findstr /C:"comfy-bridge_input" >nul 2>&1
+if not errorlevel 1 (
+    echo    Removing old input volume...
+    docker volume rm comfy-bridge_input >nul 2>&1
+)
+docker volume ls -q | findstr /C:"comfy-bridge_cache" >nul 2>&1
+if not errorlevel 1 (
+    echo    Removing old cache volume...
+    docker volume rm comfy-bridge_cache >nul 2>&1
+)
+
+REM Start containers with BuildKit for cache mounts
+echo [6/6] Starting worker containers...
+set DOCKER_BUILDKIT=1
+set COMPOSE_DOCKER_CLI_BUILD=1
+docker-compose up -d --build
 
 if errorlevel 1 (
     echo.
@@ -120,12 +142,91 @@ echo ========================================
 echo  Worker started successfully!
 echo ========================================
 echo.
+
+REM Build Electron app and create desktop shortcut
+echo Building desktop app...
+cd management-ui-nextjs
+
+REM Check if Node.js is installed
+where node >nul 2>&1
+if errorlevel 1 (
+    echo    Node.js not found - skipping desktop app build
+    echo    Install Node.js from https://nodejs.org/ to enable desktop app
+    goto :skip_electron
+)
+
+REM Check if npm is installed
+where npm >nul 2>&1
+if errorlevel 1 (
+    echo    npm not found - skipping desktop app build
+    goto :skip_electron
+)
+
+echo    Installing dependencies...
+call npm install --silent >nul 2>&1
+if errorlevel 1 (
+    echo    Failed to install dependencies - skipping desktop app build
+    goto :skip_electron
+)
+
+echo    Compiling Electron app...
+call npm run electron:compile >nul 2>&1
+if errorlevel 1 (
+    echo    Failed to compile Electron app - skipping desktop app build
+    goto :skip_electron
+)
+
+echo    Building Electron executable...
+call npm run electron:pack >nul 2>&1
+if errorlevel 1 (
+    echo    Failed to build Electron app - skipping desktop app build
+    goto :skip_electron
+)
+
+REM Find the built executable
+set ELECTRON_EXE=
+if exist "dist\win-unpacked\AI Power Grid Manager.exe" (
+    set ELECTRON_EXE=dist\win-unpacked\AI Power Grid Manager.exe
+) else if exist "dist\AI Power Grid Manager.exe" (
+    set ELECTRON_EXE=dist\AI Power Grid Manager.exe
+)
+
+if "!ELECTRON_EXE!"=="" (
+    echo    Could not find built Electron executable
+    goto :skip_electron
+)
+
+REM Get desktop path
+for /f "tokens=*" %%a in ('powershell -Command "[Environment]::GetFolderPath('Desktop')"') do set DESKTOP=%%a
+
+if "!DESKTOP!"=="" (
+    echo    Could not determine desktop path
+    goto :skip_electron
+)
+
+REM Create desktop shortcut using PowerShell
+echo    Creating desktop shortcut...
+set "EXE_PATH=%CD%\!ELECTRON_EXE!"
+set "WORK_DIR=%CD%\dist\win-unpacked"
+powershell -Command "$WshShell = New-Object -ComObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%DESKTOP%\AI Power Grid Manager.lnk'); $Shortcut.TargetPath = '%EXE_PATH%'; $Shortcut.WorkingDirectory = '%WORK_DIR%'; $Shortcut.Description = 'AI Power Grid Worker Management UI'; $Shortcut.Save()" >nul 2>&1
+
+if errorlevel 1 (
+    echo    Failed to create desktop shortcut
+) else (
+    echo    Desktop shortcut created successfully!
+)
+
+:skip_electron
+cd ..
+
+echo.
 echo Management UI: http://localhost:5000
 echo.
 echo Next steps:
-echo   1. Open http://localhost:5000 in your browser
-echo   2. Select and download models
-echo   3. Click "Start Hosting" to begin earning
+echo   1. Use the desktop app shortcut (if created) OR
+echo   2. Open http://localhost:5000 in your browser
+echo   3. Select and download models
+echo   4. Click "Start Hosting" to begin earning
 echo.
 echo Commands:
 echo   View logs: docker-compose logs -f
