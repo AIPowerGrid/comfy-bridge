@@ -185,3 +185,7 @@ export function failDownload(id: string, error: string): void {
 export function getDownloadStatus(id: string): DownloadProgress | undefined {
   return downloadStateManager.getDownload(id);
 }
+
+export function getAllDownloads(): DownloadProgress[] {
+  return downloadStateManager.getAllDownloads();
+}
