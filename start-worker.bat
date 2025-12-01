@@ -122,7 +122,7 @@ REM Start containers with BuildKit for cache mounts
 echo [6/6] Starting worker containers...
 set DOCKER_BUILDKIT=1
 set COMPOSE_DOCKER_CLI_BUILD=1
-docker-compose up -d
+docker-compose up -d --build
 
 if errorlevel 1 (
     echo.
