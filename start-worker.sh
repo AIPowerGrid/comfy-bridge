@@ -140,8 +140,21 @@ if [ ! -f .env ]; then
 fi
 echo -e "    ${GREEN}✓${NC} Configuration file found"
 
-# Start containers
-echo "[5/5] Starting worker containers..."
+# Clean up old volumes that don't match configuration
+echo "[5/6] Cleaning up old volumes..."
+if docker volume ls -q | grep -q "^comfy-bridge_input$"; then
+    echo "    Removing old input volume..."
+    docker volume rm comfy-bridge_input > /dev/null 2>&1 || true
+fi
+if docker volume ls -q | grep -q "^comfy-bridge_cache$"; then
+    echo "    Removing old cache volume..."
+    docker volume rm comfy-bridge_cache > /dev/null 2>&1 || true
+fi
+
+# Start containers with BuildKit for cache mounts
+echo "[6/6] Starting worker containers..."
+export DOCKER_BUILDKIT=1
+export COMPOSE_DOCKER_CLI_BUILD=1
 docker-compose up -d
 
 if [ $? -ne 0 ]; then
@@ -178,25 +191,20 @@ else
         cd ..
     else
         echo "    Installing dependencies..."
-        npm install --silent > /dev/null 2>&1 || {
+        if ! npm install --silent > /dev/null 2>&1; then
             echo -e "    ${YELLOW}Failed to install dependencies - skipping desktop app build${NC}"
             cd ..
-            goto skip_electron
-        }
-
-        echo "    Compiling Electron app..."
-        npm run electron:compile > /dev/null 2>&1 || {
-            echo -e "    ${YELLOW}Failed to compile Electron app - skipping desktop app build${NC}"
-            cd ..
-            goto skip_electron
-        }
-
-        echo "    Building Electron executable..."
-        npm run electron:pack > /dev/null 2>&1 || {
-            echo -e "    ${YELLOW}Failed to build Electron app - skipping desktop app build${NC}"
-            cd ..
-            goto skip_electron
-        }
+        else
+            echo "    Compiling Electron app..."
+            if ! npm run electron:compile > /dev/null 2>&1; then
+                echo -e "    ${YELLOW}Failed to compile Electron app - skipping desktop app build${NC}"
+                cd ..
+            else
+                echo "    Building Electron executable..."
+                if ! npm run electron:pack > /dev/null 2>&1; then
+                    echo -e "    ${YELLOW}Failed to build Electron app - skipping desktop app build${NC}"
+                    cd ..
+                else
 
         # Find the built executable
         ELECTRON_EXE=""
@@ -212,27 +220,41 @@ else
             fi
         fi
 
-        if [ -z "$ELECTRON_EXE" ]; then
-            echo -e "    ${YELLOW}Could not find built Electron executable${NC}"
-            cd ..
-        else
-            # Create desktop entry/launcher
-            if [[ "$OSTYPE" == "darwin"* ]]; then
-                DESKTOP="$HOME/Desktop"
-                if [ -d "$DESKTOP" ]; then
-                    echo "    Creating desktop shortcut..."
-                    FULL_PATH="$(cd "$(dirname "$ELECTRON_EXE")" && pwd)/$(basename "$ELECTRON_EXE")"
-                    osascript -e "tell application \"Finder\" to make alias file at POSIX file \"$DESKTOP\" to POSIX file \"$FULL_PATH\"" 2>/dev/null && {
-                        echo -e "    ${GREEN}Desktop shortcut created successfully!${NC}"
-                    } || echo -e "    ${YELLOW}Failed to create desktop shortcut${NC}"
-                fi
-            elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-                DESKTOP="$HOME/Desktop"
-                if [ -d "$DESKTOP" ]; then
-                    echo "    Creating desktop shortcut..."
-                    FULL_PATH="$(cd "$(dirname "$ELECTRON_EXE")" && pwd)/$(basename "$ELECTRON_EXE")"
-                    ICON_PATH="$(pwd)/public/logo.png"
-                    cat > "$DESKTOP/AI Power Grid Manager.desktop" << EOF
+                    # Find the built executable
+                    ELECTRON_EXE=""
+                    if [[ "$OSTYPE" == "darwin"* ]]; then
+                        if [ -d "dist/mac/AI Power Grid Manager.app" ]; then
+                            ELECTRON_EXE="dist/mac/AI Power Grid Manager.app"
+                        fi
+                    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+                        if [ -f "dist/AI Power Grid Manager.AppImage" ]; then
+                            ELECTRON_EXE="dist/AI Power Grid Manager.AppImage"
+                        elif [ -f "dist/linux-unpacked/aipg-model-manager" ]; then
+                            ELECTRON_EXE="dist/linux-unpacked/aipg-model-manager"
+                        fi
+                    fi
+
+                    if [ -z "$ELECTRON_EXE" ]; then
+                        echo -e "    ${YELLOW}Could not find built Electron executable${NC}"
+                        cd ..
+                    else
+                        # Create desktop entry/launcher
+                        if [[ "$OSTYPE" == "darwin"* ]]; then
+                            DESKTOP="$HOME/Desktop"
+                            if [ -d "$DESKTOP" ]; then
+                                echo "    Creating desktop shortcut..."
+                                FULL_PATH="$(cd "$(dirname "$ELECTRON_EXE")" && pwd)/$(basename "$ELECTRON_EXE")"
+                                osascript -e "tell application \"Finder\" to make alias file at POSIX file \"$DESKTOP\" to POSIX file \"$FULL_PATH\"" 2>/dev/null && {
+                                    echo -e "    ${GREEN}Desktop shortcut created successfully!${NC}"
+                                } || echo -e "    ${YELLOW}Failed to create desktop shortcut${NC}"
+                            fi
+                        elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+                            DESKTOP="$HOME/Desktop"
+                            if [ -d "$DESKTOP" ]; then
+                                echo "    Creating desktop shortcut..."
+                                FULL_PATH="$(cd "$(dirname "$ELECTRON_EXE")" && pwd)/$(basename "$ELECTRON_EXE")"
+                                ICON_PATH="$(pwd)/public/logo.png"
+                                cat > "$DESKTOP/AI Power Grid Manager.desktop" << EOF
 [Desktop Entry]
 Version=1.0
 Type=Application
@@ -243,11 +265,14 @@ Icon=$ICON_PATH
 Terminal=false
 Categories=Utility;
 EOF
-                    chmod +x "$DESKTOP/AI Power Grid Manager.desktop"
-                    echo -e "    ${GREEN}Desktop shortcut created successfully!${NC}"
+                                chmod +x "$DESKTOP/AI Power Grid Manager.desktop"
+                                echo -e "    ${GREEN}Desktop shortcut created successfully!${NC}"
+                            fi
+                        fi
+                        cd ..
+                    fi
                 fi
             fi
-            cd ..
         fi
     fi
 fi

@@ -1,9 +1,6 @@
 import { NextResponse } from 'next/server';
 import * as fs from 'fs/promises';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-
-const execAsync = promisify(exec);
+import { restartDockerContainers } from '@/lib/docker';
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic';
@@ -73,11 +70,9 @@ export async function POST(request: Request) {
     try {
       console.log('Restarting containers to apply API key changes...');
       
-      // Restart containers using docker compose (newer syntax)
-      const restartCommand = 'docker compose restart';
-      const { stdout, stderr } = await execAsync(restartCommand);
+      const { stdout, stderr, command, composeDir } = await restartDockerContainers();
       
-      console.log('Container restart output:', stdout);
+      console.log(`Container restart output (${command} @ ${composeDir}):`, stdout);
       if (stderr) {
         console.warn('Container restart warnings:', stderr);
       }
@@ -86,15 +81,15 @@ export async function POST(request: Request) {
         success: true,
         message: 'API keys saved and containers restarted successfully',
         restartOutput: stdout,
+        restartCommand: command,
       });
     } catch (restartError: any) {
       console.error('Failed to restart containers:', restartError);
       
-      // Still return success for the API key save, but warn about restart failure
       return NextResponse.json({
         success: true,
         message: 'API keys saved, but container restart failed. Please restart manually.',
-        restartError: restartError.message,
+        restartError: restartError?.stderr || restartError?.message,
         warning: 'Please restart containers manually to apply changes',
       });
     }

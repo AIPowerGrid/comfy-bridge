@@ -16,6 +16,7 @@ from typing import Dict, List, Any, Optional, Tuple
 from urllib.parse import urlparse
 import hashlib
 import time
+import struct
 
 def load_stable_diffusion_catalog(catalog_path: str = '/app/grid-image-model-reference/stable_diffusion.json') -> Dict[str, Any]:
     """Load stable_diffusion.json catalog"""
@@ -192,6 +193,54 @@ def get_download_urls_from_model(model_info: Dict[str, Any], model_id: str) -> L
     
     return downloads
 
+
+def _expected_safetensors_size(filepath: Path) -> Tuple[bool, Optional[int]]:
+    """
+    Parse the safetensors header to ensure the payload is fully present.
+    Returns (is_valid, required_size_bytes or None).
+    """
+    try:
+        with open(filepath, "rb") as f:
+            header_size_raw = f.read(8)
+            if len(header_size_raw) != 8:
+                return False, None
+            header_size = struct.unpack("<Q", header_size_raw)[0]
+            header_bytes = f.read(header_size)
+            if len(header_bytes) != header_size:
+                return False, None
+            header = json.loads(header_bytes)
+        max_offset = 0
+        for tensor_meta in header.values():
+            if isinstance(tensor_meta, dict):
+                offsets = tensor_meta.get("data_offsets")
+                if isinstance(offsets, list) and len(offsets) == 2:
+                    max_offset = max(max_offset, int(offsets[1]))
+        required_size = 8 + header_size + max_offset
+        actual_size = filepath.stat().st_size
+        if max_offset == 0:
+            # No tensor metadata; treat as valid.
+            return True, required_size
+        return actual_size >= required_size, required_size
+    except Exception as exc:
+        print(f"[WARN] Failed to inspect safetensors header for {filepath}: {exc}")
+        return False, None
+
+
+def _is_file_complete(filepath: Path) -> bool:
+    """
+    Lightweight validation for existing downloads. Currently only validates .safetensors
+    files by ensuring the payload size matches the header offsets.
+    """
+    if not filepath.exists():
+        return False
+    if filepath.suffix == ".safetensors":
+        ok, required_size = _expected_safetensors_size(filepath)
+        if not ok:
+            req = f" (expected ≥ {required_size} bytes)" if required_size else ""
+            print(f"[WARN] Detected incomplete safetensors file: {filepath}{req}")
+            return False
+    return True
+
 def download_file(url: str, filepath: Path, headers: Optional[Dict[str, str]] = None, progress_callback=None) -> Tuple[bool, Optional[str]]:
     """
     Download a file from URL with progress reporting
@@ -239,6 +288,14 @@ def download_file(url: str, filepath: Path, headers: Optional[Dict[str, str]] = 
                         speed = downloaded / elapsed if elapsed > 0 else 0
                         eta = (total_size - downloaded) / speed if speed > 0 else 0
                         progress_callback(progress, downloaded, total_size, speed, eta)
+        
+        if total_size > 0 and downloaded != total_size:
+            print(f"[ERROR] Download incomplete for {filepath.name}: expected {total_size} bytes, got {downloaded}", flush=True)
+            try:
+                filepath.unlink()
+            except OSError:
+                pass
+            return False, "Incomplete download"
         
         # Print completion
         size_mb = downloaded / (1024 * 1024)
@@ -394,9 +451,17 @@ def download_model(model_id: str, models_path: str, stable_diffusion_catalog: Di
         
         # Check if already exists
         if filepath.exists():
-            print(f"[SKIP] File already exists: {filepath}", flush=True)
-            success_count += 1
-            continue
+            if _is_file_complete(filepath):
+                print(f"[SKIP] File already exists: {filepath}", flush=True)
+                success_count += 1
+                continue
+            else:
+                print(f"[WARN] Existing file appears corrupted, removing: {filepath}", flush=True)
+                try:
+                    filepath.unlink()
+                except OSError as unlink_err:
+                    print(f"[ERROR] Unable to remove corrupted file {filepath}: {unlink_err}", flush=True)
+                    continue
         
         # Get expected hash from config if available
         expected_hash = None
@@ -436,6 +501,14 @@ def download_model(model_id: str, models_path: str, stable_diffusion_catalog: Di
         if not verify_model_file(filepath, expected_hash):
             print(f"[ERROR] Verification failed for {file_name}", flush=True)
             filepath.unlink()  # Remove corrupted file
+            continue
+        
+        if not _is_file_complete(filepath):
+            print(f"[ERROR] Integrity check failed for {file_name}", flush=True)
+            try:
+                filepath.unlink()
+            except OSError:
+                pass
             continue
         
         success_count += 1

@@ -48,8 +48,8 @@ export async function POST(request: Request): Promise<Response> {
       console.error('Error loading model configs:', error);
     }
     
-    // Start download state tracking with files
-    startDownload(models[0], files);
+    // Start download state tracking
+    startDownload(models[0]);
     
         // Call the comfy-bridge API to download models
         const stream = new ReadableStream({
