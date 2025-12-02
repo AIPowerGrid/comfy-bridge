@@ -553,7 +553,44 @@ def resolve_dependencies(model_id: str, catalog: Dict[str, Any], resolved: set =
     
     return all_models
 
-def download_models(model_ids: List[str], models_path: str, 
+def is_model_already_downloaded(model_id: str, models_path: str,
+                               stable_diffusion_catalog: Optional[Dict[str, Any]],
+                               model_configs: Optional[Dict[str, Any]]) -> bool:
+    """Check if all files for a model are already downloaded"""
+    # Try to find model in catalogs
+    model_info = None
+    if stable_diffusion_catalog and model_id in stable_diffusion_catalog:
+        model_info = stable_diffusion_catalog[model_id]
+    elif model_configs and model_id in model_configs:
+        model_info = model_configs[model_id]
+
+    if not model_info:
+        return False
+
+    # Get all download URLs for this model
+    downloads = get_download_urls_from_model(model_info, model_id)
+
+    if not downloads:
+        return False
+
+    # Check if all files exist
+    for download_info in downloads:
+        file_name = download_info['file_name']
+        file_type = download_info['file_type']
+
+        # Determine file path (normalize folder)
+        file_type_norm = normalize_model_folder(file_type)
+        filepath = Path(models_path) / file_type_norm / file_name
+
+        # Also check alternative ckpt path for checkpoints
+        alt_ckpt_path = Path(models_path) / 'ckpt' / file_name if file_type_norm == 'checkpoints' else None
+
+        if not os.path.exists(filepath) and (alt_ckpt_path is None or not os.path.exists(alt_ckpt_path)):
+            return False
+
+    return True
+
+def download_models(model_ids: List[str], models_path: str,
                    stable_diffusion_path: str = '/app/grid-image-model-reference/stable_diffusion.json',
                    config_path: str = '/app/comfy-bridge/model_configs.json',
                    resolve_deps: bool = True) -> bool:
@@ -605,20 +642,49 @@ def download_models(model_ids: List[str], models_path: str,
     else:
         all_model_ids = model_ids
     
-    # Download each model (dependencies first, then requested models)
-    success_count = 0
-    total_count = len(all_model_ids)
-    downloaded_models = set()  # Track downloaded models to avoid duplicates
-    
+    # Pre-scan: categorize models as already downloaded vs need downloading
+    print(f"\n[INFO] Analyzing {len(all_model_ids)} model(s) for download status...", flush=True)
+
+    models_already_downloaded = []
+    models_to_download = []
+
     for model_id in all_model_ids:
+        if is_model_already_downloaded(model_id, models_path, stable_diffusion_catalog, model_configs):
+            models_already_downloaded.append(model_id)
+        else:
+            models_to_download.append(model_id)
+
+    # Display categorized lists
+    if models_already_downloaded:
+        print(f"\n[SKIP] {len(models_already_downloaded)} model(s) already downloaded:", flush=True)
+        for model_id in models_already_downloaded:
+            print(f"  ✓ {model_id}", flush=True)
+
+    if models_to_download:
+        print(f"\n[DOWNLOAD] {len(models_to_download)} model(s) to be downloaded:", flush=True)
+        for model_id in models_to_download:
+            print(f"  → {model_id}", flush=True)
+    else:
+        print(f"\n[SUCCESS] All {len(all_model_ids)} model(s) are already downloaded!", flush=True)
+        return True
+
+    print(f"\n{'='*60}", flush=True)
+    print(f"STARTING DOWNLOADS", flush=True)
+    print(f"{'='*60}", flush=True)
+
+    # Download each model that needs downloading
+    success_count = 0
+    downloaded_models = set()  # Track downloaded models to avoid duplicates
+
+    for model_id in models_to_download:
         if download_model(model_id, models_path, stable_diffusion_catalog, model_configs, downloaded_models):
             success_count += 1
         else:
             print(f"[ERROR] Failed to download {model_id}", flush=True)
-    
-    print(f"\n[SUMMARY] Successfully downloaded: {success_count}/{total_count} models", flush=True)
-    
-    return success_count == total_count
+
+    print(f"\n[SUMMARY] Successfully downloaded: {success_count}/{len(models_to_download)} models", flush=True)
+
+    return success_count == len(models_to_download)
 
 def main():
     """Main CLI interface"""

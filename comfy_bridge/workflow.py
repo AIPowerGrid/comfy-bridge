@@ -1,7 +1,7 @@
 import json
 import os
 import copy
-import httpx
+import httpx  # type: ignore  # httpx installed via requirements.txt in Docker
 import uuid
 import logging
 from typing import Dict, Any, Optional, Tuple, List

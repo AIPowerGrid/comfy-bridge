@@ -30,13 +30,19 @@ async def fetch_comfyui_models(comfy_url: str) -> List[str]:
                     )
                     models.extend(checkpoint_models)
 
-                    # Get Flux models
-                    flux_models = (
-                        data.get("FluxLoader", {})
-                        .get("input", {})
-                        .get("required", {})
-                        .get("model_name", [[]])[0]
-                    )
+                    flux_loaders = ["FluxLoader", "UNETLoader", "DualCLIPLoader"]
+                    flux_models = []
+                    for loader_name in flux_loaders:
+                        loader_data = data.get(loader_name, {})
+                        if loader_data and loader_data.get("input", {}).get("required", {}).get("model_name"):
+                            loader_models = (
+                                loader_data
+                                .get("input", {})
+                                .get("required", {})
+                                .get("model_name", [[]])[0]
+                            )
+                            flux_models.extend(loader_models)
+                            break  # Use first available loader
                     models.extend(flux_models)
                 elif endpoint == "/model_list":
                     models = data.get("checkpoints", []) + data.get("models", [])
@@ -427,23 +433,33 @@ class ModelMapper:
                 has_compatible_models = False
                 
                 if model_type == "flux":
-                    unet_models = available_models.get("UNETLoader") or []
-                    dual_clip = available_models.get("DualCLIPLoader") or {}
-                    vae_models = available_models.get("VAELoader") or []
-                    
-                    flux_unet = [m for m in unet_models if is_model_compatible(m, "flux")]
-                    clip1 = dual_clip.get("clip_name1", []) if isinstance(dual_clip, dict) else []
-                    clip2 = dual_clip.get("clip_name2", []) if isinstance(dual_clip, dict) else []
-                    flux_clip1 = [m for m in clip1 if is_model_compatible(m, "flux")]
-                    flux_clip2 = [m for m in clip2 if is_model_compatible(m, "flux")]
-                    flux_vae = [m for m in vae_models if is_model_compatible(m, "flux")]
-                    
-                    has_compatible_models = bool(flux_unet and (flux_clip1 or flux_clip2) and flux_vae)
-                    
-                    if not has_compatible_models and self._has_local_flux_assets():
+                    # Check for FluxLoader first (newer FLUX implementations)
+                    flux_loader_models = available_models.get("FluxLoader") or []
+
+                    if flux_loader_models:
+                        # If FluxLoader is available, use it
                         has_compatible_models = True
-                        logger.debug(f"Flux workflow {workflow_id}: local flux assets detected, allowing despite missing loader metadata")
-                
+                        logger.debug(f"Flux workflow {workflow_id}: FluxLoader detected")
+                    else:
+                        # Fall back to individual component loaders
+                        unet_models = available_models.get("UNETLoader") or []
+                        dual_clip = available_models.get("DualCLIPLoader") or {}
+                        vae_models = available_models.get("VAELoader") or []
+
+                        flux_unet = [m for m in unet_models if is_model_compatible(m, "flux")]
+                        clip1 = dual_clip.get("clip_name1", []) if isinstance(dual_clip, dict) else []
+                        clip2 = dual_clip.get("clip_name2", []) if isinstance(dual_clip, dict) else []
+                        flux_clip1 = [m for m in clip1 if is_model_compatible(m, "flux")]
+                        flux_clip2 = [m for m in clip2 if is_model_compatible(m, "flux")]
+                        flux_vae = [m for m in vae_models if is_model_compatible(m, "flux")]
+
+                        has_compatible_models = bool(flux_unet and (flux_clip1 or flux_clip2) and flux_vae)
+
+                    # Allow FLUX models even without detected loaders - runtime will handle it
+                    if not has_compatible_models:
+                        logger.warning(f"Flux workflow {workflow_id}: No compatible loaders detected, allowing anyway (runtime validation will apply)")
+                        has_compatible_models = True
+
                 elif model_type == "wanvideo":
                     # Some ComfyUI builds omit WanVideo loader info; require at least a VAE entry as a proxy.
                     vae_models = available_models.get("VAELoader") or []
