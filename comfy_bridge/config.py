@@ -1,5 +1,5 @@
 import os
-from dotenv import load_dotenv
+from dotenv import load_dotenv  # type: ignore  # dotenv installed via requirements.txt in Docker
 
 load_dotenv()
 
@@ -23,6 +23,10 @@ class Settings:
     WORKFLOW_FILE = os.getenv("WORKFLOW_FILE", None)
     COMFYUI_OUTPUT_DIR = os.getenv("COMFYUI_OUTPUT_DIR", r"C:\dev\ComfyUI\output")
     GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH = os.getenv("GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH")
+    # ModelVault on-chain validation (Base Sepolia)
+    MODELVAULT_ENABLED = os.getenv("MODELVAULT_ENABLED", "true").lower() == "true"
+    MODELVAULT_RPC_URL = os.getenv("MODELVAULT_RPC_URL", "https://sepolia.base.org")
+    MODELVAULT_CONTRACT = os.getenv("MODELVAULT_CONTRACT", "0xe660455D4A83bbbbcfDCF4219ad82447a831c8A1")
 
     @classmethod
     def validate(cls):

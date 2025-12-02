@@ -16,6 +16,7 @@ import RemovalSummaryDialog from '@/components/RemovalSummaryDialog';
 import RebuildingPage from '@/components/RebuildingPage';
 import { ToastContainer } from '@/components/Toast';
 import { useToast } from '@/lib/useToast';
+import { ModelVaultStatus } from '@/components/ModelVaultStatus';
 
 export default function Home() {
   const [gpuInfo, setGpuInfo] = useState<any>(null);
@@ -643,6 +644,9 @@ export default function Home() {
         {/* Main Content */}
         <div className="space-y-8">
           
+          {/* ModelVault Status */}
+          <ModelVaultStatus />
+
           {/* System Info - Full width on mobile, sidebar on desktop */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <GPUInfo 

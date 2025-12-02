@@ -6,7 +6,8 @@
   "homepage": "./",
   "scripts": {
     "dev": "next dev -p 5000",
-    "build": "next build",
+    "build": "npm run validate-exports && next build",
+    "validate-exports": "tsx scripts/validate-exports.ts",
     "start": "next start -p 5000",
     "lint": "next lint",
     "test": "jest",
@@ -19,10 +20,14 @@
     "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
+    "@rainbow-me/rainbowkit": "^2.2.8",
+    "@tanstack/react-query": "^5.37.1",
     "framer-motion": "^11.3.19",
     "next": "14.2.5",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "viem": "^2.37.11",
+    "wagmi": "^2.17.5"
   },
   "devDependencies": {
     "@types/electron": "^1.4.38",
@@ -39,6 +44,7 @@
     "postcss": "^8.4.39",
     "tailwindcss": "^3.4.6",
     "ts-jest": "^29.1.2",
+    "tsx": "^4.7.0",
     "typescript": "^5",
     "wait-on": "^7.2.0"
   },
