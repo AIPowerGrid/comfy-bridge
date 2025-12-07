@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import GPUInfo from '@/components/GPUInfo';
 import DiskSpace from '@/components/DiskSpace';
-import ModelDetailView from '@/components/ModelDetailView';
+// ModelDetailView removed - blockchain registry is now the primary model UI
 import Header from '@/components/Header';
 import StatusMessage from '@/components/StatusMessage';
 import APIKeyEditor from '@/components/APIKeyEditor';
@@ -16,20 +16,21 @@ import RemovalSummaryDialog from '@/components/RemovalSummaryDialog';
 import RebuildingPage from '@/components/RebuildingPage';
 import { ToastContainer } from '@/components/Toast';
 import { useToast } from '@/lib/useToast';
+import { ModelVaultStatus } from '@/components/ModelVaultStatus';
+import { useModelVaultRegister, generateModelHash, ModelType } from '@/lib/web3';
 
 export default function Home() {
   const [gpuInfo, setGpuInfo] = useState<any>(null);
   const [diskSpace, setDiskSpace] = useState<any>(null);
-  const [catalog, setCatalog] = useState<any>(null);
+  // Note: catalog removed - blockchain registry is now the single source of truth
   const [apiKeys, setApiKeys] = useState<any>({ huggingface: '', civitai: '' });
   const [gridConfig, setGridConfig] = useState<any>({ gridApiKey: '', workerName: '', aipgWallet: '' });
-  const [filter, setFilter] = useState<'all' | 'compatible' | 'installed'>('compatible');
-  const [styleFilter, setStyleFilter] = useState<'all' | 'text-to-image' | 'text-to-video' | 'image-to-video' | 'image-to-image' | 'anime' | 'realistic' | 'generalist' | 'artistic' | 'video'>('all');
+  // Note: filter and styleFilter removed - filtering is now handled by ModelVaultStatus component
   const [loading, setLoading] = useState(true);
   const [statusMessage, setStatusMessage] = useState<{type: 'success' | 'error' | 'info', message: string} | null>(null);
   const [downloadStatus, setDownloadStatus] = useState<any>(null);
   const [showGettingStarted, setShowGettingStarted] = useState(false);
-  const [isModelsCollapsed, setIsModelsCollapsed] = useState(false);
+  // Note: isModelsCollapsed removed - ModelVaultStatus handles its own expansion
   const [isApiKeysCollapsed, setIsApiKeysCollapsed] = useState(false);
   const [isGpuInfoCollapsed, setIsGpuInfoCollapsed] = useState(false);
   const [isDiskSpaceCollapsed, setIsDiskSpaceCollapsed] = useState(false);
@@ -45,8 +46,24 @@ export default function Home() {
   // Toast notifications
   const { toasts, removeToast, showSuccess, showError, showInfo, showWarning } = useToast();
 
+  // ModelVault registration
+  const { registerModel, isRegistering, isConnected: isWalletConnected } = useModelVaultRegister();
+  const [registeredModelHashes, setRegisteredModelHashes] = useState<Set<string>>(new Set());
+  const [registeringModelId, setRegisteringModelId] = useState<string | null>(null);
+  
+  // Model status for blockchain registry
+  const [installedModels, setInstalledModels] = useState<Set<string>>(new Set());
+  const [hostedModels, setHostedModels] = useState<Set<string>>(new Set());
+
   useEffect(() => {
-    loadData();
+    // Set a failsafe timeout to ensure loading state clears even if API calls hang
+    const failsafeTimeout = setTimeout(() => {
+      setLoading(false);
+    }, 15000);
+
+    loadData().finally(() => {
+      clearTimeout(failsafeTimeout);
+    });
     
     // Disabled: Run startup cleanup to remove orphaned WORKFLOW_FILE entries
     // runStartupCleanup();
@@ -67,41 +84,43 @@ export default function Home() {
     
     window.addEventListener('showToast', handleToastEvent as EventListener);
     
-    // Set up SSE connection for real-time download updates
-    const eventSource = new EventSource('/api/models/download/stream');
+    // Set up SSE connection for real-time download updates (only if endpoint exists)
+    let eventSource: EventSource | null = null;
+    let fallbackInterval: NodeJS.Timeout | null = null;
     
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'status') {
-          setDownloadStatus(data);
+    // Check if SSE endpoint exists before connecting
+    fetch('/api/models/download/stream', { method: 'HEAD' })
+      .then(res => {
+        if (res.ok || res.status === 405) {
+          // Endpoint exists, set up SSE
+          eventSource = new EventSource('/api/models/download/stream');
+          
+          eventSource.onmessage = (event) => {
+            try {
+              const data = JSON.parse(event.data);
+              if (data.type === 'status') {
+                setDownloadStatus(data);
+              }
+            } catch (error) {
+              console.error('Error parsing SSE data:', error);
+            }
+          };
+          
+          eventSource.onerror = () => {
+            console.log('SSE connection closed or errored');
+            eventSource?.close();
+          };
         }
-      } catch (error) {
-        console.error('Error parsing SSE data:', error);
-      }
-    };
-    
-    eventSource.onerror = (error) => {
-      console.error('SSE connection error:', error);
-      showError('Connection Error', 'Failed to connect to download status stream. Using fallback polling.');
-      
-      // Fallback to polling if SSE fails
-      const fallbackInterval = setInterval(async () => {
-        try {
-          const response = await fetch('/api/models/download/status');
-          const status = await response.json();
-          setDownloadStatus(status);
-        } catch (error) {
-          console.error('Fallback polling error:', error);
-        }
-      }, 3000); // Poll every 3 seconds as fallback
-      
-      // Clean up fallback after 5 minutes
-      setTimeout(() => clearInterval(fallbackInterval), 300000);
-    };
+      })
+      .catch(() => {
+        // SSE endpoint doesn't exist, that's OK - downloads will work without live updates
+        console.log('Download stream endpoint not available');
+      });
     
     return () => {
-      eventSource.close();
+      clearTimeout(failsafeTimeout);
+      eventSource?.close();
+      if (fallbackInterval) clearInterval(fallbackInterval);
       window.removeEventListener('showToast', handleToastEvent as EventListener);
     };
   }, []);
@@ -120,32 +139,89 @@ export default function Home() {
     }
   };
   
-  const loadData = async () => {
+  const loadModelStatus = async () => {
     try {
-      // Load GPU info
-      const gpuRes = await fetch('/api/gpu-info');
-      const gpuData = await gpuRes.json();
-      setGpuInfo(gpuData);
+      const response = await fetch('/api/models-status');
+      if (response.ok) {
+        const data = await response.json();
+        setHostedModels(new Set(data.hostedModels || []));
+        // Create set of installed model names from filenames
+        const installedSet = new Set<string>();
+        for (const file of (data.installedFiles || [])) {
+          // Remove extension and add variations
+          const baseName = file.replace(/\.(safetensors|ckpt|pt)$/i, '');
+          installedSet.add(file);
+          installedSet.add(baseName);
+          installedSet.add(baseName.replace(/_/g, '-'));
+          installedSet.add(baseName.replace(/-/g, '_'));
+        }
+        setInstalledModels(installedSet);
+      }
+    } catch (error) {
+      console.error('Failed to load model status:', error);
+    }
+  };
 
-      // Load disk space
-      const diskRes = await fetch('/api/disk-space');
-      const diskData = await diskRes.json();
-      setDiskSpace(diskData);
+  const loadData = async () => {
+    // Helper function to fetch with timeout
+    const fetchWithTimeout = async (url: string, timeoutMs: number = 5000) => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const response = await fetch(url, { signal: controller.signal });
+        clearTimeout(timeoutId);
+        return response;
+      } catch (error: any) {
+        clearTimeout(timeoutId);
+        if (error.name === 'AbortError') {
+          throw new Error(`Request to ${url} timed out`);
+        }
+        throw error;
+      }
+    };
 
-      // Load models catalog
-      const catalogRes = await fetch('/api/models-catalog');
-      const catalogData = await catalogRes.json();
-      setCatalog(catalogData);
+    try {
+      // Load model status (for blockchain registry display)
+      await loadModelStatus();
+      
+      // Load data in parallel with timeouts
+      // Note: models-catalog removed - blockchain registry is the source of truth
+      const [gpuRes, diskRes, keysRes, gridRes] = await Promise.allSettled([
+        fetchWithTimeout('/api/gpu-info'),
+        fetchWithTimeout('/api/disk-space'),
+        fetchWithTimeout('/api/api-keys'),
+        fetchWithTimeout('/api/grid-config'),
+      ]);
 
-      // Load API keys
-      const keysRes = await fetch('/api/api-keys');
-      const keysData = await keysRes.json();
-      setApiKeys(keysData);
+      // Process GPU info
+      if (gpuRes.status === 'fulfilled' && gpuRes.value.ok) {
+        setGpuInfo(await gpuRes.value.json());
+      } else {
+        console.warn('GPU info failed:', gpuRes.status === 'rejected' ? gpuRes.reason : 'Bad response');
+        setGpuInfo({ available: false, gpus: [], total_memory_gb: 0 });
+      }
 
-      // Load grid config
-      const gridRes = await fetch('/api/grid-config');
-      const gridData = await gridRes.json();
-      setGridConfig(gridData);
+      // Process disk space
+      if (diskRes.status === 'fulfilled' && diskRes.value.ok) {
+        setDiskSpace(await diskRes.value.json());
+      } else {
+        console.warn('Disk space failed:', diskRes.status === 'rejected' ? diskRes.reason : 'Bad response');
+        setDiskSpace({ error: 'Failed to load disk space' });
+      }
+
+      // Process API keys
+      if (keysRes.status === 'fulfilled' && keysRes.value.ok) {
+        setApiKeys(await keysRes.value.json());
+      } else {
+        console.warn('API keys failed:', keysRes.status === 'rejected' ? keysRes.reason : 'Bad response');
+      }
+
+      // Process grid config
+      if (gridRes.status === 'fulfilled' && gridRes.value.ok) {
+        setGridConfig(await gridRes.value.json());
+      } else {
+        console.warn('Grid config failed:', gridRes.status === 'rejected' ? gridRes.reason : 'Bad response');
+      }
 
       setLoading(false);
     } catch (error) {
@@ -162,8 +238,7 @@ export default function Home() {
   };
 
   const toggleAllCollapsed = () => {
-    const allCollapsed = isModelsCollapsed && isApiKeysCollapsed && isGpuInfoCollapsed && isDiskSpaceCollapsed && isGridConfigCollapsed;
-    setIsModelsCollapsed(!allCollapsed);
+    const allCollapsed = isApiKeysCollapsed && isGpuInfoCollapsed && isDiskSpaceCollapsed && isGridConfigCollapsed;
     setIsApiKeysCollapsed(!allCollapsed);
     setIsGpuInfoCollapsed(!allCollapsed);
     setIsDiskSpaceCollapsed(!allCollapsed);
@@ -294,33 +369,7 @@ export default function Home() {
 
   const handleDownloadSingle = async (modelId: string, autoHost: boolean = false) => {
     try {
-      // Check if we have required API keys for this model
-      const model = catalog?.models?.find((m: any) => m.id === modelId);
-      
-      if (!model) {
-        showStatus('error', 'Model not found');
-        return;
-      }
-      
-      // Check if model has a download URL
-      if (!model.config?.download_url && !model.config?.files?.[0]?.path) {
-        showStatus('error', `Model ${modelId} is not downloadable - no download URL available`);
-        showError('Download Not Available', `Model ${modelId} is not downloadable. This model may require manual installation or is not yet available for download.`);
-        return;
-      }
-      
-      if (model.requires_huggingface_key && !apiKeys.huggingface) {
-        showStatus('error', 'HuggingFace API key required for this model. Please configure it first.');
-        showError('API Key Required', 'HuggingFace API key required for this model. Please configure it first.');
-        return;
-      }
-      
-      if (model.requires_civitai_key && !apiKeys.civitai) {
-        showStatus('error', 'Civitai API key required for this model. Please configure it first.');
-        showError('API Key Required', 'Civitai API key required for this model. Please configure it first.');
-        return;
-      }
-      
+      // For blockchain models, we fetch from the chain - no local catalog needed
       showStatus('info', `Starting download of ${modelId}...`);
 
       // Start download - read SSE stream for progress
@@ -465,6 +514,68 @@ export default function Home() {
       showError('Uninstall Error', error.message);
     }
   };
+
+  // Register model to ModelVault on-chain
+  const handleRegisterToVault = async (modelId: string, model: any) => {
+    if (!isWalletConnected) {
+      showError('Wallet Not Connected', 'Please connect your wallet to register models on-chain');
+      return;
+    }
+
+    try {
+      setRegisteringModelId(modelId);
+      showStatus('info', `Registering ${model.display_name || modelId} to ModelVault...`);
+
+      // Determine model type based on baseline/style
+      // ModelType: TEXT_MODEL = 0, IMAGE_MODEL = 1, VIDEO_MODEL = 2
+      let modelType = ModelType.IMAGE_MODEL; // Default to image
+      const baseline = (model.baseline || '').toLowerCase();
+      const style = (model.style || '').toLowerCase();
+      
+      if (baseline.includes('video') || baseline.includes('wan') || baseline.includes('ltx') || 
+          model.capability_type?.includes('Video') || style.includes('video')) {
+        modelType = ModelType.VIDEO_MODEL;
+      } else if (baseline.includes('llm') || baseline.includes('text') || baseline.includes('language')) {
+        modelType = ModelType.TEXT_MODEL;
+      } else {
+        // All image models (SD, SDXL, FLUX, etc.) use IMAGE_MODEL
+        modelType = ModelType.IMAGE_MODEL;
+      }
+
+      const fileName = model.config?.files?.[0]?.path || model.filename || modelId;
+      const sizeBytes = BigInt(Math.floor((model.size_gb || 0) * 1024 * 1024 * 1024));
+
+      const result = await registerModel({
+        modelId,
+        fileName,
+        displayName: model.display_name || model.name || modelId,
+        description: model.description || '',
+        modelType,
+        isNSFW: model.nsfw || false,
+        sizeBytes,
+        inpainting: model.inpainting || false,
+        img2img: false,
+        controlnet: false,
+        lora: model.type === 'loras',
+        baseModel: model.baseline || '',
+        architecture: model.type || 'checkpoints',
+      });
+
+      if (result.success) {
+        showSuccess('Model Registered', `${model.display_name || modelId} has been registered on-chain!`);
+        // Add to registered hashes
+        const hash = generateModelHash(fileName);
+        setRegisteredModelHashes(prev => new Set([...prev, hash]));
+      } else {
+        showError('Registration Failed', result.error || 'Failed to register model');
+      }
+    } catch (error: any) {
+      console.error('Registration error:', error);
+      showError('Registration Error', error.message || 'An error occurred during registration');
+    } finally {
+      setRegisteringModelId(null);
+    }
+  };
   
   const handleRestartComplete = async () => {
     try {
@@ -509,10 +620,10 @@ export default function Home() {
     );
   }
 
-  // Calculate API key requirements
+  // Calculate API key requirements (blockchain models may require API keys for downloads)
   const modelsRequiringKeys = {
-    huggingface: catalog?.models?.filter((m: any) => m.requires_huggingface_key).length || 0,
-    civitai: catalog?.models?.filter((m: any) => m.requires_civitai_key).length || 0,
+    huggingface: 0, // Will be determined from blockchain model metadata when needed
+    civitai: 0,
   };
 
   // Show rebuilding page if containers are rebuilding
@@ -636,13 +747,46 @@ export default function Home() {
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
-            {isModelsCollapsed && isApiKeysCollapsed && isGpuInfoCollapsed && isDiskSpaceCollapsed ? 'Expand All' : 'Collapse All'}
+            {isApiKeysCollapsed && isGpuInfoCollapsed && isDiskSpaceCollapsed && isGridConfigCollapsed ? 'Expand All' : 'Collapse All'}
           </button>
         </div>
 
         {/* Main Content */}
         <div className="space-y-8">
           
+          {/* Blockchain Model Registry - Primary Model Display */}
+          <ModelVaultStatus 
+            onStartEarning={async (modelName) => {
+              // Check if model needs downloading first - check installedModels set
+              const isInstalled = installedModels.has(modelName) || 
+                Array.from(installedModels).some(f => 
+                  f.toLowerCase().includes(modelName.toLowerCase().replace(/[^a-z0-9]/g, ''))
+                );
+              
+              if (isInstalled) {
+                await handleHost(modelName);
+              } else {
+                // Download and then host
+                await handleDownloadSingle(modelName, true);
+              }
+            }}
+            onStopEarning={async (modelName) => {
+              await handleUnhost(modelName);
+            }}
+            onUninstall={async (modelName) => {
+              await handleUninstall(modelName);
+            }}
+            onDownload={async (modelName) => {
+              // Download and auto-host
+              await handleDownloadSingle(modelName, true);
+            }}
+            installedModels={installedModels}
+            hostedModels={hostedModels}
+            downloadingModels={new Set(
+              downloadStatus?.is_downloading && downloadStatus?.current_model ? [downloadStatus.current_model] : []
+            )}
+          />
+
           {/* System Info - Full width on mobile, sidebar on desktop */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <GPUInfo 
@@ -657,9 +801,8 @@ export default function Home() {
             />
           </div>
 
-          {/* Main Content Area */}
-          <div className="space-y-6">
-            
+          {/* Configuration Area - Grid Config and API Keys side by side */}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
             {/* Grid Configuration */}
             <GridConfigEditor
               gridApiKey={gridConfig.gridApiKey || ''}
@@ -671,7 +814,7 @@ export default function Home() {
             />
             
             {/* API Keys Section */}
-            <div className="bg-gray-900 rounded-xl border border-gray-700 mt-8">
+            <div className="bg-gray-900 rounded-xl border border-gray-700">
               {/* Collapsible Header */}
               <div
                 className="flex items-center justify-between p-6 cursor-pointer hover:bg-gray-800/30 transition-colors"
@@ -682,7 +825,7 @@ export default function Home() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
                   </svg>
                   <div>
-                    <h2 className="text-2xl font-bold text-white">API Keys Setup</h2>
+                    <h2 className="text-xl font-bold text-white">API Keys Setup</h2>
                     <p className="text-sm text-gray-400">
                       {apiKeys.huggingface || apiKeys.civitai ? '✓ API keys configured' : 'Configure API keys for model downloads'}
                     </p>
@@ -724,88 +867,14 @@ export default function Home() {
                 </div>
               </motion.div>
             </div>
-            
-            {/* API Key Warning */}
-            <APIKeyStatus
-              hasHuggingFaceKey={!!apiKeys.huggingface}
-              hasCivitaiKey={!!apiKeys.civitai}
-              modelsRequiringKeys={modelsRequiringKeys}
-            />
-            
-            {/* Model Selection */}
-            <div className="bg-gray-900 rounded-xl border border-gray-700">
-              {/* Collapsible Header */}
-              <div 
-                className="flex items-center justify-between p-6 cursor-pointer hover:bg-gray-800/30 transition-colors"
-                onClick={() => setIsModelsCollapsed(!isModelsCollapsed)}
-              >
-                <div className="flex items-center gap-3">
-                  <svg className="w-6 h-6 text-aipg-orange" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                  </svg>
-                  <div>
-                    <h2 className="text-2xl font-bold text-white">Choose Your AI Models</h2>
-                    <p className="text-sm text-gray-400">
-                      {catalog?.models ? 
-                        `${catalog.models.filter((m: any) => {
-                          const maxVram = gpuInfo?.gpus?.[0]?.vram_available_gb || gpuInfo?.total_memory_gb || 0;
-                          return m.vram_required_gb <= maxVram;
-                        }).length} models compatible (${catalog.total_count || 0} total models)` :
-                        'Select AI models for your worker'
-                      }
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {catalog?.installed_count > 0 && (
-                    <span className="px-3 py-1 text-xs bg-blue-500/20 text-blue-400 rounded-full border border-blue-500/50">
-                      {catalog.installed_count} installed
-                    </span>
-                  )}
-                  <svg 
-                    className={`w-5 h-5 text-gray-400 transition-transform ${isModelsCollapsed ? 'rotate-180' : ''}`}
-                    fill="none" 
-                    stroke="currentColor" 
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </div>
-              </div>
-
-              {/* Collapsible Content */}
-              <motion.div
-                initial={false}
-                animate={{ height: isModelsCollapsed ? 0 : 'auto' }}
-                transition={{ duration: 0.3 }}
-                className="overflow-hidden"
-              >
-                <div className="px-6 pb-6">
-                  <p className="text-gray-400 mb-6">
-                    Select the AI models you want to run on your worker. Each model is specialized for different types of content creation.
-                  </p>
-                  
-                  <ModelDetailView
-                    catalog={catalog}
-                    diskSpace={diskSpace}
-                    filter={filter}
-                    styleFilter={styleFilter}
-                    gpuInfo={gpuInfo}
-                    downloadStatus={downloadStatus}
-                    onFilterChange={setFilter}
-                    onStyleFilterChange={setStyleFilter}
-                    onUninstall={handleUninstall}
-                    onHost={handleHost}
-                    onUnhost={handleUnhost}
-                    onDownload={(modelId) => handleDownloadSingle(modelId, false)}
-                    onDownloadAndHost={(modelId) => handleDownloadSingle(modelId, true)}
-                    onCancelDownload={handleCancelDownload}
-                    onCatalogRefresh={loadData}
-                  />
-                </div>
-              </motion.div>
-            </div>
           </div>
+          
+          {/* API Key Warning */}
+          <APIKeyStatus
+            hasHuggingFaceKey={!!apiKeys.huggingface}
+            hasCivitaiKey={!!apiKeys.civitai}
+            modelsRequiringKeys={modelsRequiringKeys}
+          />
         </div>
       </div>
       

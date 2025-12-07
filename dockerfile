@@ -55,7 +55,9 @@ RUN --mount=type=cache,target=/root/.cache/git \
     cd ComfyUI-WanVideoWrapper && \
     if [ -f requirements.txt ]; then \
         pip3 install --timeout 120 -r requirements.txt; \
-    fi
+    fi && \
+    # Try to install optional dependencies for WanVideoWrapper
+    pip3 install --timeout 120 onnxruntime || echo "Optional: onnxruntime not available"
 
 # Install ComfyUI-WanMoeKSampler custom node extension (provides SplitSigmasAtT)
 RUN --mount=type=cache,target=/root/.cache/git \
@@ -91,8 +93,13 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 COPY comfy_bridge ./comfy_bridge
 COPY workflows ./workflows
 COPY tests ./tests
-COPY download_models_from_catalog.py model_manager.py model_configs.json get_gpu_info.py gpu_info_api.py downloads_api.py catalog_sync.py start_catalog_sync.sh ./
-RUN chmod +x get_gpu_info.py download_models_from_catalog.py gpu_info_api.py downloads_api.py catalog_sync.py start_catalog_sync.sh
+# Copy utility scripts (blockchain-based model download, no JSON catalogs)
+COPY download_models_from_chain.py model_manager.py get_gpu_info.py gpu_info_api.py downloads_api.py install-optional-deps.sh ./
+RUN chmod +x get_gpu_info.py download_models_from_chain.py gpu_info_api.py downloads_api.py install-optional-deps.sh
+
+# Install optional performance dependencies
+RUN --mount=type=cache,target=/root/.cache/pip \
+    ./install-optional-deps.sh
 
 # Create startup script
 COPY docker-entrypoint.sh /app/

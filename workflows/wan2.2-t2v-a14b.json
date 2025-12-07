@@ -101,7 +101,7 @@
   },
   "39": {
     "inputs": {
-      "model_name": "wan_2.1_vae.safetensors",
+      "model_name": "wan2.2_vae.safetensors",
       "precision": "bf16"
     },
     "class_type": "WanVideoVAELoader",

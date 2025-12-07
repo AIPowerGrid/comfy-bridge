@@ -2,6 +2,7 @@
 
 import { motion } from 'framer-motion';
 import { useState, useEffect } from 'react';
+import { WalletConnect } from './WalletConnect';
 
 export default function Header() {
   const [isEarning, setIsEarning] = useState(false);
@@ -102,6 +103,11 @@ export default function Header() {
       animate={{ opacity: 1, y: 0 }}
       className="text-center mb-8"
     >
+      {/* Wallet Connect - Top Right */}
+      <div className="absolute top-4 right-6 z-50">
+        <WalletConnect />
+      </div>
+
       <div className="flex items-center justify-center gap-4 mb-6">
         {/* AIPG Logo */}
         <div className="relative">

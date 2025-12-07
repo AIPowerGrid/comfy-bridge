@@ -11,17 +11,15 @@ const nextConfig = {
             key: 'Content-Security-Policy',
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline'",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
               "style-src 'self' 'unsafe-inline'",
-              "img-src 'self' data: blob:",
-              "font-src 'self'",
-              "connect-src 'self' http://localhost:* http://comfy-bridge:*",
-              "frame-src 'none'",
+              "img-src 'self' data: blob: https: http:",
+              "font-src 'self' https://fonts.gstatic.com",
+              "connect-src 'self' http://localhost:* http://comfy-bridge:* https: wss:",
+              "frame-src https://*.walletconnect.com https://*.walletconnect.org",
               "object-src 'none'",
               "base-uri 'self'",
-              "form-action 'self'",
-              "frame-ancestors 'none'",
-              "upgrade-insecure-requests"
+              "form-action 'self'"
             ].join('; ')
           }
         ]
