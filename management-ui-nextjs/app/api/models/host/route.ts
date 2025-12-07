@@ -1,221 +1,160 @@
 import { NextResponse } from 'next/server';
-import { promises as fs } from 'fs';
+import * as fs from 'fs/promises';
 import * as path from 'path';
-import { exec } from 'child_process';
-import { promisify } from 'util';
 
-const execAsync = promisify(exec);
+export const dynamic = 'force-dynamic';
+
+const isWindows = process.platform === 'win32';
+
+function getEnvPath() {
+  if (isWindows) {
+    return process.env.ENV_FILE_PATH || 'c:\\dev\\comfy-bridge\\.env';
+  }
+  return process.env.ENV_FILE_PATH || '/app/comfy-bridge/.env';
+}
+
+function getWorkflowsPath() {
+  if (isWindows) {
+    return 'c:\\dev\\comfy-bridge\\workflows';
+  }
+  return '/app/comfy-bridge/workflows';
+}
 
 export async function POST(request: Request) {
   try {
     const { model_id } = await request.json();
     
     if (!model_id) {
-      return NextResponse.json(
-        { error: 'Model ID is required' },
-        { status: 400 }
-      );
-    }
-    
-    // Strip .json extension if present in model_id
-    const modelIdWithoutJson = model_id.endsWith('.json') ? model_id.slice(0, -5) : model_id;
-    
-    // Verify model is installed before allowing hosting
-    const modelConfigPath = '/app/comfy-bridge/model_configs.json';
-    const modelsPath = process.env.MODELS_PATH || '/app/ComfyUI/models';
-    
-    try {
-      const configData = await fs.readFile(modelConfigPath, 'utf-8');
-      const modelConfigs = JSON.parse(configData);
-      const modelInfo = modelConfigs[modelIdWithoutJson];
-      
-      if (!modelInfo) {
-        return NextResponse.json({
-          success: false,
-          error: 'Model not found in catalog'
-        }, { status: 404 });
-      }
-      
-      // Check if model files are installed
-      const files = modelInfo.files || (modelInfo.filename ? [{ path: modelInfo.filename, file_type: modelInfo.type || 'checkpoints' }] : []);
-      
-      if (files.length === 0) {
-        return NextResponse.json({
-          success: false,
-          error: 'Model has no files defined in catalog'
-        }, { status: 400 });
-      }
-      
-      // Check if all files exist
-      for (const file of files) {
-        const fileName = file.path;
-        const fileType = file.file_type || 'checkpoints';
-        const filePath = path.join(modelsPath, fileType, fileName);
-        
-        try {
-          await fs.access(filePath);
-        } catch (err) {
-          return NextResponse.json({
-            success: false,
-            error: `Model not installed. Missing file: ${fileName}`,
-            missing_file: fileName,
-            file_path: `${fileType}/${fileName}`
-          }, { status: 400 });
-        }
-      }
-      
-      console.log(`Verified ${files.length} file(s) installed for ${modelIdWithoutJson}`);
-    } catch (error) {
-      console.error('Error verifying model installation:', error);
       return NextResponse.json({
         success: false,
-        error: 'Failed to verify model installation'
-      }, { status: 500 });
+        error: 'Model ID is required'
+      }, { status: 400 });
     }
     
-    const envFilePath = process.env.ENV_FILE_PATH || '/app/comfy-bridge/.env';
-    let envContent = await fs.readFile(envFilePath, 'utf-8');
+    console.log(`Starting to host model: ${model_id}`);
     
-    // Get current WORKFLOW_FILE value and strip .json from each model
-    const match = envContent.match(/^WORKFLOW_FILE=(.*)$/m);
-    let currentModels: string[] = [];
+    const envPath = getEnvPath();
+    const workflowsPath = getWorkflowsPath();
     
-    if (match && match[1]) {
-      currentModels = match[1].split(',').map(s => {
-        const trimmed = s.trim();
-        return trimmed.endsWith('.json') ? trimmed.slice(0, -5) : trimmed;
-      }).filter(Boolean);
-    }
-    
-    // Check if this is a new model being enabled
-    const isNewModel = !currentModels.includes(modelIdWithoutJson);
-    
-    // Check if workflow file exists, create template if not
-    const workflowsPath = process.env.COMFY_BRIDGE_PATH 
-      ? path.join(process.env.COMFY_BRIDGE_PATH, 'workflows')
-      : '/app/comfy-bridge/workflows';
-    
-    const workflowFilePath = path.join(workflowsPath, `${modelIdWithoutJson}.json`);
-    
+    // Read current .env
+    let envContent = '';
     try {
-      await fs.access(workflowFilePath);
-    } catch (error) {
-      // Workflow file doesn't exist, create a template
-      console.log(`Creating template workflow file for ${modelIdWithoutJson}`);
-      
-      // Create a basic workflow template
-      const templateWorkflow = {
-        "3": {
-          "inputs": {
-            "seed": 1,
-            "steps": 20,
-            "cfg": 7,
-            "sampler_name": "euler",
-            "scheduler": "normal",
-            "denoise": 1,
-            "model": ["4", 0],
-            "positive": ["6", 0],
-            "negative": ["7", 0],
-            "latent_image": ["5", 0]
-          },
-          "class_type": "KSampler",
-          "_meta": { "title": "KSampler" }
-        },
-        "4": {
-          "inputs": {
-            "ckpt_name": "checkpoint_name.safetensors"
-          },
-          "class_type": "CheckpointLoaderSimple",
-          "_meta": { "title": "Load Checkpoint" }
-        },
-        "5": {
-          "inputs": {
-            "width": 512,
-            "height": 512,
-            "batch_size": 1
-          },
-          "class_type": "EmptyLatentImage",
-          "_meta": { "title": "Empty Latent Image" }
-        },
-        "6": {
-          "inputs": {
-            "text": "prompt",
-            "clip": ["4", 1]
-          },
-          "class_type": "CLIPTextEncode",
-          "_meta": { "title": "CLIP Text Encode (Prompt)" }
-        },
-        "7": {
-          "inputs": {
-            "text": "negative prompt",
-            "clip": ["4", 1]
-          },
-          "class_type": "CLIPTextEncode",
-          "_meta": { "title": "CLIP Text Encode (Negative)" }
-        },
-        "8": {
-          "inputs": {
-            "samples": ["3", 0],
-            "vae": ["4", 2]
-          },
-          "class_type": "VAEDecode",
-          "_meta": { "title": "VAE Decode" }
-        },
-        "9": {
-          "inputs": {
-            "filename_prefix": "ComfyUI",
-            "images": ["8", 0]
-          },
-          "class_type": "SaveImage",
-          "_meta": { "title": "Save Image" }
-        }
-      };
-      
-      // Ensure workflows directory exists
-      await fs.mkdir(workflowsPath, { recursive: true });
-      
-      // Write the template workflow
-      await fs.writeFile(workflowFilePath, JSON.stringify(templateWorkflow, null, 2), 'utf-8');
-      
-      console.log(`Created template workflow file: ${workflowFilePath}`);
+      envContent = await fs.readFile(envPath, 'utf-8');
+    } catch (err) {
+      // File might not exist yet
+      envContent = '';
     }
     
-    // Add model if not already in the list (without .json extension)
-    if (isNewModel) {
-      currentModels.push(modelIdWithoutJson);
-      
-      const newModelsValue = currentModels.join(',');
-      
-      // Update WORKFLOW_FILE
-      if (match) {
-        envContent = envContent.replace(/^WORKFLOW_FILE=.*$/m, `WORKFLOW_FILE=${newModelsValue}`);
-      } else {
-        envContent += `\nWORKFLOW_FILE=${newModelsValue}`;
+    // Check if workflow file exists for this model
+    const workflowFile = `${model_id}.json`;
+    const workflowFullPath = path.join(workflowsPath, workflowFile);
+    
+    let workflowExists = false;
+    try {
+      await fs.access(workflowFullPath);
+      workflowExists = true;
+    } catch (err) {
+      console.log(`Workflow file not found: ${workflowFullPath}`);
+    }
+    
+    if (!workflowExists) {
+      // Try with lowercase
+      const lowerWorkflowFile = `${model_id.toLowerCase()}.json`;
+      const lowerWorkflowPath = path.join(workflowsPath, lowerWorkflowFile);
+      try {
+        await fs.access(lowerWorkflowPath);
+        workflowExists = true;
+      } catch (err) {
+        // Also try with common naming patterns
+        const patterns = [
+          `${model_id.replace(/[^a-zA-Z0-9]/g, '_')}.json`,
+          `${model_id.replace(/[^a-zA-Z0-9]/g, '-')}.json`,
+          `${model_id.toLowerCase().replace(/[^a-z0-9]/g, '_')}.json`,
+        ];
+        
+        for (const pattern of patterns) {
+          try {
+            await fs.access(path.join(workflowsPath, pattern));
+            workflowExists = true;
+            break;
+          } catch (err) {
+            // Continue checking
+          }
+        }
       }
-      
-      await fs.writeFile(envFilePath, envContent, 'utf-8');
-      
-      // Return success, frontend will handle restart/rebuild
+    }
+    
+    if (!workflowExists) {
       return NextResponse.json({
-        success: true,
-        message: `Model ${modelIdWithoutJson} is now being hosted. Containers will restart to apply changes.`,
-        models: currentModels,
-        requires_restart: true, // Tell frontend to trigger rebuild
-      });
+        success: false,
+        error: `No workflow file found for ${model_id}. Please ensure a workflow file exists in the workflows directory.`
+      }, { status: 400 });
+    }
+    
+    // Get current WORKFLOW_FILE value
+    const workflowMatch = envContent.match(/^WORKFLOW_FILE=(.*)$/m);
+    let currentWorkflows: string[] = [];
+    
+    if (workflowMatch && workflowMatch[1]) {
+      currentWorkflows = workflowMatch[1].split(',').map(s => s.trim()).filter(Boolean);
+    }
+    
+    // Add the new model if not already present
+    const modelWorkflow = `${model_id}.json`;
+    if (!currentWorkflows.includes(modelWorkflow) && !currentWorkflows.includes(model_id)) {
+      currentWorkflows.push(modelWorkflow);
+    }
+    
+    // Update WORKFLOW_FILE in .env
+    const newWorkflowValue = currentWorkflows.join(',');
+    
+    if (workflowMatch) {
+      envContent = envContent.replace(/^WORKFLOW_FILE=.*$/m, `WORKFLOW_FILE=${newWorkflowValue}`);
     } else {
+      envContent += `\nWORKFLOW_FILE=${newWorkflowValue}\n`;
+    }
+    
+    await fs.writeFile(envPath, envContent, 'utf-8');
+    
+    console.log(`Updated WORKFLOW_FILE to: ${newWorkflowValue}`);
+    
+    // Trigger container restart
+    try {
+      const { exec } = await import('child_process');
+      const { promisify } = await import('util');
+      const execAsync = promisify(exec);
+      
+      if (isWindows) {
+        // On Windows, use docker-compose from the comfy-bridge directory
+        await execAsync('docker-compose restart comfy-bridge', { 
+          cwd: 'c:\\dev\\comfy-bridge' 
+        });
+      } else {
+        // In Docker, use docker-compose
+        await execAsync('docker-compose -f /app/comfy-bridge/docker-compose.yml restart comfy-bridge');
+      }
+    } catch (restartError) {
+      console.error('Failed to restart container:', restartError);
+      // Don't fail the request, just note the warning
       return NextResponse.json({
         success: true,
-        message: `Model ${modelIdWithoutJson} is already being hosted`,
-        models: currentModels,
-        restarted: false,
+        requires_restart: true,
+        message: `Model ${model_id} configured for hosting. Manual restart may be required.`,
+        warning: 'Container restart failed - please restart manually'
       });
     }
+    
+    return NextResponse.json({
+      success: true,
+      requires_restart: true,
+      message: `Now hosting ${model_id}. Container is restarting...`
+    });
+    
   } catch (error: any) {
     console.error('Error hosting model:', error);
-    return NextResponse.json(
-      { error: error.message || 'Failed to host model' },
-      { status: 500 }
-    );
+    return NextResponse.json({
+      success: false,
+      error: error.message || 'Failed to host model'
+    }, { status: 500 });
   }
 }
-

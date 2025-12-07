@@ -20,14 +20,14 @@ export interface ModelDownloadState {
   eta?: string;
   files: FileDownloadState[];
   error_message?: string;
-  status?: 'pending' | 'downloading' | 'completed' | 'failed';
+  status?: 'pending' | 'downloading' | 'completed' | 'failed' | 'cancelled';
   processId?: number;
 }
 
 export interface DownloadProgress {
   id: string;
   modelId: string;
-  status: 'pending' | 'downloading' | 'completed' | 'failed';
+  status: 'pending' | 'downloading' | 'completed' | 'failed' | 'cancelled';
   progress: number; // 0-100
   message: string;
   startedAt: Date;
@@ -89,6 +89,30 @@ class DownloadStateManager {
 }
 
 export const downloadStateManager = new DownloadStateManager();
+
+export function createDownload(modelId: string, files?: FileDownloadState[]): string {
+  return downloadStateManager.createDownload(modelId, files);
+}
+
+export function updateDownload(id: string, updates: Partial<DownloadProgress>): void {
+  downloadStateManager.updateDownload(id, updates);
+}
+
+export function getDownload(id: string): DownloadProgress | undefined {
+  return downloadStateManager.getDownload(id);
+}
+
+export function getDownloadsByModel(modelId: string): DownloadProgress[] {
+  return downloadStateManager.getDownloadsByModel(modelId);
+}
+
+export function removeDownload(id: string): void {
+  downloadStateManager.removeDownload(id);
+}
+
+export function clearCompletedDownloads(): void {
+  downloadStateManager.clearCompletedDownloads();
+}
 
 // Additional methods for file management
 export function setFileStatus(modelId: string, fileName: string, status: 'queued' | 'downloading' | 'completed' | 'failed' | 'error' | 'cancelled'): void {
@@ -188,4 +212,59 @@ export function getDownloadStatus(id: string): DownloadProgress | undefined {
 
 export function getAllDownloads(): DownloadProgress[] {
   return downloadStateManager.getAllDownloads();
+}
+
+// Cancel download for a specific model
+export function cancelDownload(modelId: string): void {
+  const downloads = downloadStateManager.getDownloadsByModel(modelId);
+  for (const download of downloads) {
+    if (download.status === 'downloading') {
+      downloadStateManager.updateDownload(download.id, {
+        status: 'cancelled',
+        message: 'Download cancelled by user',
+        completedAt: new Date(),
+      });
+    }
+  }
+}
+
+// Get all download states as a Map (for backward compatibility)
+export function getAllDownloadStates(): Map<string, ModelDownloadState> {
+  const downloads = downloadStateManager.getAllDownloads();
+  const statesMap = new Map<string, ModelDownloadState>();
+
+  // Group downloads by model ID
+  const modelGroups = new Map<string, DownloadProgress[]>();
+  for (const download of downloads) {
+    if (!modelGroups.has(download.modelId)) {
+      modelGroups.set(download.modelId, []);
+    }
+    modelGroups.get(download.modelId)!.push(download);
+  }
+
+  // Convert to ModelDownloadState format
+  for (const [modelId, modelDownloads] of modelGroups) {
+    // Find the most recent download for this model
+    const latestDownload = modelDownloads.sort((a, b) =>
+      new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
+    )[0];
+
+    const modelState: ModelDownloadState = {
+      is_downloading: latestDownload.status === 'downloading',
+      progress: latestDownload.progress,
+      total_files: latestDownload.files?.length || 0,
+      completed_files: latestDownload.files?.filter(f => f.status === 'completed').length || 0,
+      message: latestDownload.message,
+      speed: latestDownload.files?.[0]?.speed,
+      eta: latestDownload.files?.[0]?.eta,
+      files: latestDownload.files || [],
+      error_message: latestDownload.error,
+      status: latestDownload.status,
+      processId: latestDownload.processId,
+    };
+
+    statesMap.set(modelId, modelState);
+  }
+
+  return statesMap;
 }

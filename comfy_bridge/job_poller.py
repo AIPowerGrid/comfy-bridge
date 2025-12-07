@@ -9,10 +9,10 @@ logger = logging.getLogger(__name__)
 
 class JobPoller:
     def __init__(
-        self, 
+        self,
         comfy_client,
         result_processor,
-        max_wait_time: int = 600,
+        max_wait_time: int = 1800,
         filesystem_fallback_time: int = 300
     ):
         self.comfy = comfy_client

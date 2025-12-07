@@ -2,9 +2,21 @@ import { NextResponse } from 'next/server';
 import { promises as fs } from 'fs';
 import { restartDockerContainers } from '@/lib/docker';
 
+// Check if running in Docker or locally
+const isWindows = process.platform === 'win32';
+const isLocalDev = isWindows || !process.env.DOCKER_CONTAINER;
+
+// Get the correct .env path based on platform
+function getEnvPath() {
+  if (isWindows) {
+    return process.env.ENV_FILE_PATH || 'c:\\dev\\comfy-bridge\\.env';
+  }
+  return process.env.ENV_FILE_PATH || '/app/comfy-bridge/.env';
+}
+
 export async function GET() {
   try {
-    const envFilePath = process.env.ENV_FILE_PATH || '/app/comfy-bridge/.env';
+    const envFilePath = getEnvPath();
     const envContent = await fs.readFile(envFilePath, 'utf-8');
     
     // Parse GRID_API_KEY
@@ -30,12 +42,13 @@ export async function GET() {
       workerName,
       aipgWallet,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error reading grid config:', error);
     return NextResponse.json({
       gridApiKey: '',
       workerName: '',
       aipgWallet: '',
+      error: 'Could not read .env file: ' + error.message,
     });
   }
 }
@@ -55,7 +68,7 @@ export async function POST(request: Request) {
     // Construct full worker name
     const fullWorkerName = `${workerName}.${aipgWallet}`;
     
-    const envFilePath = process.env.ENV_FILE_PATH || '/app/comfy-bridge/.env';
+    const envFilePath = getEnvPath();
     let envContent = await fs.readFile(envFilePath, 'utf-8');
     
     // Update GRID_API_KEY
@@ -74,7 +87,16 @@ export async function POST(request: Request) {
     
     await fs.writeFile(envFilePath, envContent, 'utf-8');
     
-    // Restart containers to apply environment changes
+    // Skip Docker restart on Windows (local dev mode)
+    if (isWindows) {
+      return NextResponse.json({
+        success: true,
+        message: 'Grid configuration saved successfully',
+        fullWorkerName,
+      });
+    }
+    
+    // Restart containers to apply environment changes (Docker only)
     try {
       console.log('Restarting containers to apply environment changes...');
       

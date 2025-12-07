@@ -1,7 +1,7 @@
 import json
 import os
 import copy
-import httpx
+import httpx  # type: ignore  # httpx installed via requirements.txt in Docker
 import uuid
 import logging
 from typing import Dict, Any, Optional, Tuple, List
@@ -616,6 +616,7 @@ async def process_workflow(
     # Process each node in the workflow
     # Handle ComfyUI format (nodes array)
     if isinstance(processed_workflow, dict) and "nodes" in processed_workflow:
+        logger.info("Processing workflow in ComfyUI native format (nodes array)")
         nodes = processed_workflow.get("nodes", [])
         # Don't modify WanVideo workflows - they work correctly as-is
         for node in nodes:
@@ -742,7 +743,7 @@ async def process_workflow(
                 # In native format, scheduler might be in inputs dict
                 if isinstance(inputs, dict):
                     node_id_str = str(node.get('id', 'unknown'))
-                    
+
                     # Apply scheduler from payload if provided, otherwise validate workflow scheduler
                     if payload_scheduler and "scheduler" in inputs:
                         valid_scheduler = map_wanvideo_scheduler(payload_scheduler)
@@ -754,7 +755,7 @@ async def process_workflow(
                         if current_scheduler != valid_scheduler:
                             logger.info(f"Node {node_id_str}: Validating workflow scheduler: '{current_scheduler}' -> '{valid_scheduler}'")
                             inputs["scheduler"] = valid_scheduler
-                    
+
                     # Apply parameters from payload - only if they're reasonable
                     if payload_steps is not None and "steps" in inputs:
                         old_steps = inputs.get("steps")
@@ -780,7 +781,21 @@ async def process_workflow(
                         old_riflex = inputs.get("riflex_freq_index")
                         inputs["riflex_freq_index"] = payload.get("riflex_freq_index")
                         logger.info(f"Node {node_id_str}: Applied riflex_freq_index: {old_riflex} -> {payload.get('riflex_freq_index')}")
-                    
+
+                    node["inputs"] = inputs
+
+            # Handle WanVideoDecode nodes - prevent payload parameters from causing tensor mismatches
+            elif class_type == "WanVideoDecode":
+                logger.info(f"Processing WanVideoDecode node {node.get('id', 'unknown')} in native format")
+                # WanVideoDecode tile parameters should NOT be overridden by payload width/height
+                # as they need to match the WanVideoSampler output tensor dimensions
+                if isinstance(inputs, dict):
+                    node_id_str = str(node.get('id', 'unknown'))
+                    # Log current tile settings for debugging tensor dimension issues
+                    tile_x = inputs.get("tile_x")
+                    tile_y = inputs.get("tile_y")
+                    logger.info(f"WanVideoDecode node {node_id_str}: tile_x={tile_x}, tile_y={tile_y}")
+                    # Keep workflow tile settings - do not override with payload width/height
                     node["inputs"] = inputs
             
             # Handle BasicScheduler nodes - update steps and scheduler via widgets_values
@@ -863,6 +878,7 @@ async def process_workflow(
 
     # Handle simple format (direct node objects)
     else:
+        logger.info("Processing workflow in simple format (node objects)")
         for node_id, node_data in processed_workflow.items():
             if not isinstance(node_data, dict):
                 continue
@@ -1069,7 +1085,20 @@ async def process_workflow(
                     inputs["riflex_freq_index"] = payload.get("riflex_freq_index")
                     logger.info(f"Node {node_id}: Applied riflex_freq_index: {old_riflex} -> {payload.get('riflex_freq_index')}")
                 node_data["inputs"] = inputs
-            
+
+            # Handle WanVideoDecode nodes - prevent payload parameters from causing tensor mismatches
+            elif class_type == "WanVideoDecode":
+                logger.info(f"Processing WanVideoDecode node {node_id} in simple format")
+                # WanVideoDecode tile parameters should NOT be overridden by payload width/height
+                # as they need to match the WanVideoSampler output tensor dimensions
+                node_id_str = str(node_id)
+                # Log current tile settings for debugging tensor dimension issues
+                tile_x = inputs.get("tile_x")
+                tile_y = inputs.get("tile_y")
+                logger.info(f"WanVideoDecode node {node_id_str}: tile_x={tile_x}, tile_y={tile_y}")
+                # Keep workflow tile settings - do not override with payload width/height
+                node_data["inputs"] = inputs
+
             # Handle WanVideoEmptyEmbeds nodes - update dimensions and frame count
             # NOTE: Text-to-video models (t2v) don't support img2img properly.
             # Only image-to-video models (ti2v) can handle source images.

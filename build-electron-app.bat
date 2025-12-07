@@ -57,28 +57,8 @@ echo.
 
 cd management-ui-nextjs
 
-REM Check if Node.js is installed
-where node >nul 2>&1
-if errorlevel 1 (
-    echo ERROR: Node.js is not installed
-    echo Install Node.js from https://nodejs.org/
-    echo.
-    echo Skipping Electron app build...
-    exit /b 0
-)
-
-REM Check if npm is installed
-where npm >nul 2>&1
-if errorlevel 1 (
-    echo ERROR: npm is not installed
-    echo Install Node.js (includes npm) from https://nodejs.org/
-    echo.
-    echo Skipping Electron app build...
-    exit /b 0
-)
-
 echo Installing dependencies...
-call npm install --silent
+docker run --rm -v "%CD%:/app" -w /app node:20-alpine sh -c "npm install --silent"
 if errorlevel 1 (
     echo ERROR: Failed to install dependencies
     echo Skipping Electron app build...
@@ -86,7 +66,7 @@ if errorlevel 1 (
 )
 
 echo Compiling Electron app...
-call npm run electron:compile
+docker run --rm -v "%CD%:/app" -w /app node:20-alpine sh -c "npm run electron:compile"
 if errorlevel 1 (
     echo ERROR: Failed to compile Electron app
     echo Skipping Electron app build...
@@ -94,7 +74,7 @@ if errorlevel 1 (
 )
 
 echo Building Electron executable...
-call npm run electron:pack
+docker run --rm -v "%CD%:/app" -w /app node:20-alpine sh -c "npm run electron:pack"
 if errorlevel 1 (
     echo ERROR: Failed to build Electron app
     echo Skipping Electron app build...
