@@ -93,8 +93,9 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 COPY comfy_bridge ./comfy_bridge
 COPY workflows ./workflows
 COPY tests ./tests
-COPY download_models_from_catalog.py model_manager.py model_configs.json get_gpu_info.py gpu_info_api.py downloads_api.py catalog_sync.py start_catalog_sync.sh install-optional-deps.sh ./
-RUN chmod +x get_gpu_info.py download_models_from_catalog.py gpu_info_api.py downloads_api.py catalog_sync.py start_catalog_sync.sh install-optional-deps.sh
+# Copy utility scripts (blockchain-based model download, no JSON catalogs)
+COPY download_models_from_chain.py model_manager.py get_gpu_info.py gpu_info_api.py downloads_api.py install-optional-deps.sh ./
+RUN chmod +x get_gpu_info.py download_models_from_chain.py gpu_info_api.py downloads_api.py install-optional-deps.sh
 
 # Install optional performance dependencies
 RUN --mount=type=cache,target=/root/.cache/pip \

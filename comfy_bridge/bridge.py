@@ -16,6 +16,7 @@ from .r2_uploader import R2Uploader
 from .filesystem_checker import FilesystemChecker
 from .optional_deps import check_optional_dependencies
 from .modelvault_client import get_modelvault_client, ModelVaultClient
+from .health import get_health_checker, validate_job_for_model, ModelHealthChecker
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +47,9 @@ class ComfyUIBridge:
         # Initialize ModelVault client for on-chain validation
         modelvault_enabled = modelvault_enabled and Settings.MODELVAULT_ENABLED
         self.modelvault: ModelVaultClient = get_modelvault_client(enabled=modelvault_enabled)
+        
+        # Initialize health checker for model file validation
+        self.health_checker: ModelHealthChecker = get_health_checker()
 
         # Check optional dependencies
         check_optional_dependencies()
@@ -53,6 +57,8 @@ class ComfyUIBridge:
         self.supported_models: List[str] = []
         # Track jobs currently being processed to prevent duplicates
         self.processing_jobs: Set[str] = set()
+        # Track models that have failed validation (don't advertise)
+        self.unhealthy_models: Set[str] = set()
     
     async def process_once(self) -> None:
         """Process a single job from the queue."""
@@ -76,6 +82,20 @@ class ComfyUIBridge:
         logger.info(f"Processing job {job_id} for model {model_name}")
         
         try:
+            # Health check: validate model files exist before accepting job
+            can_serve, health_reason = validate_job_for_model(model_name)
+            if not can_serve:
+                logger.error(f"❌ Rejecting job {job_id}: {health_reason}")
+                # Track unhealthy model to potentially remove from advertising
+                self.unhealthy_models.add(model_name)
+                try:
+                    await self.api.cancel_job(job_id)
+                    logger.info(f"Cancelled job {job_id} due to model health check failure")
+                except Exception as cancel_error:
+                    logger.error(f"Failed to cancel job {job_id}: {cancel_error}")
+                self.processing_jobs.discard(job_id)
+                return
+            
             # On-chain model validation (if enabled)
             if self.modelvault.enabled:
                 steps = job.get("params", {}).get("steps", 20)
@@ -235,15 +255,38 @@ class ComfyUIBridge:
             else:
                 self.supported_models = []
                 
-        logger.info(f"Advertising {len(self.supported_models)} models:")
+        # Health check: validate model files exist before advertising
+        self.health_checker.set_advertised_models(self.supported_models)
+        worker_health = self.health_checker.get_worker_health()
+        
+        # Filter to only advertise healthy/servable models
+        healthy_models = worker_health.servable_models
+        unhealthy = set(self.supported_models) - set(healthy_models)
+        
+        if unhealthy:
+            logger.warning(f"⚠️  {len(unhealthy)} models have missing files and won't be advertised:")
+            for model in unhealthy:
+                health = worker_health.model_details.get(model)
+                if health:
+                    logger.warning(f"    ✗ {model}: {health.error_message}")
+                    if health.missing_files:
+                        for f in health.missing_files[:3]:
+                            logger.warning(f"        Missing: {f}")
+        
+        # Only advertise healthy models
+        self.supported_models = healthy_models
+        
+        logger.info(f"Advertising {len(self.supported_models)} healthy models:")
         for i, model in enumerate(self.supported_models, 1):
-            logger.info(f"  {i}. {model}")
+            health = worker_health.model_details.get(model)
+            status = "✓" if health and health.is_healthy else "~"
+            logger.info(f"  {i}. {status} {model}")
             
         if not self.supported_models:
-            logger.error("CRITICAL: No models configured! The bridge will not receive any jobs.")
+            logger.error("CRITICAL: No healthy models to advertise! The bridge will not receive any jobs.")
             logger.error("To fix this, either:")
-            logger.error("  1. Set WORKFLOW_FILE in your .env file, or") 
-            logger.error("  2. Ensure DEFAULT_WORKFLOW_MAP contains models")
+            logger.error("  1. Download the model files, or") 
+            logger.error("  2. Check WORKFLOW_FILE configuration")
 
         job_count = 0
         while True:

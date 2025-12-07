@@ -9,6 +9,101 @@ const execAsync = promisify(exec);
 // Force dynamic rendering
 export const dynamic = 'force-dynamic';
 
+// Check if running in Docker or locally
+const isWindows = process.platform === 'win32';
+const isLocalDev = isWindows || !process.env.DOCKER_CONTAINER;
+
+// Get the models path for Windows
+function getWindowsModelsPath() {
+  return process.env.MODELS_PATH || 'C:\\dev\\comfy-bridge\\persistent_volumes\\models';
+}
+
+// Recursively scan a directory for model files
+async function scanDirectoryForModels(dirPath: string, prefix: string = ''): Promise<string[]> {
+  const models: string[] = [];
+  
+  try {
+    const entries = await fs.readdir(dirPath, { withFileTypes: true });
+    
+    for (const entry of entries) {
+      const fullPath = path.join(dirPath, entry.name);
+      
+      if (entry.isDirectory()) {
+        // Recursively scan subdirectories
+        const subModels = await scanDirectoryForModels(fullPath, prefix ? `${prefix}/${entry.name}` : entry.name);
+        models.push(...subModels);
+      } else if (entry.isFile()) {
+        const ext = entry.name.toLowerCase();
+        if (ext.endsWith('.safetensors') || ext.endsWith('.ckpt') || ext.endsWith('.pth') || ext.endsWith('.bin') || ext.endsWith('.gguf')) {
+          models.push(prefix ? `${prefix}/${entry.name}` : entry.name);
+        }
+      }
+    }
+  } catch (err) {
+    // Directory might not exist or not accessible
+    console.log(`Could not scan ${dirPath}:`, err);
+  }
+  
+  return models;
+}
+
+// Scan for model files on Windows
+async function scanWindowsModels(modelsPath: string): Promise<string[]> {
+  console.log('Scanning for models in:', modelsPath);
+  const models = await scanDirectoryForModels(modelsPath);
+  console.log(`Found ${models.length} model files`);
+  return models;
+}
+
+// Get disk space on Windows using PowerShell (wmic is deprecated in Windows 11)
+async function getWindowsDiskSpace(targetPath: string) {
+  const modelsPath = getWindowsModelsPath();
+  const models = await scanWindowsModels(modelsPath).catch(() => []);
+  
+  try {
+    // Get the drive letter from the path
+    const driveLetter = path.parse(targetPath).root.replace(/\\/g, '').replace(':', '');
+    
+    // Use PowerShell Get-CimInstance (replacement for wmic)
+    const { stdout } = await execAsync(
+      `powershell -NoProfile -Command "Get-CimInstance -ClassName Win32_LogicalDisk -Filter \\"DeviceID='${driveLetter}:'\\" | Select-Object Size,FreeSpace | ConvertTo-Json"`,
+      { shell: 'cmd.exe' }
+    );
+    
+    const diskInfo = JSON.parse(stdout.trim());
+    const totalBytes = diskInfo.Size;
+    const freeBytes = diskInfo.FreeSpace;
+    const usedBytes = totalBytes - freeBytes;
+    
+    return {
+      name: `${driveLetter}:`,
+      display_name: `AI Models Volume (${driveLetter}:)`,
+      mount_point: modelsPath,
+      total_gb: Math.round((totalBytes / (1024 * 1024 * 1024)) * 100) / 100,
+      used_gb: Math.round((usedBytes / (1024 * 1024 * 1024)) * 100) / 100,
+      free_gb: Math.round((freeBytes / (1024 * 1024 * 1024)) * 100) / 100,
+      percent_used: Math.round((usedBytes / totalBytes) * 100 * 10) / 10,
+      models_count: models.length,
+      models: models,
+    };
+  } catch (error) {
+    console.error('Windows disk space check failed:', error);
+    // Fallback: return basic info with model scan
+    return {
+      name: 'C:',
+      display_name: 'AI Models Volume',
+      mount_point: modelsPath,
+      total_gb: 0,
+      used_gb: 0,
+      free_gb: 0,
+      percent_used: 0,
+      models_count: models.length,
+      models: models,
+      error: 'Could not get disk space info',
+    };
+  }
+}
+
 interface DriveInfo {
   name: string;
   display_name: string;
@@ -78,6 +173,14 @@ async function getModelsByPath(modelsPath: string): Promise<{ [key: string]: str
 }
 
 export async function GET() {
+  // Get real disk space on Windows
+  if (isWindows) {
+    // Use the comfy-bridge directory for disk info
+    const localPath = process.env.MODELS_PATH || 'c:\\dev\\comfy-bridge';
+    const diskInfo = await getWindowsDiskSpace(localPath);
+    return NextResponse.json(diskInfo);
+  }
+
   try {
     const modelsPath = process.env.MODELS_PATH || '/app/ComfyUI/models';
     
@@ -108,10 +211,10 @@ export async function GET() {
       });
     }
     
-    return NextResponse.json({ error: 'Failed to get disk space' }, { status: 500 });
-  } catch (error) {
+    return NextResponse.json({ error: 'Failed to parse disk info' }, { status: 500 });
+  } catch (error: any) {
     console.error('Disk space check failed:', error);
-    return NextResponse.json({ error: 'Failed to get disk space' }, { status: 500 });
+    return NextResponse.json({ error: 'Disk space check failed: ' + error.message }, { status: 500 });
   }
 }
 
