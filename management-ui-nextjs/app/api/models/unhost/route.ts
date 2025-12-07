@@ -1,91 +1,119 @@
 import { NextResponse } from 'next/server';
-import { promises as fs } from 'fs';
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import * as fs from 'fs/promises';
 
-const execAsync = promisify(exec);
+export const dynamic = 'force-dynamic';
+
+const isWindows = process.platform === 'win32';
+
+function getEnvPath() {
+  if (isWindows) {
+    return process.env.ENV_FILE_PATH || 'c:\\dev\\comfy-bridge\\.env';
+  }
+  return process.env.ENV_FILE_PATH || '/app/comfy-bridge/.env';
+}
 
 export async function POST(request: Request) {
   try {
     const { model_id } = await request.json();
     
     if (!model_id) {
-      return NextResponse.json(
-        { error: 'Model ID is required' },
-        { status: 400 }
-      );
+      return NextResponse.json({
+        success: false,
+        error: 'Model ID is required'
+      }, { status: 400 });
     }
     
-    // Strip .json extension if present in model_id
-    const modelIdWithoutJson = model_id.endsWith('.json') ? model_id.slice(0, -5) : model_id;
+    console.log(`Stopping hosting for model: ${model_id}`);
     
-    const envFilePath = process.env.ENV_FILE_PATH || '/app/comfy-bridge/.env';
-    let envContent = await fs.readFile(envFilePath, 'utf-8');
+    const envPath = getEnvPath();
     
-    // Get current WORKFLOW_FILE value and strip .json from each model
-    const match = envContent.match(/^WORKFLOW_FILE=(.*)$/m);
-    let currentModels: string[] = [];
-    
-    if (match && match[1]) {
-      currentModels = match[1].split(',').map(s => {
-        const trimmed = s.trim();
-        return trimmed.endsWith('.json') ? trimmed.slice(0, -5) : trimmed;
-      }).filter(Boolean);
+    // Read current .env
+    let envContent = '';
+    try {
+      envContent = await fs.readFile(envPath, 'utf-8');
+    } catch (err) {
+      return NextResponse.json({
+        success: false,
+        error: 'Could not read environment file'
+      }, { status: 500 });
     }
     
-    // Remove model from the list
-    const initialLength = currentModels.length;
-    currentModels = currentModels.filter(m => m !== modelIdWithoutJson);
+    // Get current WORKFLOW_FILE value
+    const workflowMatch = envContent.match(/^WORKFLOW_FILE=(.*)$/m);
     
-    if (currentModels.length < initialLength) {
-      const newModelsValue = currentModels.join(',');
-      
-      // Update WORKFLOW_FILE
-      if (match) {
-        envContent = envContent.replace(/^WORKFLOW_FILE=.*$/m, `WORKFLOW_FILE=${newModelsValue}`);
-      }
-      
-      await fs.writeFile(envFilePath, envContent, 'utf-8');
-      
-      // Restart containers to apply changes
-      console.log('Restarting containers to stop hosting model...');
-      try {
-        const scriptPath = process.env.COMFY_BRIDGE_PATH || '/app/comfy-bridge';
-        await execAsync('docker-compose restart', {
-          cwd: scriptPath,
-          timeout: 60000,
-        });
-        
-        return NextResponse.json({
-          success: true,
-          message: `Model ${modelIdWithoutJson} is no longer being hosted. Containers restarted.`,
-          models: currentModels,
-          restarted: true,
-        });
-      } catch (restartError: any) {
-        console.error('Container restart failed:', restartError);
-        return NextResponse.json({
-          success: true,
-          message: `Model ${modelIdWithoutJson} removed from hosting, but failed to restart containers. Please restart manually.`,
-          models: currentModels,
-          restarted: false,
-          warning: restartError.message,
-        });
-      }
-    } else {
+    if (!workflowMatch || !workflowMatch[1]) {
       return NextResponse.json({
         success: true,
-        message: `Model ${modelIdWithoutJson} was not being hosted`,
-        models: currentModels,
-        restarted: false,
+        message: `Model ${model_id} was not being hosted`
       });
     }
+    
+    let currentWorkflows = workflowMatch[1].split(',').map(s => s.trim()).filter(Boolean);
+    
+    // Remove the model from the list (check multiple variations)
+    const modelVariations = [
+      model_id,
+      `${model_id}.json`,
+      model_id.toLowerCase(),
+      `${model_id.toLowerCase()}.json`,
+    ];
+    
+    const originalLength = currentWorkflows.length;
+    currentWorkflows = currentWorkflows.filter(w => {
+      const wLower = w.toLowerCase();
+      const wNoJson = w.replace(/\.json$/, '').toLowerCase();
+      return !modelVariations.some(v => v.toLowerCase() === wLower || v.toLowerCase() === wNoJson);
+    });
+    
+    if (currentWorkflows.length === originalLength) {
+      return NextResponse.json({
+        success: true,
+        message: `Model ${model_id} was not being hosted`
+      });
+    }
+    
+    // Update WORKFLOW_FILE in .env
+    const newWorkflowValue = currentWorkflows.join(',');
+    envContent = envContent.replace(/^WORKFLOW_FILE=.*$/m, `WORKFLOW_FILE=${newWorkflowValue}`);
+    
+    await fs.writeFile(envPath, envContent, 'utf-8');
+    
+    console.log(`Updated WORKFLOW_FILE to: ${newWorkflowValue}`);
+    
+    // Trigger container restart
+    try {
+      const { exec } = await import('child_process');
+      const { promisify } = await import('util');
+      const execAsync = promisify(exec);
+      
+      if (isWindows) {
+        await execAsync('docker-compose restart comfy-bridge', { 
+          cwd: 'c:\\dev\\comfy-bridge' 
+        });
+      } else {
+        await execAsync('docker-compose -f /app/comfy-bridge/docker-compose.yml restart comfy-bridge');
+      }
+      
+      return NextResponse.json({
+        success: true,
+        restarted: true,
+        message: `Stopped hosting ${model_id}. Container is restarting...`
+      });
+    } catch (restartError) {
+      console.error('Failed to restart container:', restartError);
+      return NextResponse.json({
+        success: true,
+        restarted: false,
+        message: `Stopped hosting ${model_id}. Manual restart may be required.`,
+        warning: 'Container restart failed'
+      });
+    }
+    
   } catch (error: any) {
     console.error('Error unhosting model:', error);
-    return NextResponse.json(
-      { error: error.message || 'Failed to unhost model' },
-      { status: 500 }
-    );
+    return NextResponse.json({
+      success: false,
+      error: error.message || 'Failed to stop hosting model'
+    }, { status: 500 });
   }
 }
-

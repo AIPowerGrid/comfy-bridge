@@ -1,3 +1,10 @@
+"""
+WAN Video Model Asset Management
+
+Handles symlink creation and integrity checking for WAN video model assets.
+Model information is sourced from the blockchain (ModelVault contract).
+"""
+
 import logging
 import os
 import json
@@ -28,8 +35,6 @@ WAN_ASSET_MODEL_MAP: Dict[str, str] = {
 }
 
 DEFAULT_MODELS_PATH = "/app/ComfyUI/models"
-DEFAULT_STABLE_DIFFUSION_CATALOG = "/app/grid-image-model-reference/stable_diffusion.json"
-DEFAULT_MODEL_CONFIG = "/app/comfy-bridge/model_configs.json"
 
 
 def _find_wan_asset(filename: str, models_root: str) -> Optional[str]:
@@ -99,24 +104,26 @@ def _is_file_complete(path: str) -> bool:
 
 
 def _redownload_asset(filename: str, models_root: str) -> bool:
+    """
+    Attempt to re-download a corrupted WAN asset.
+    
+    Model information is fetched from the blockchain registry.
+    """
     model_id = WAN_ASSET_MODEL_MAP.get(filename)
     if not model_id or downloader is None:
         return False
+    
     logger.warning(
         "Attempting to re-download Wan asset %s (model %s) due to integrity failure",
         filename,
         model_id,
     )
-    stable_catalog = os.environ.get(
-        "STABLE_DIFFUSION_CATALOG", DEFAULT_STABLE_DIFFUSION_CATALOG
-    )
-    model_config = os.environ.get("MODEL_CONFIG_PATH", DEFAULT_MODEL_CONFIG)
+    
     try:
+        # Download using model_id - downloader will resolve from chain/fallback sources
         return downloader.download_models(
             [model_id],
             models_root,
-            stable_diffusion_path=stable_catalog,
-            config_path=model_config,
             resolve_deps=True,
         )
     except Exception as exc:

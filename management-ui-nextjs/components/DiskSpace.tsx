@@ -48,7 +48,7 @@ export default function DiskSpace({ diskSpace, isCollapsed = false, onToggleColl
         <div className="flex items-center gap-2">
           {diskSpace.models_count > 0 && (
             <span className="px-3 py-1 text-xs bg-aipg-orange/20 text-aipg-orange rounded-full border border-aipg-orange/30">
-              {diskSpace.models_count} model{diskSpace.models_count !== 1 ? 's' : ''} installed
+              {diskSpace.models_count} file{diskSpace.models_count !== 1 ? 's' : ''} installed
             </span>
           )}
           <svg 
@@ -100,7 +100,7 @@ export default function DiskSpace({ diskSpace, isCollapsed = false, onToggleColl
                 onClick={() => setShowModels(!showModels)}
                 className="text-xs font-semibold text-aipg-orange bg-aipg-orange/20 px-3 py-1 rounded-full border border-aipg-orange/30 hover:bg-aipg-orange/30 transition-all"
               >
-                {showModels ? 'Hide' : 'Show'} {diskSpace.models_count} installed model{diskSpace.models_count !== 1 ? 's' : ''}
+                {showModels ? 'Hide' : 'Show'} {diskSpace.models_count} installed file{diskSpace.models_count !== 1 ? 's' : ''}
               </button>
               
               {/* Expanded model list */}
@@ -111,7 +111,7 @@ export default function DiskSpace({ diskSpace, isCollapsed = false, onToggleColl
                   exit={{ opacity: 0, height: 0 }}
                   className="mt-3"
                 >
-                  <div className="text-xs font-semibold text-gray-400 mb-2">Installed models:</div>
+                  <div className="text-xs font-semibold text-gray-400 mb-2">Installed files:</div>
                   <div className="max-h-40 overflow-y-auto space-y-1">
                     {diskSpace.models.map((model, idx) => (
                       <div key={idx} className="text-xs text-gray-300 pl-2 font-mono">

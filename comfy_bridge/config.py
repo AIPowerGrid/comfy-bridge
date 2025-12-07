@@ -1,3 +1,10 @@
+"""
+ComfyBridge Configuration
+
+Model registration is tracked on the blockchain (ModelVault contract).
+The chain is the single source of truth for model discovery and validation.
+"""
+
 import os
 from dotenv import load_dotenv  # type: ignore  # dotenv installed via requirements.txt in Docker
 
@@ -22,8 +29,13 @@ class Settings:
     )
     WORKFLOW_FILE = os.getenv("WORKFLOW_FILE", None)
     COMFYUI_OUTPUT_DIR = os.getenv("COMFYUI_OUTPUT_DIR", r"C:\dev\ComfyUI\output")
+    
+    # DEPRECATED: JSON catalog path - blockchain is now the source of truth
+    # Kept for backward compatibility during transition
     GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH = os.getenv("GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH")
-    # ModelVault on-chain validation (Base Sepolia)
+    
+    # ModelVault on-chain model registry (Base Sepolia)
+    # The blockchain is the single source of truth for model registration
     MODELVAULT_ENABLED = os.getenv("MODELVAULT_ENABLED", "true").lower() == "true"
     MODELVAULT_RPC_URL = os.getenv("MODELVAULT_RPC_URL", "https://sepolia.base.org")
     MODELVAULT_CONTRACT = os.getenv("MODELVAULT_CONTRACT", "0xe660455D4A83bbbbcfDCF4219ad82447a831c8A1")
@@ -32,3 +44,8 @@ class Settings:
     def validate(cls):
         if not cls.GRID_API_KEY:
             raise RuntimeError("GRID_API_KEY environment variable is required.")
+    
+    @classmethod
+    def is_chain_enabled(cls) -> bool:
+        """Check if blockchain model registry is enabled."""
+        return cls.MODELVAULT_ENABLED
