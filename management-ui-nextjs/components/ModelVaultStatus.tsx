@@ -17,28 +17,44 @@ const MODEL_TYPE_COLORS: Record<number, string> = {
   [ModelType.VIDEO_MODEL]: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
 };
 
+// Chain ID to name mapping
+const CHAIN_NAMES: Record<number, string> = {
+  8453: 'Base',
+  84532: 'Base Sepolia',
+};
+
 interface ModelVaultStatusProps {
   onStartEarning?: (modelName: string) => void;
   onStopEarning?: (modelName: string) => void;
   onUninstall?: (modelName: string) => void;
+  onBatchUninstall?: (modelNames: string[]) => void;
   onDownload?: (modelName: string) => void;
   installedModels?: Set<string>;
   hostedModels?: Set<string>;
   downloadingModels?: Set<string>;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 export function ModelVaultStatus({ 
   onStartEarning, 
   onStopEarning, 
   onUninstall,
+  onBatchUninstall,
   onDownload,
   installedModels = new Set(),
   hostedModels = new Set(),
   downloadingModels = new Set(),
+  isCollapsed,
+  onToggleCollapse,
 }: ModelVaultStatusProps) {
-  const { isConnected, address } = useWallet();
+  const { isConnected, address, chainId } = useWallet();
   const { isLoading, error, modelsWithDetails = [], refreshModels } = useModelVault();
-  const [isExpanded, setIsExpanded] = useState(true);
+  const networkName = CHAIN_NAMES[chainId] || 'Unknown Network';
+  // Use external collapse control if provided, otherwise use internal state
+  const [internalExpanded, setInternalExpanded] = useState(true);
+  const isExpanded = isCollapsed !== undefined ? !isCollapsed : internalExpanded;
+  const toggleExpanded = onToggleCollapse || (() => setInternalExpanded(!internalExpanded));
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | 'image' | 'video' | 'text'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'installed' | 'not-installed' | 'hosting'>('all');
@@ -165,7 +181,7 @@ export function ModelVaultStatus({
           </p>
           <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
             <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
-            <span>Base Sepolia Network</span>
+            <span>Base Network</span>
           </div>
         </div>
       </div>
@@ -194,7 +210,7 @@ export function ModelVaultStatus({
             </svg>
             Blockchain Model Registry
             <span className="text-xs px-2 py-0.5 bg-blue-500/20 text-blue-300 rounded-full">
-              Base Sepolia
+              {networkName}
             </span>
           </h2>
         </div>
@@ -222,7 +238,7 @@ export function ModelVaultStatus({
             {isLoading ? 'Syncing...' : 'Refresh'}
           </button>
           <button
-            onClick={() => setIsExpanded(!isExpanded)}
+            onClick={toggleExpanded}
             className="p-2 hover:bg-white/5 rounded-lg transition-colors"
           >
             <svg
@@ -358,11 +374,11 @@ export function ModelVaultStatus({
             {/* Bulk Actions */}
             {selectedModels.size > 0 && (
               <div className="mb-4 p-4 bg-blue-900/20 rounded-lg border border-blue-500/30">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between flex-wrap gap-2">
                   <span className="text-sm text-gray-300">
                     {selectedModels.size} model{selectedModels.size !== 1 ? 's' : ''} selected
                   </span>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap">
                     <button
                       onClick={() => {
                         selectedModels.forEach(modelName => onStartEarning?.(modelName));
@@ -370,8 +386,39 @@ export function ModelVaultStatus({
                       }}
                       className="px-3 py-1 text-xs font-medium bg-green-600 hover:bg-green-700 text-white rounded transition-all"
                     >
-                      Start Earning All
+                      Start Hosting All
                     </button>
+                    {/* Show uninstall button if any selected models are installed */}
+                    {Array.from(selectedModels).some(modelName => 
+                      installedModels.has(modelName) || 
+                      modelsWithDetails.some(({ info }) => 
+                        info && (info.displayName === modelName || info.fileName === modelName) && 
+                        (installedModels.has(info.displayName || '') || installedModels.has(info.fileName))
+                      )
+                    ) && (
+                      <button
+                        onClick={() => {
+                          // Only uninstall models that are actually installed
+                          const installedSelected = Array.from(selectedModels).filter(modelName => 
+                            installedModels.has(modelName) ||
+                            modelsWithDetails.some(({ info }) => 
+                              info && (info.displayName === modelName || info.fileName === modelName) && 
+                              (installedModels.has(info.displayName || '') || installedModels.has(info.fileName))
+                            )
+                          );
+                          // Use batch uninstall if available, otherwise fall back to individual
+                          if (onBatchUninstall && installedSelected.length > 0) {
+                            onBatchUninstall(installedSelected);
+                          } else {
+                            installedSelected.forEach(modelName => onUninstall?.(modelName));
+                          }
+                          setSelectedModels(new Set());
+                        }}
+                        className="px-3 py-1 text-xs font-medium bg-red-600 hover:bg-red-700 text-white rounded transition-all"
+                      >
+                        🗑 Uninstall Selected
+                      </button>
+                    )}
                     <button
                       onClick={() => setSelectedModels(new Set())}
                       className="px-3 py-1 text-xs font-medium bg-gray-600 hover:bg-gray-700 text-white rounded transition-all"
@@ -557,9 +604,9 @@ export function ModelVaultStatus({
                             ) : (
                               <button
                                 onClick={() => onDownload?.(modelName)}
-                                className="px-3 py-1 text-xs font-medium bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 rounded transition-all border border-blue-600/30"
+                                className="px-3 py-1 text-xs font-medium bg-green-600/20 hover:bg-green-600/40 text-green-400 rounded transition-all border border-green-600/30"
                               >
-                                ⬇ Download & Start
+                                ▶ Start Hosting
                               </button>
                             )}
                             {isInstalled && (

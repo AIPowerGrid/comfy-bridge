@@ -30,7 +30,7 @@ export default function Home() {
   const [statusMessage, setStatusMessage] = useState<{type: 'success' | 'error' | 'info', message: string} | null>(null);
   const [downloadStatus, setDownloadStatus] = useState<any>(null);
   const [showGettingStarted, setShowGettingStarted] = useState(false);
-  // Note: isModelsCollapsed removed - ModelVaultStatus handles its own expansion
+  const [isModelVaultCollapsed, setIsModelVaultCollapsed] = useState(false);
   const [isApiKeysCollapsed, setIsApiKeysCollapsed] = useState(false);
   const [isGpuInfoCollapsed, setIsGpuInfoCollapsed] = useState(false);
   const [isDiskSpaceCollapsed, setIsDiskSpaceCollapsed] = useState(false);
@@ -238,7 +238,8 @@ export default function Home() {
   };
 
   const toggleAllCollapsed = () => {
-    const allCollapsed = isApiKeysCollapsed && isGpuInfoCollapsed && isDiskSpaceCollapsed && isGridConfigCollapsed;
+    const allCollapsed = isModelVaultCollapsed && isApiKeysCollapsed && isGpuInfoCollapsed && isDiskSpaceCollapsed && isGridConfigCollapsed;
+    setIsModelVaultCollapsed(!allCollapsed);
     setIsApiKeysCollapsed(!allCollapsed);
     setIsGpuInfoCollapsed(!allCollapsed);
     setIsDiskSpaceCollapsed(!allCollapsed);
@@ -320,12 +321,16 @@ export default function Home() {
       
       if (result.success) {
         if (result.requires_restart) {
-          // Show countdown for rebuild
-          setRestartMessage(`${modelId} is now hosted! Containers will rebuild to start earning`);
+          // Show countdown for restart
+          setRestartMessage(`${modelId} is now hosted! Containers will restart to start earning`);
           setShowRestartCountdown(true);
+        } else if (result.already_hosted) {
+          showStatus('success', `${modelId} is already being hosted!`);
+          showSuccess('Already Hosted', result.message || `${modelId} is already configured for hosting.`);
+          await loadData();
         } else {
           showStatus('success', `Now hosting ${modelId}!`);
-          showSuccess('Model Hosting Started', `${modelId} is already being hosted!`);
+          showSuccess('Model Hosting Started', result.message || `${modelId} is now being hosted!`);
           await loadData();
         }
       } else {
@@ -371,6 +376,16 @@ export default function Home() {
     try {
       // For blockchain models, we fetch from the chain - no local catalog needed
       showStatus('info', `Starting download of ${modelId}...`);
+      
+      // Set initial download status to show the progress indicator
+      setDownloadStatus({
+        is_downloading: true,
+        current_model: modelId,
+        progress: 0,
+        speed: '',
+        eta: '',
+        message: 'Starting download...'
+      });
 
       // Start download - read SSE stream for progress
       const downloadRes = await fetch('/api/models/download', {
@@ -382,6 +397,7 @@ export default function Home() {
       });
 
       if (!downloadRes.ok) {
+        setDownloadStatus(null);
         throw new Error(`Download failed: ${downloadRes.status}`);
       }
 
@@ -406,7 +422,41 @@ export default function Home() {
                   const data = JSON.parse(line.slice(6));
                   const targetModel = data.model || modelId;
                   
-                  if (data.type === 'complete') {
+                  // Update download status for progress display
+                  if (data.type === 'info' || data.type === 'progress') {
+                    setDownloadStatus((prev: any) => ({
+                      is_downloading: true,
+                      current_model: targetModel,
+                      progress: data.progress ?? prev?.progress ?? 0,
+                      speed: data.speed || prev?.speed || '',
+                      eta: data.eta || prev?.eta || '',
+                      message: data.message || prev?.message || 'Downloading...'
+                    }));
+                  } else if (data.type === 'start') {
+                    setDownloadStatus({
+                      is_downloading: true,
+                      current_model: targetModel,
+                      progress: 0,
+                      speed: '',
+                      eta: '',
+                      message: data.message || 'Starting download...'
+                    });
+                  } else if (data.type === 'success') {
+                    // File completed, update message but keep downloading
+                    setDownloadStatus((prev: any) => ({
+                      ...prev,
+                      message: data.message || 'File downloaded successfully'
+                    }));
+                  } else if (data.type === 'warning') {
+                    // Warning message, keep downloading
+                    setDownloadStatus((prev: any) => ({
+                      ...prev,
+                      message: data.message || 'Warning during download'
+                    }));
+                  } else if (data.type === 'complete') {
+                    // Clear download status
+                    setDownloadStatus(null);
+                    
                     if (autoHost) {
                       showStatus('success', `${targetModel} installed successfully! Starting hosting...`);
                       showSuccess('Download Complete', `${targetModel} installed successfully! Preparing to start earning...`);
@@ -418,9 +468,13 @@ export default function Home() {
                       await loadData();
                     }
                   } else if (data.type === 'error') {
+                    setDownloadStatus(null);
                     throw new Error(data.message);
                   }
                 } catch (e) {
+                  if (e instanceof Error && e.message !== 'Error parsing SSE:') {
+                    throw e;
+                  }
                   console.error('Error parsing SSE:', e);
                 }
               }
@@ -428,9 +482,12 @@ export default function Home() {
           }
         } catch (readError) {
           console.error('Error reading stream:', readError);
+          setDownloadStatus(null);
+          throw readError;
         }
       }
     } catch (error: any) {
+      setDownloadStatus(null);
       showStatus('error', 'Error: ' + error.message);
       showError('Download Error', 'Error: ' + error.message);
     }
@@ -466,18 +523,26 @@ export default function Home() {
   };
 
   const handleUninstall = async (modelId: string) => {
+    await handleBatchUninstall([modelId]);
+  };
+
+  const handleBatchUninstall = async (modelIds: string[]) => {
     try {
-      showStatus('info', 'Preparing to uninstall ' + modelId + '...');
+      const modelCount = modelIds.length;
+      showStatus('info', `Preparing to uninstall ${modelCount} model${modelCount > 1 ? 's' : ''}...`);
       
       const res = await fetch('/api/models/uninstall', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model_id: modelId }),
+        body: JSON.stringify({ model_ids: modelIds }),
       });
       
       const result = await res.json();
       
       if (result.success) {
+        // Check for affected models (shared files case)
+        const affectedModels = result.affected_models || modelIds;
+        
         if (result.removed_items && result.removed_items.length > 0) {
           // Show removal summary dialog if files were deleted
           const items = (result.removed_items || []).map((item: any) => ({
@@ -490,15 +555,18 @@ export default function Home() {
           setShowRemovalDialog(true);
           
           // Set up the restart action
+          const restartMsg = `Uninstalled ${affectedModels.length} model${affectedModels.length > 1 ? 's' : ''}: ${affectedModels.slice(0, 3).join(', ')}${affectedModels.length > 3 ? '...' : ''}. Containers will restart`;
+          
           setPendingRestartAction(() => async () => {
             setShowRemovalDialog(false);
-            setRestartMessage(`${modelId} uninstalled. Containers will rebuild`);
+            setRestartMessage(restartMsg);
             setShowRestartCountdown(true);
           });
         } else if (result.requires_restart) {
           // No files removed but configuration changed, go straight to countdown
-          showSuccess('Configuration Cleaned', `Removed ${modelId} from hosting configuration.`);
-          setRestartMessage(`${modelId} removed from configuration. Containers will rebuild`);
+          const msg = `Removed ${affectedModels.length} model${affectedModels.length > 1 ? 's' : ''} from hosting configuration.`;
+          showSuccess('Configuration Cleaned', msg);
+          setRestartMessage(`${msg} Containers will restart`);
           setShowRestartCountdown(true);
         } else {
           // Nothing to do
@@ -582,21 +650,21 @@ export default function Home() {
       setShowRestartCountdown(false);
       setShowRebuildingPage(true);
       
-      // Call the restart API with rebuild flag
+      // Call the restart API
       const res = await fetch('/api/containers/restart', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rebuild: true }),
+        body: JSON.stringify({}),
       });
       
       if (!res.ok) {
         const result = await res.json();
-        showError('Rebuild Failed', result.error || 'Failed to rebuild containers');
+        showError('Restart Failed', result.error || 'Failed to restart containers');
         setShowRebuildingPage(false);
       }
       // If successful, the RebuildingPage component will handle the rest
     } catch (error: any) {
-      showError('Rebuild Error', error.message);
+      showError('Restart Error', error.message);
       setShowRebuildingPage(false);
     }
   };
@@ -691,14 +759,20 @@ export default function Home() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-3 h-3 bg-yellow-500 rounded-full animate-pulse"></div>
-                <div>
+                <div className="flex-1 min-w-0">
                   <h3 className="font-semibold text-yellow-400">Download in Progress</h3>
                   <p className="text-sm text-gray-400">
                     {downloadStatus.current_model ? 
-                      `Downloading ${downloadStatus.current_model}...` : 
+                      `Downloading ${downloadStatus.current_model}` : 
                       'Download in progress...'
                     }
                   </p>
+                  {/* Show current file being downloaded */}
+                  {downloadStatus.message && (
+                    <p className="text-xs text-gray-500 mt-1 truncate max-w-md" title={downloadStatus.message}>
+                      {downloadStatus.message}
+                    </p>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-4">
@@ -709,7 +783,12 @@ export default function Home() {
                     </div>
                     {downloadStatus.speed && (
                       <div className="text-xs text-gray-400">
-                        {downloadStatus.speed} MB/s
+                        {downloadStatus.speed}
+                      </div>
+                    )}
+                    {downloadStatus.eta && (
+                      <div className="text-xs text-gray-500">
+                        ETA: {downloadStatus.eta}
                       </div>
                     )}
                   </div>
@@ -747,46 +826,13 @@ export default function Home() {
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
-            {isApiKeysCollapsed && isGpuInfoCollapsed && isDiskSpaceCollapsed && isGridConfigCollapsed ? 'Expand All' : 'Collapse All'}
+            {isModelVaultCollapsed && isApiKeysCollapsed && isGpuInfoCollapsed && isDiskSpaceCollapsed && isGridConfigCollapsed ? 'Expand All' : 'Collapse All'}
           </button>
         </div>
 
         {/* Main Content */}
         <div className="space-y-8">
           
-          {/* Blockchain Model Registry - Primary Model Display */}
-          <ModelVaultStatus 
-            onStartEarning={async (modelName) => {
-              // Check if model needs downloading first - check installedModels set
-              const isInstalled = installedModels.has(modelName) || 
-                Array.from(installedModels).some(f => 
-                  f.toLowerCase().includes(modelName.toLowerCase().replace(/[^a-z0-9]/g, ''))
-                );
-              
-              if (isInstalled) {
-                await handleHost(modelName);
-              } else {
-                // Download and then host
-                await handleDownloadSingle(modelName, true);
-              }
-            }}
-            onStopEarning={async (modelName) => {
-              await handleUnhost(modelName);
-            }}
-            onUninstall={async (modelName) => {
-              await handleUninstall(modelName);
-            }}
-            onDownload={async (modelName) => {
-              // Download and auto-host
-              await handleDownloadSingle(modelName, true);
-            }}
-            installedModels={installedModels}
-            hostedModels={hostedModels}
-            downloadingModels={new Set(
-              downloadStatus?.is_downloading && downloadStatus?.current_model ? [downloadStatus.current_model] : []
-            )}
-          />
-
           {/* System Info - Full width on mobile, sidebar on desktop */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <GPUInfo 
@@ -856,9 +902,6 @@ export default function Home() {
                 className="overflow-hidden"
               >
                 <div className="px-6 pb-6">
-                  <p className="text-gray-400 mb-4">
-                    Some AI models require API keys to download. Don't worry - these are free to get!
-                  </p>
                   <APIKeyEditor
                     huggingfaceKey={apiKeys.huggingface || ''}
                     civitaiKey={apiKeys.civitai || ''}
@@ -874,6 +917,35 @@ export default function Home() {
             hasHuggingFaceKey={!!apiKeys.huggingface}
             hasCivitaiKey={!!apiKeys.civitai}
             modelsRequiringKeys={modelsRequiringKeys}
+          />
+          
+          {/* Blockchain Model Registry */}
+          <ModelVaultStatus 
+            onStartEarning={async (modelName) => {
+              // This callback is only called for installed models (the component handles the check)
+              // Just start hosting directly
+              await handleHost(modelName);
+            }}
+            onStopEarning={async (modelName) => {
+              await handleUnhost(modelName);
+            }}
+            onUninstall={async (modelName) => {
+              await handleUninstall(modelName);
+            }}
+            onBatchUninstall={async (modelNames) => {
+              await handleBatchUninstall(modelNames);
+            }}
+            onDownload={async (modelName) => {
+              // Download and auto-host
+              await handleDownloadSingle(modelName, true);
+            }}
+            installedModels={installedModels}
+            hostedModels={hostedModels}
+            downloadingModels={new Set(
+              downloadStatus?.is_downloading && downloadStatus?.current_model ? [downloadStatus.current_model] : []
+            )}
+            isCollapsed={isModelVaultCollapsed}
+            onToggleCollapse={() => setIsModelVaultCollapsed(!isModelVaultCollapsed)}
           />
         </div>
       </div>

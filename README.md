@@ -230,6 +230,15 @@ Track your progress in real-time:
 - Ensure ROCm is properly installed
 - Check Docker supports your GPU model
 
+### TypeScript/Build Errors? 🔧
+
+If you see errors about missing modules or TypeScript types when working with the management UI:
+```bash
+cd management-ui-nextjs
+npm install
+```
+This installs all required dependencies and type definitions.
+
 ### Need More Help? 💬
 
 - 📝 **Logs**: `docker-compose logs -f` - See what's happening

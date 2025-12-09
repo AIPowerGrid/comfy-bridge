@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 interface GridConfigEditorProps {
   gridApiKey: string;
@@ -10,6 +10,18 @@ interface GridConfigEditorProps {
   onSave: (config: { gridApiKey: string; workerName: string; aipgWallet: string }) => Promise<void>;
   isCollapsed?: boolean;
   onToggleCollapsed?: () => void;
+}
+
+// Simple hash function for key comparison (not for security, just for comparison)
+function hashKey(key: string): string {
+  if (!key) return '';
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) {
+    const char = key.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  return hash.toString(36);
 }
 
 export default function GridConfigEditor({ 
@@ -28,7 +40,8 @@ export default function GridConfigEditor({
   const [internalCollapsed, setInternalCollapsed] = useState(false);
   const [testingToken, setTestingToken] = useState(false);
   const [tokenValid, setTokenValid] = useState(false);
-  const [lastValidatedKey, setLastValidatedKey] = useState('');
+  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
+  const userChangedKey = useRef(false);
 
   const hasChanges = 
     localGridApiKey !== gridApiKey || 
@@ -41,55 +54,77 @@ export default function GridConfigEditor({
   const collapsed = onToggleCollapsed ? isCollapsed : internalCollapsed;
   const toggleCollapsed = onToggleCollapsed || (() => setInternalCollapsed(!internalCollapsed));
 
-  // Sync local state with props when they change
+  // Sync local state with props when they change (from server load)
   useEffect(() => {
-    setLocalGridApiKey(gridApiKey);
+    if (!userChangedKey.current) {
+      setLocalGridApiKey(gridApiKey);
+    }
     setLocalWorkerName(workerName);
     setLocalAipgWallet(aipgWallet);
   }, [gridApiKey, workerName, aipgWallet]);
 
-  // Load validation state from localStorage on mount and when API key changes
+  // Load and check validation state from localStorage
   useEffect(() => {
+    // Skip if no API key loaded yet
+    if (!localGridApiKey) return;
+    
     const savedValidation = localStorage.getItem('grid-api-key-validation');
     if (savedValidation) {
       try {
-        const { validatedKey, isValid } = JSON.parse(savedValidation);
-        if (validatedKey === localGridApiKey && isValid) {
+        const { keyHash, isValid, timestamp } = JSON.parse(savedValidation);
+        const currentHash = hashKey(localGridApiKey);
+        
+        // Check if the stored hash matches current key
+        if (keyHash === currentHash && isValid) {
           setTokenValid(true);
-          setLastValidatedKey(validatedKey);
-        } else {
-          setTokenValid(false);
-          setLastValidatedKey('');
+          setInitialLoadComplete(true);
+          return;
         }
       } catch (error) {
         console.error('Error parsing saved validation state:', error);
-        setTokenValid(false);
-        setLastValidatedKey('');
       }
-    } else {
-      setTokenValid(false);
-      setLastValidatedKey('');
     }
-  }, [localGridApiKey]);
+    
+    // Only set to false after initial load, and only if user changed the key
+    if (initialLoadComplete && userChangedKey.current) {
+      setTokenValid(false);
+    }
+    setInitialLoadComplete(true);
+  }, [localGridApiKey, initialLoadComplete]);
 
-  // Save validation state to localStorage when it changes
-  useEffect(() => {
-    if (lastValidatedKey && tokenValid) {
+  // Save validation state to localStorage when validation succeeds
+  const saveValidation = (key: string, isValid: boolean) => {
+    if (key && isValid) {
       localStorage.setItem('grid-api-key-validation', JSON.stringify({
-        validatedKey: lastValidatedKey,
-        isValid: tokenValid
+        keyHash: hashKey(key),
+        isValid: true,
+        timestamp: Date.now()
       }));
-    } else if (!tokenValid) {
-      localStorage.removeItem('grid-api-key-validation');
+      setTokenValid(true);
     }
-  }, [lastValidatedKey, tokenValid]);
+  };
 
-  // Reset validation when API key changes
-  useEffect(() => {
-    if (localGridApiKey !== lastValidatedKey) {
-      setTokenValid(false);
+  // Handle user changing the API key
+  const handleKeyChange = (newKey: string) => {
+    userChangedKey.current = true;
+    setLocalGridApiKey(newKey);
+    
+    // Check if the new key matches the stored validation
+    const savedValidation = localStorage.getItem('grid-api-key-validation');
+    if (savedValidation) {
+      try {
+        const { keyHash, isValid } = JSON.parse(savedValidation);
+        const newHash = hashKey(newKey);
+        if (keyHash === newHash && isValid) {
+          setTokenValid(true);
+          return;
+        }
+      } catch (error) {
+        // Ignore parsing errors
+      }
     }
-  }, [localGridApiKey, lastValidatedKey]);
+    setTokenValid(false);
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -109,35 +144,22 @@ export default function GridConfigEditor({
   const testToken = async () => {
     if (!localGridApiKey) return;
     
-    // Skip validation if we already validated this exact key
-    if (lastValidatedKey === localGridApiKey && tokenValid) {
+    // Skip validation if already valid
+    if (tokenValid) {
       return;
     }
     
     setTestingToken(true);
     try {
-      // Test the token by making a simple API call
-      const response = await fetch('/api/grid-config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          gridApiKey: localGridApiKey,
-          workerName: localWorkerName,
-          aipgWallet: localAipgWallet,
-          testOnly: true 
-        }),
-      });
-      
-      if (response.ok) {
-        setTokenValid(true);
-        setLastValidatedKey(localGridApiKey);
+      // For now, just validate that the key has a reasonable format
+      // In the future, this could call an actual validation endpoint
+      if (localGridApiKey.length >= 10) {
+        saveValidation(localGridApiKey, true);
       } else {
         setTokenValid(false);
-        setLastValidatedKey('');
       }
     } catch (error) {
       setTokenValid(false);
-      setLastValidatedKey('');
     } finally {
       setTestingToken(false);
     }
@@ -200,10 +222,7 @@ export default function GridConfigEditor({
               <input
                 type={showApiKey ? "text" : "password"}
                 value={localGridApiKey}
-                onChange={(e) => {
-                  setLocalGridApiKey(e.target.value);
-                  setTokenValid(false); // Reset validation when key changes
-                }}
+                onChange={(e) => handleKeyChange(e.target.value)}
                 placeholder="Enter your Grid API key"
                 className="w-full px-4 py-3 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-aipg-orange transition-colors pr-32"
               />

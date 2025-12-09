@@ -225,7 +225,7 @@ export default function ModelCard({
                     : 'bg-green-600 hover:bg-green-700'
                 }`}
               >
-                {isHosting ? 'Stop Earning' : 'Start Earning'}
+                {isHosting ? 'Stop Hosting' : 'Start Hosting'}
               </button>
               {!isRegisteredOnChain && onRegisterToVault && (
                 <button
@@ -269,7 +269,7 @@ export default function ModelCard({
                 }}
                 className="flex-1 px-3 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-bold rounded-lg transition-all transform hover:scale-[1.02]"
               >
-                Install & Start Earning
+                Start Hosting
               </button>
           ) : (
             /* Not downloaded, not hosting: Give user choice */
@@ -281,7 +281,7 @@ export default function ModelCard({
                     }}
                     className="flex-1 px-3 py-2 bg-gradient-to-r from-aipg-orange to-orange-600 hover:from-orange-600 hover:to-aipg-orange text-white text-sm font-bold rounded-lg transition-all transform hover:scale-[1.02]"
                   >
-                    Install Only
+                    Download Only
                   </button>
                   <button
                     onClick={(e) => {
@@ -290,7 +290,7 @@ export default function ModelCard({
                     }}
                     className="flex-1 px-3 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-bold rounded-lg transition-all transform hover:scale-[1.02]"
                   >
-                    Install & Start Earning
+                    Start Hosting
                   </button>
             </>
           )}

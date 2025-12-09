@@ -8,11 +8,48 @@ No JSON catalogs are used - all model info comes from the chain.
 import os
 import sys
 import time
+import json
 import struct
 import hashlib
 import requests
 from pathlib import Path
 from typing import Optional, Dict, List, Tuple
+
+# Global model name for progress tracking
+_current_model = ""
+
+def emit_progress(progress: float, speed: str = "", eta: str = "", message: str = "", msg_type: str = "info"):
+    """Emit a JSON progress message for the management UI."""
+    data = {
+        "type": msg_type,
+        "progress": round(progress, 1),
+        "speed": speed,
+        "eta": eta,
+        "message": message,
+        "model": _current_model,
+        "timestamp": time.time()
+    }
+    print(f"data: {json.dumps(data)}", flush=True)
+    print(flush=True)  # Empty line for SSE format
+
+# Load .env file if present
+try:
+    from dotenv import load_dotenv
+    # Look for .env in the script's directory
+    env_path = Path(__file__).parent / '.env'
+    if env_path.exists():
+        load_dotenv(env_path)
+        print(f"[INFO] Loaded environment from {env_path}")
+except ImportError:
+    # python-dotenv not installed, try manual loading
+    env_path = Path(__file__).parent / '.env'
+    if env_path.exists():
+        with open(env_path) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    key, _, value = line.partition('=')
+                    os.environ.setdefault(key.strip(), value.strip())
 
 # Import blockchain client
 from comfy_bridge.modelvault_client import (
@@ -110,12 +147,23 @@ def download_file(
         if 'civitai.com' in url:
             civitai_key = os.environ.get('CIVITAI_API_KEY')
             if civitai_key:
-                request_headers['Authorization'] = f"Bearer {civitai_key}"
+                # CivitAI uses token as query parameter
+                separator = '&' if '?' in url else '?'
+                url = f"{url}{separator}token={civitai_key}"
         
-        response = requests.get(url, headers=request_headers, stream=True, timeout=300)
+        response = requests.get(url, headers=request_headers, stream=True, timeout=300, allow_redirects=True)
         response.raise_for_status()
         
+        # Check content type - if HTML, it's likely an error page
+        content_type = response.headers.get('content-type', '')
+        if 'text/html' in content_type:
+            return False, "Received HTML instead of file - check if API key is required (set CIVITAI_API_KEY for CivitAI)"
+        
         total_size = int(response.headers.get('content-length', 0))
+        
+        # Sanity check - model files should be at least 1MB
+        if total_size > 0 and total_size < 1_000_000:
+            return False, f"File too small ({total_size} bytes) - likely an error response. Set CIVITAI_API_KEY for CivitAI downloads"
         downloaded = 0
         start_time = time.time()
         
@@ -174,21 +222,24 @@ def download_model_from_chain(
     Download a single model using info from blockchain.
     Returns True if successful.
     """
+    global _current_model
+    _current_model = model_info.display_name
+    
     if downloaded is None:
         downloaded = set()
     
     if model_info.display_name in downloaded:
-        print(f"[SKIP] {model_info.display_name} already processed")
+        emit_progress(100, message=f"[SKIP] {model_info.display_name} already processed")
         return True
     
-    print(f"\n[MODEL] {model_info.display_name}")
-    print(f"  Type: {model_info.model_type.name}")
-    print(f"  Base: {model_info.base_model}")
+    emit_progress(0, message=f"[MODEL] {model_info.display_name}")
+    emit_progress(0, message=f"  Type: {model_info.model_type.name}")
+    emit_progress(0, message=f"  Base: {model_info.base_model}")
     
     # Check if model has download files
     if not model_info.files:
-        print(f"[WARN] No download files registered for {model_info.display_name}")
-        print(f"  This model needs to be registered with download URLs (V2 contract)")
+        emit_progress(0, message=f"[WARN] No download files registered for {model_info.display_name}", msg_type="warning")
+        emit_progress(0, message=f"  This model needs to be registered with download URLs (V2 contract)", msg_type="warning")
         return False
     
     success_count = 0
@@ -198,27 +249,46 @@ def download_model_from_chain(
         folder = normalize_model_folder(file_info.file_type)
         filepath = Path(models_path) / folder / file_info.file_name
         
-        print(f"[FILE] [{idx}/{total_files}] {file_info.file_name} -> {folder}/")
+        # Calculate base progress for this file
+        file_base_progress = ((idx - 1) / total_files) * 100
+        file_progress_range = 100 / total_files
+        
+        emit_progress(file_base_progress, message=f"[FILE] [{idx}/{total_files}] {file_info.file_name} -> {folder}/")
         
         # Check if already exists
         if filepath.exists() and _is_file_complete(filepath):
-            print(f"  ✓ Already downloaded")
+            emit_progress(file_base_progress + file_progress_range, message=f"  ✓ Already downloaded: {file_info.file_name}")
             success_count += 1
             continue
         
         # Remove incomplete file
         if filepath.exists():
-            print(f"  Removing incomplete file...")
+            emit_progress(file_base_progress, message=f"  Removing incomplete file...")
             filepath.unlink()
         
-        # Download with filename in progress output
+        # Download with progress output
+        last_emit_time = [0]  # Use list to allow modification in nested function
+        
         def progress_cb(pct, dl, total, speed, eta):
+            # Throttle progress updates to every 0.5 seconds
+            now = time.time()
+            if now - last_emit_time[0] < 0.5 and pct < 99:
+                return
+            last_emit_time[0] = now
+            
             speed_mb = speed / (1024 * 1024)
+            speed_str = f"{speed_mb:.1f} MB/s"
             eta_str = f"{eta:.0f}s" if eta < 60 else f"{eta/60:.1f}m"
-            # Include filename for clarity in logs
-            print(f"  [{pct:.1f}%] {file_info.file_name}: {dl/(1024*1024):.1f}/{total/(1024*1024):.1f} MB @ {speed_mb:.1f} MB/s ETA: {eta_str}", end='\r')
+            
+            # Calculate overall progress including file position
+            overall_pct = file_base_progress + (pct / 100) * file_progress_range
+            
+            message = f"  [{pct:.1f}%] {file_info.file_name}: {dl/(1024*1024):.1f}/{total/(1024*1024):.1f} MB"
+            emit_progress(overall_pct, speed=speed_str, eta=eta_str, message=message)
         
         # Try primary URL
+        url_preview = file_info.download_url[:80] + "..." if len(file_info.download_url) > 80 else file_info.download_url
+        emit_progress(file_base_progress, message=f"  Downloading: {url_preview}")
         success, error = download_file(
             file_info.download_url,
             filepath,
@@ -228,7 +298,7 @@ def download_model_from_chain(
         
         # Try mirror if primary fails
         if not success and file_info.mirror_url:
-            print(f"  Primary failed, trying mirror...")
+            emit_progress(file_base_progress, message=f"  Primary failed, trying mirror...")
             success, error = download_file(
                 file_info.mirror_url,
                 filepath,
@@ -238,11 +308,19 @@ def download_model_from_chain(
         
         if success:
             success_count += 1
+            emit_progress(file_base_progress + file_progress_range, message=f"  ✓ Downloaded: {file_info.file_name}")
         else:
-            print(f"  [ERROR] {error}")
+            emit_progress(file_base_progress, message=f"  [ERROR] {error}", msg_type="error")
     
     downloaded.add(model_info.display_name)
-    return success_count == total_files
+    final_success = success_count == total_files
+    
+    if final_success:
+        emit_progress(100, message=f"[SUCCESS] {model_info.display_name} - {success_count}/{total_files} files")
+    else:
+        emit_progress(100, message=f"[PARTIAL] {model_info.display_name} - {success_count}/{total_files} files", msg_type="warning")
+    
+    return final_success
 
 
 def download_models_from_chain(
@@ -259,31 +337,43 @@ def download_models_from_chain(
     Returns:
         True if all models downloaded successfully
     """
-    print("=" * 60)
-    print("Blockchain Model Download")
-    print("=" * 60)
-    print(f"Models path: {models_path}")
-    print(f"Requested: {len(model_names)} model(s)")
-    print("=" * 60)
+    global _current_model
+    _current_model = model_names[0] if model_names else ""
+    
+    # Emit start event
+    start_data = {
+        "type": "start",
+        "model": _current_model,
+        "message": f"Starting download for {_current_model}..."
+    }
+    print(f"data: {json.dumps(start_data)}", flush=True)
+    print(flush=True)
+    
+    emit_progress(0, message="=" * 60)
+    emit_progress(0, message="Blockchain Model Download")
+    emit_progress(0, message="=" * 60)
+    emit_progress(0, message=f"Models path: {models_path}")
+    emit_progress(0, message=f"Requested: {len(model_names)} model(s)")
+    emit_progress(0, message="=" * 60)
     
     # Get blockchain client
     client = get_modelvault_client()
     
     if not client.enabled:
-        print("[ERROR] ModelVault client not available")
+        emit_progress(0, message="[ERROR] ModelVault client not available", msg_type="error")
         return False
     
     # Fetch all models from chain
-    print("\n[CHAIN] Fetching models from blockchain...")
+    emit_progress(0, message="[CHAIN] Fetching models from blockchain...")
     total = client.get_total_models()
-    print(f"  Total models on chain: {total}")
+    emit_progress(0, message=f"  Total models on chain: {total}")
     
     all_models = client.fetch_all_models()
-    print(f"  Loaded: {len(all_models)} models")
+    emit_progress(0, message=f"  Loaded: {len(all_models)} models")
     
     if not all_models:
-        print("[ERROR] No models found on blockchain")
-        print("  Please register models to the blockchain first")
+        emit_progress(0, message="[ERROR] No models found on blockchain", msg_type="error")
+        emit_progress(0, message="  Please register models to the blockchain first", msg_type="error")
         return False
     
     # Resolve requested models
@@ -298,16 +388,16 @@ def download_models_from_chain(
             not_found.append(name)
     
     if not_found:
-        print(f"\n[WARN] Models not found on chain: {', '.join(not_found)}")
+        emit_progress(0, message=f"[WARN] Models not found on chain: {', '.join(not_found)}", msg_type="warning")
     
     if not models_to_download:
-        print("[ERROR] No resolvable models found on blockchain")
+        emit_progress(0, message="[ERROR] No resolvable models found on blockchain", msg_type="error")
         return False
     
-    print(f"\n[DOWNLOAD] {len(models_to_download)} model(s) to process:")
+    emit_progress(0, message=f"[DOWNLOAD] {len(models_to_download)} model(s) to process:")
     for m in models_to_download:
         files_str = f"{len(m.files)} files" if m.files else "NO FILES"
-        print(f"  • {m.display_name} ({files_str})")
+        emit_progress(0, message=f"  • {m.display_name} ({files_str})")
     
     # Download each model
     downloaded = set()
@@ -317,11 +407,26 @@ def download_models_from_chain(
         if download_model_from_chain(model, models_path, downloaded):
             success_count += 1
     
-    print("\n" + "=" * 60)
-    print(f"[SUMMARY] Downloaded: {success_count}/{len(models_to_download)} models")
-    print("=" * 60)
+    emit_progress(100, message="=" * 60)
+    all_success = success_count == len(models_to_download)
+    if all_success:
+        emit_progress(100, message=f"[COMPLETE] Downloaded: {success_count}/{len(models_to_download)} models")
+    else:
+        emit_progress(100, message=f"[SUMMARY] Downloaded: {success_count}/{len(models_to_download)} models", msg_type="warning")
+    emit_progress(100, message="=" * 60)
     
-    return success_count == len(models_to_download)
+    # Emit final complete event
+    complete_data = {
+        "type": "complete",
+        "success": all_success,
+        "message": "Download complete" if all_success else "Download partially complete",
+        "models": model_names,
+        "timestamp": time.time()
+    }
+    print(f"data: {json.dumps(complete_data)}", flush=True)
+    print(flush=True)
+    
+    return all_success
 
 
 def main():

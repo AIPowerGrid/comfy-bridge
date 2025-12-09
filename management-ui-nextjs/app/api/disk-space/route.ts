@@ -78,7 +78,7 @@ async function getWindowsDiskSpace(targetPath: string) {
     return {
       name: `${driveLetter}:`,
       display_name: `AI Models Volume (${driveLetter}:)`,
-      mount_point: modelsPath,
+      mount_point: 'persistent_volumes/models',
       total_gb: Math.round((totalBytes / (1024 * 1024 * 1024)) * 100) / 100,
       used_gb: Math.round((usedBytes / (1024 * 1024 * 1024)) * 100) / 100,
       free_gb: Math.round((freeBytes / (1024 * 1024 * 1024)) * 100) / 100,
@@ -92,7 +92,7 @@ async function getWindowsDiskSpace(targetPath: string) {
     return {
       name: 'C:',
       display_name: 'AI Models Volume',
-      mount_point: modelsPath,
+      mount_point: 'persistent_volumes/models',
       total_gb: 0,
       used_gb: 0,
       free_gb: 0,
@@ -136,6 +136,15 @@ function getVolumeDisplayName(mountPoint: string): { displayName: string; hostPa
   
   // For unknown mounts, use the mount point
   return { displayName: mountPoint };
+}
+
+// Get the display path for the models directory
+function getModelsDisplayPath(): string {
+  if (isWindows) {
+    return process.env.MODELS_PATH || 'persistent_volumes/models';
+  }
+  // In Docker, show the host path for clarity
+  return 'persistent_volumes/models';
 }
 
 async function getModelsByPath(modelsPath: string): Promise<{ [key: string]: string[] }> {
@@ -201,7 +210,7 @@ export async function GET() {
       return NextResponse.json({
         name: device,
         display_name: 'AI Models Volume',
-        mount_point: modelsPath,
+        mount_point: getModelsDisplayPath(),
         total_gb: Math.round(totalKb / (1024 * 1024) * 100) / 100,
         used_gb: Math.round(usedKb / (1024 * 1024) * 100) / 100,
         free_gb: Math.round(availKb / (1024 * 1024) * 100) / 100,

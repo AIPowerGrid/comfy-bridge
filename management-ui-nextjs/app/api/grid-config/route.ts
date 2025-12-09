@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { promises as fs } from 'fs';
 import { restartDockerContainers } from '@/lib/docker';
 
+// Force dynamic rendering - depends on filesystem state
+export const dynamic = 'force-dynamic';
+
 // Check if running in Docker or locally
 const isWindows = process.platform === 'win32';
 const isLocalDev = isWindows || !process.env.DOCKER_CONTAINER;

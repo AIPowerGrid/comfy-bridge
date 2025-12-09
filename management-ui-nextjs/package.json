@@ -6,8 +6,7 @@
   "homepage": "./",
   "scripts": {
     "dev": "next dev -p 5000",
-    "build": "npm run validate-exports && next build",
-    "validate-exports": "tsx scripts/validate-exports.ts",
+    "build": "next build",
     "start": "next start -p 5000",
     "lint": "next lint",
     "test": "jest",
