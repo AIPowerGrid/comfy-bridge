@@ -87,13 +87,15 @@ class ModelHealthChecker:
     Integrates with blockchain registry to know expected files.
     """
     
-    # ComfyUI model directories
+    # ComfyUI model directories - search multiple possible locations
     MODEL_DIRS = {
-        'checkpoint': ['checkpoints', 'ckpt'],
-        'vae': ['vae'],
-        'text_encoder': ['text_encoders', 'clip'],
-        'lora': ['loras'],
-        'diffusion_models': ['diffusion_models', 'unet'],
+        'checkpoint': ['checkpoints', 'ckpt', 'diffusion_models'],
+        'vae': ['vae', 'vae/wan'],
+        'text_encoder': ['text_encoders', 'clip', 'text_encoders/wan'],
+        'text_encoders': ['text_encoders', 'clip', 'text_encoders/wan'],
+        'lora': ['loras', 'loras/wan'],
+        'diffusion_models': ['diffusion_models', 'diffusion_models/wan', 'unet', 'unet/wan'],
+        'unet': ['diffusion_models', 'diffusion_models/wan', 'unet', 'unet/wan'],
     }
     
     def __init__(self, models_path: str = "/app/ComfyUI/models"):
@@ -116,12 +118,21 @@ class ModelHealthChecker:
             if file_path.exists():
                 return file_path
         
-        # Fallback: search all model dirs
+        # Fallback: search all model dirs (one level)
         for subdir in self.models_path.iterdir():
             if subdir.is_dir():
                 file_path = subdir / filename
                 if file_path.exists():
                     return file_path
+        
+        # Deep search: walk entire tree
+        for root, dirs, files in os.walk(self.models_path):
+            if filename in files:
+                return Path(root) / filename
+            # Case-insensitive fallback
+            for f in files:
+                if f.lower() == filename.lower():
+                    return Path(root) / f
         
         return None
     
@@ -295,11 +306,28 @@ class ModelHealthChecker:
 _health_checker: Optional[ModelHealthChecker] = None
 
 
+def _find_models_path() -> str:
+    """Find the actual models directory, checking multiple possible locations."""
+    # Check env var first
+    env_path = os.environ.get("MODELS_PATH")
+    if env_path and os.path.isdir(env_path):
+        return env_path
+    
+    # Check common paths
+    for path in ["/app/ComfyUI/models", "/persistent_volumes/models"]:
+        if os.path.isdir(path):
+            return path
+    
+    # Fall back to default
+    return "/app/ComfyUI/models"
+
+
 def get_health_checker() -> ModelHealthChecker:
     """Get singleton health checker instance."""
     global _health_checker
     if _health_checker is None:
-        models_path = os.environ.get("MODELS_PATH", "/app/ComfyUI/models")
+        models_path = _find_models_path()
+        logger.info(f"Health checker using models path: {models_path}")
         _health_checker = ModelHealthChecker(models_path)
     return _health_checker
 

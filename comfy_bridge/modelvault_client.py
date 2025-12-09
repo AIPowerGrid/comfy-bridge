@@ -395,6 +395,15 @@ class ModelVaultClient:
                         model_files = config.get("files", []) or data.get("files", [])
                         download_info = config.get("download", [])
                         
+                        # Get config-level download URL as fallback
+                        config_download_url = (
+                            config.get("download_url") or 
+                            config.get("file_url") or 
+                            data.get("download_url") or
+                            data.get("url") or
+                            ""
+                        )
+                        
                         # Build maps of file_name -> download_url and file_name -> type from download array
                         download_urls = {}
                         download_types = {}
@@ -412,12 +421,13 @@ class ModelVaultClient:
                         for file_info in model_files:
                             if isinstance(file_info, dict):
                                 file_path = file_info.get("path", "")
-                                # Get URL from file_info first, then fall back to download_urls map
+                                # Get URL from file_info first, then fall back to download_urls map, then config-level URL
                                 url = (
                                     file_info.get("url") or 
                                     file_info.get("file_url") or 
                                     file_info.get("download_url") or
-                                    download_urls.get(file_path, "")
+                                    download_urls.get(file_path, "") or
+                                    config_download_url
                                 )
                                 # Get type from file_info first, then from download_types map
                                 file_type = (
@@ -604,6 +614,15 @@ class ModelVaultClient:
                     files_data = config.get("files", []) or data.get("files", [])
                     download_info = config.get("download", [])
                     
+                    # Get config-level download URL as fallback
+                    config_download_url = (
+                        config.get("download_url") or 
+                        config.get("file_url") or 
+                        data.get("download_url") or
+                        data.get("url") or
+                        ""
+                    )
+                    
                     # Build maps of file_name -> download_url and file_name -> type from download array
                     download_urls = {}
                     download_types = {}
@@ -622,12 +641,13 @@ class ModelVaultClient:
                     for file_info in files_data:
                         if isinstance(file_info, dict):
                             file_path = file_info.get("path", "")
-                            # Get URL from file_info first, then fall back to download_urls map
+                            # Get URL from file_info first, then fall back to download_urls map, then config-level URL
                             url = (
                                 file_info.get("url") or 
                                 file_info.get("file_url") or 
                                 file_info.get("download_url") or
-                                download_urls.get(file_path, "")
+                                download_urls.get(file_path, "") or
+                                config_download_url
                             )
                             # Get type from file_info first, then from download_types map
                             file_type = (
