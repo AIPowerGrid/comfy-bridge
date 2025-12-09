@@ -67,6 +67,7 @@ class ComfyUIBridge:
         
         # Handle the case where no job is available
         if not job or not job.get("id"):
+            logger.debug(f"No job available (response: {job})")
             return
             
         job_id = job.get("id")
@@ -289,11 +290,12 @@ class ComfyUIBridge:
             logger.error("  2. Check WORKFLOW_FILE configuration")
 
         job_count = 0
+        logger.info("Starting job polling loop...")
         while True:
             job_count += 1
-            # Only show polling message every 10 attempts to reduce noise
-            if job_count % 10 == 1:
-                logger.debug(f"Service running (poll #{job_count})")
+            # Show polling message every 15 attempts (every ~30 seconds)
+            if job_count % 15 == 1:
+                logger.info(f"👀 Polling for jobs... (poll #{job_count}, models: {len(self.supported_models)})")
             try:
                 await self.process_once()
             except Exception as e:

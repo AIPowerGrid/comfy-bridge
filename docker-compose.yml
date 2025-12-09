@@ -92,6 +92,7 @@ services:
       - DEBUG=${DEBUG:-true}
       - MODELVAULT_CONTRACT=${MODELVAULT_CONTRACT:-0xF5caaB067Bae8ea6Be18903056E20e8DacB92182}
       - MODELVAULT_RPC=${MODELVAULT_RPC:-https://sepolia.base.org}
+      - MODELS_PATH=/app/ComfyUI/models
     
     # Ports
     ports:

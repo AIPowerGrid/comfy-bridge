@@ -182,12 +182,23 @@ export default function Header() {
               <span className="text-sm text-gray-300 font-medium">Configure Connection</span>
             </div>
           )}
-          <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-sm text-gray-500">
-            <span><span className="font-semibold text-aipg-gold">1.</span> Configure connection</span>
-            <span className="text-gray-600">→</span>
-            <span><span className="font-semibold text-aipg-gold">2.</span> Select models</span>
-            <span className="text-gray-600">→</span>
-            <span><span className="font-semibold text-aipg-gold">3.</span> Click Start Hosting</span>
+          <div className="flex flex-col items-start text-sm text-gray-500 bg-gray-900/50 rounded-lg px-4 py-3 border border-gray-700">
+            <div className="flex items-center gap-2 py-1">
+              <span className="font-semibold text-aipg-gold w-5">1.</span>
+              <span>Configure wallet connection</span>
+            </div>
+            <div className="flex items-center gap-2 py-1">
+              <span className="font-semibold text-aipg-gold w-5">2.</span>
+              <span>Configure grid & API keys</span>
+            </div>
+            <div className="flex items-center gap-2 py-1">
+              <span className="font-semibold text-aipg-gold w-5">3.</span>
+              <span>Select models to host</span>
+            </div>
+            <div className="flex items-center gap-2 py-1">
+              <span className="font-semibold text-aipg-gold w-5">4.</span>
+              <span>Click Start Hosting</span>
+            </div>
           </div>
         </div>
       </div>

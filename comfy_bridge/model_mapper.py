@@ -78,17 +78,19 @@ class ModelMapper:
     """
     
     # Fallback workflow mappings for models not yet on-chain or for legacy support
-    # These will be phased out as all models get registered on-chain
+    # Map BOTH the Grid API model names (lowercase) AND stable_diffusion.json names
     FALLBACK_WORKFLOW_MAP = {
-        # Video Generation Models
-        "wan2_2_t2v_14b": "wan2.2-t2v-a14b",
-        "wan2.2-t2v-a14b": "wan2.2-t2v-a14b",
-        "wan2_2_t2v_14b_hq": "wan2.2-t2v-a14b-hq",
-        "wan2.2-t2v-a14b-hq": "wan2.2-t2v-a14b-hq",
+        # Video Generation Models - map all variants to workflow files
+        # Grid API uses lowercase underscore names for job requests
+        "wan2_2_t2v_14b": "wan2.2-t2v-a14b",       # Grid API name
+        "wan2.2-t2v-a14b": "wan2.2-t2v-a14b",      # stable_diffusion.json name
+        "wan2_2_t2v_14b_hq": "wan2.2-t2v-a14b-hq", # Grid API name
+        "wan2.2-t2v-a14b-hq": "wan2.2-t2v-a14b-hq",# stable_diffusion.json name
         "wan2_2_t2v_14b_best": "wan2.2-t2v-a14b-best",
         "wan2.2-t2v-a14b-best": "wan2.2-t2v-a14b-best",
-        "wan2_2_ti2v_5b": "wan2.2_ti2v_5B",
-        "wan2.2_ti2v_5b": "wan2.2_ti2v_5B",
+        "wan2_2_ti2v_5b": "wan2.2_ti2v_5B",        # Grid API name (lowercase b!)
+        "wan2.2_ti2v_5B": "wan2.2_ti2v_5B",        # stable_diffusion.json name (uppercase B)
+        "wan2.2_ti2v_5b": "wan2.2_ti2v_5B",        # lowercase variant
         "ltxv": "ltxv",
         
         # Flux Dev (all naming variants)
@@ -412,39 +414,108 @@ class ModelMapper:
         
         return None
 
+    # Reverse mapping: workflow filename -> Grid model name
+    # These must match the model names that have QUEUED JOBS in the Grid API
+    # Check https://api.aipowergrid.io/api/v2/status/models for active job queues
+    WORKFLOW_TO_GRID_MODEL = {
+        # Video Generation Models - use exact stable_diffusion.json names
+        # Grid has both variants, but stable_diffusion.json names are canonical
+        "wan2.2-t2v-a14b": "wan2.2-t2v-a14b",
+        "wan2.2-t2v-a14b-hq": "wan2.2-t2v-a14b-hq",
+        "wan2.2-t2v-a14b-best": "wan2.2-t2v-a14b-best",
+        "wan2.2_ti2v_5B": "wan2.2_ti2v_5B",       # Use stable_diffusion.json name (mixed case)
+        "wan2.2-ti2v-5B": "wan2.2_ti2v_5B",       # Map hyphen variant
+        "ltxv": "ltxv",
+        
+        # Flux Dev variants
+        "flux1.dev": "FLUX.1-dev",
+        "FLUX.1-dev": "FLUX.1-dev",
+        "flux1-dev": "FLUX.1-dev",
+        
+        # Flux Krea variants
+        "flux1_krea_dev": "flux.1-krea-dev",
+        "flux.1-krea-dev": "flux.1-krea-dev",
+        "krea": "krea",
+        
+        # Flux Kontext variants
+        "FLUX.1-dev-Kontext-fp8-scaled": "FLUX.1-dev-Kontext-fp8-scaled",
+        "flux1-krea-dev_fp8_scaled": "FLUX.1-dev-Kontext-fp8-scaled",
+        "flux_kontext_dev_basic": "flux_kontext_dev_basic",
+        
+        # Other image models
+        "Chroma_final": "Chroma",
+        "Chroma": "Chroma",
+        "sdxl": "SDXL 1.0",
+        "sdxl1": "SDXL 1.0",
+        "SDXL": "SDXL 1.0",
+    }
+
+    # Map workflow IDs to ALL Grid model name variants that might have jobs
+    # This ensures we advertise both naming conventions
+    WORKFLOW_TO_ALL_GRID_NAMES = {
+        "wan2.2_ti2v_5B": ["wan2.2_ti2v_5B", "wan2_2_ti2v_5b"],  # Both variants
+        "wan2.2-t2v-a14b": ["wan2.2-t2v-a14b", "wan2_2_t2v_14b"],
+        "wan2.2-t2v-a14b-hq": ["wan2.2-t2v-a14b-hq", "wan2_2_t2v_14b_hq"],
+    }
+
     def _build_workflow_map_from_env(self):
         """Build workflow map based on env-specified workflows.
         
         Use explicit mapping for known workflow files to avoid model name resolution issues.
         Validates that required models are installed before advertising workflows.
+        Advertises ALL naming variants for models to catch jobs from any source.
         """
         self.workflow_map = {}
         env_workflows = self._iter_env_workflow_files()
         
-        # Direct mapping - workflow filenames now match model names exactly
-        # Store model names without .json extension
-        logger.info("Using simplified direct filename mapping")
-        
         logger.info("Building workflow map from WORKFLOW_FILE env var")
-        for grid_model_name, abs_path in env_workflows:
+        for raw_entry, abs_path in env_workflows:
             filename = os.path.basename(abs_path)
             logger.debug(f"Processing workflow file: {filename}")
             
-            # Direct mapping: filename without .json extension becomes workflow identifier
             if filename.endswith('.json'):
                 workflow_id = filename[:-5]  # Remove .json extension
-                self.workflow_map[grid_model_name] = workflow_id
-                logger.info(f"Mapped {grid_model_name} -> {workflow_id}")
+                
+                # Check if this workflow has multiple Grid name variants
+                all_names = self.WORKFLOW_TO_ALL_GRID_NAMES.get(workflow_id)
+                if all_names:
+                    # Register ALL name variants for this workflow
+                    for grid_model_name in all_names:
+                        self.workflow_map[grid_model_name] = workflow_id
+                        logger.info(f"Mapped Grid model '{grid_model_name}' -> workflow '{workflow_id}'")
+                else:
+                    # Single name from WORKFLOW_TO_GRID_MODEL or use workflow_id
+                    grid_model_name = self.WORKFLOW_TO_GRID_MODEL.get(workflow_id, workflow_id)
+                    
+                    # Also check if raw entry maps to a grid model name
+                    if raw_entry.endswith('.json'):
+                        raw_workflow = raw_entry[:-5]
+                    else:
+                        raw_workflow = raw_entry
+                    grid_from_raw = self.WORKFLOW_TO_GRID_MODEL.get(raw_workflow)
+                    if grid_from_raw:
+                        grid_model_name = grid_from_raw
+                    
+                    self.workflow_map[grid_model_name] = workflow_id
+                    logger.info(f"Mapped Grid model '{grid_model_name}' -> workflow '{workflow_id}'")
             else:
                 logger.warning(f"Skipping non-JSON file: {filename}")
         
         logger.info(f"Final workflow map from env: {len(self.workflow_map)} models")
         for model, workflow in self.workflow_map.items():
-            logger.debug(f"  {model} -> {workflow}")
+            logger.info(f"  {model} -> {workflow}")
 
     def _has_local_flux_assets(self) -> bool:
         """Fallback detection for Flux assets on disk when ComfyUI doesn't list them."""
-        models_root = os.getenv("MODELS_PATH", "/app/ComfyUI/models")
+        # Check multiple possible model locations
+        models_root = os.getenv("MODELS_PATH")
+        if not models_root or not os.path.isdir(models_root):
+            for path in ["/app/ComfyUI/models", "/persistent_volumes/models"]:
+                if os.path.isdir(path):
+                    models_root = path
+                    break
+            else:
+                models_root = "/app/ComfyUI/models"
 
         def dir_has_keywords(subdir: str, keywords: list[str]) -> bool:
             path = os.path.join(models_root, subdir)
@@ -619,13 +690,13 @@ class ModelMapper:
         return "Dreamshaper.json"  # Default workflow
 
     def get_available_horde_models(self) -> List[str]:
-        """Get list of available models (combines chain + workflow map)."""
-        # Unique model names from both chain and workflow map
-        models = set(self.workflow_map.keys())
-        # Add chain-registered model display names
-        for model_info in self.chain_models.values():
-            models.add(model_info.display_name)
-        return list(models)
+        """Get list of available models (only installed models with workflows).
+        
+        Only returns models that have configured workflows - not all models
+        from the blockchain. This ensures we only advertise what we can serve.
+        """
+        # Only return models that have workflow mappings (i.e., are installed)
+        return list(self.workflow_map.keys())
 
     def is_model_on_chain(self, model_name: str) -> bool:
         """Check if a model is registered on the blockchain."""

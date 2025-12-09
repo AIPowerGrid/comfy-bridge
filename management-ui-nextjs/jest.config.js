@@ -24,10 +24,19 @@ module.exports = {
       }
     }],
   },
+  // Transform ESM packages from node_modules
+  transformIgnorePatterns: [
+    'node_modules/(?!(wagmi|viem|@wagmi|@rainbow-me|@tanstack)/)',
+  ],
   verbose: true,
   moduleNameMapper: {
     '^electron$': '<rootDir>/electron/__mocks__/electron.ts',
     '^@/(.*)$': '<rootDir>/$1',
+    // Mock wagmi and viem to avoid ESM issues in tests
+    '^wagmi$': '<rootDir>/lib/web3/__mocks__/wagmi.ts',
+    '^wagmi/chains$': '<rootDir>/lib/web3/__mocks__/wagmi-chains.ts',
+    '^viem$': '<rootDir>/lib/web3/__mocks__/viem.ts',
+    '^@rainbow-me/rainbowkit$': '<rootDir>/lib/web3/__mocks__/rainbowkit.ts',
   },
 };
 

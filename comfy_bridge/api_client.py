@@ -49,8 +49,6 @@ class APIClient:
             "amount": 1,
         }
 
-        logger.debug(f"Polling for jobs with {len(payload.get('models', []))} models")
-        
         try:
             response = await self.client.post(
                 "/v2/generate/pop", headers=self.headers, json=payload
@@ -62,7 +60,13 @@ class APIClient:
             if result.get("id"):
                 job_id = result.get("id")
                 self._job_cache[job_id] = result
-                logger.info(f"Received job {job_id} for model {result.get('model', 'unknown')}")
+                logger.info(f"✅ Received job {job_id} for model {result.get('model', 'unknown')}")
+            
+            # Log skipped jobs for debugging (only if interesting)
+            skipped = result.get("skipped", {})
+            interesting_skips = {k: v for k, v in skipped.items() if v > 0}
+            if interesting_skips:
+                logger.debug(f"Skipped: {interesting_skips}")
 
             return result
         except httpx.HTTPStatusError as e:
@@ -70,6 +74,9 @@ class APIClient:
             logger.error(
                 f"pop_job response [{e.response.status_code}]: {e.response.text}"
             )
+            raise
+        except Exception as e:
+            logger.error(f"pop_job unexpected error: {type(e).__name__}: {e}")
             raise
 
     async def cancel_job(self, job_id: str) -> None:
