@@ -182,8 +182,12 @@ export default function Header() {
               <span className="text-sm text-gray-300 font-medium">Configure Connection</span>
             </div>
           )}
-          <div className="text-sm text-gray-500">
-            <span className="font-semibold text-aipg-gold">Step 1:</span> Configure your connection below
+          <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-sm text-gray-500">
+            <span><span className="font-semibold text-aipg-gold">1.</span> Configure connection</span>
+            <span className="text-gray-600">→</span>
+            <span><span className="font-semibold text-aipg-gold">2.</span> Select models</span>
+            <span className="text-gray-600">→</span>
+            <span><span className="font-semibold text-aipg-gold">3.</span> Click Start Hosting</span>
           </div>
         </div>
       </div>

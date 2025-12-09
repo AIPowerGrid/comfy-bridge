@@ -115,6 +115,9 @@ services:
       - ./.env:/app/comfy-bridge/.env:ro
       # Grid image model reference repository
       - ../grid-image-model-reference:/app/grid-image-model-reference:ro
+      # Mount local Python code for development (allows hot-reload of code changes)
+      - ./comfy_bridge:/app/comfy-bridge/comfy_bridge:ro
+      - ./download_models_from_chain.py:/app/comfy-bridge/download_models_from_chain.py:ro
     
     # Restart policy
     restart: unless-stopped

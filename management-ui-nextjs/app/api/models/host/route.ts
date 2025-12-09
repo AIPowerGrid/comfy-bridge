@@ -46,45 +46,55 @@ export async function POST(request: Request) {
     }
     
     // Check if workflow file exists for this model
-    const workflowFile = `${model_id}.json`;
-    const workflowFullPath = path.join(workflowsPath, workflowFile);
+    // Try multiple naming variations to find a match
+    const namingVariations = [
+      `${model_id}.json`,
+      `${model_id.toLowerCase()}.json`,
+      `${model_id.replace(/[^a-zA-Z0-9.-]/g, '_')}.json`,
+      `${model_id.replace(/[^a-zA-Z0-9.-]/g, '-')}.json`,
+      `${model_id.toLowerCase().replace(/[^a-z0-9.-]/g, '_')}.json`,
+      `${model_id.toLowerCase().replace(/[^a-z0-9.-]/g, '-')}.json`,
+      // Handle cases like "flux.1-krea-dev" -> "flux1_krea_dev.json"
+      `${model_id.replace(/\./g, '').replace(/-/g, '_')}.json`,
+    ];
     
-    let workflowExists = false;
-    try {
-      await fs.access(workflowFullPath);
-      workflowExists = true;
-    } catch (err) {
-      console.log(`Workflow file not found: ${workflowFullPath}`);
-    }
+    let foundWorkflowFile = '';
     
-    if (!workflowExists) {
-      // Try with lowercase
-      const lowerWorkflowFile = `${model_id.toLowerCase()}.json`;
-      const lowerWorkflowPath = path.join(workflowsPath, lowerWorkflowFile);
+    // First try the exact variations
+    for (const variant of namingVariations) {
       try {
-        await fs.access(lowerWorkflowPath);
-        workflowExists = true;
+        await fs.access(path.join(workflowsPath, variant));
+        foundWorkflowFile = variant;
+        console.log(`Found workflow file: ${variant}`);
+        break;
       } catch (err) {
-        // Also try with common naming patterns
-        const patterns = [
-          `${model_id.replace(/[^a-zA-Z0-9]/g, '_')}.json`,
-          `${model_id.replace(/[^a-zA-Z0-9]/g, '-')}.json`,
-          `${model_id.toLowerCase().replace(/[^a-z0-9]/g, '_')}.json`,
-        ];
-        
-        for (const pattern of patterns) {
-          try {
-            await fs.access(path.join(workflowsPath, pattern));
-            workflowExists = true;
-            break;
-          } catch (err) {
-            // Continue checking
-          }
-        }
+        // Continue checking
       }
     }
     
-    if (!workflowExists) {
+    // If not found, list all workflows and try fuzzy matching
+    if (!foundWorkflowFile) {
+      try {
+        const files = await fs.readdir(workflowsPath);
+        const modelLower = model_id.toLowerCase().replace(/[^a-z0-9]/g, '');
+        
+        for (const file of files) {
+          if (!file.endsWith('.json')) continue;
+          const fileLower = file.toLowerCase().replace(/[^a-z0-9]/g, '');
+          // Check if model name is contained in filename or vice versa
+          if (fileLower.includes(modelLower) || modelLower.includes(fileLower.replace('json', ''))) {
+            foundWorkflowFile = file;
+            console.log(`Found workflow file via fuzzy match: ${file} for model ${model_id}`);
+            break;
+          }
+        }
+      } catch (err) {
+        console.error('Error listing workflows directory:', err);
+      }
+    }
+    
+    if (!foundWorkflowFile) {
+      console.log(`No workflow file found for ${model_id}. Checked: ${namingVariations.join(', ')}`);
       return NextResponse.json({
         success: false,
         error: `No workflow file found for ${model_id}. Please ensure a workflow file exists in the workflows directory.`
@@ -99,10 +109,30 @@ export async function POST(request: Request) {
       currentWorkflows = workflowMatch[1].split(',').map(s => s.trim()).filter(Boolean);
     }
     
-    // Add the new model if not already present
-    const modelWorkflow = `${model_id}.json`;
-    if (!currentWorkflows.includes(modelWorkflow) && !currentWorkflows.includes(model_id)) {
-      currentWorkflows.push(modelWorkflow);
+    // Add the found workflow file if not already present
+    // Check both the found filename and model_id variations
+    const alreadyPresent = currentWorkflows.some(w => {
+      const wLower = w.toLowerCase().replace(/\.json$/, '');
+      const foundLower = foundWorkflowFile.toLowerCase().replace(/\.json$/, '');
+      const modelLower = model_id.toLowerCase();
+      return wLower === foundLower || wLower === modelLower || w === foundWorkflowFile;
+    });
+    
+    if (!alreadyPresent) {
+      currentWorkflows.push(foundWorkflowFile);
+      console.log(`Adding ${foundWorkflowFile} to WORKFLOW_FILE`);
+    } else {
+      console.log(`Workflow ${foundWorkflowFile} already in WORKFLOW_FILE`);
+    }
+    
+    // If already present, no need to update file
+    if (alreadyPresent) {
+      return NextResponse.json({
+        success: true,
+        requires_restart: false,
+        already_hosted: true,
+        message: `Model ${model_id} is already configured for hosting.`
+      });
     }
     
     // Update WORKFLOW_FILE in .env
@@ -118,36 +148,11 @@ export async function POST(request: Request) {
     
     console.log(`Updated WORKFLOW_FILE to: ${newWorkflowValue}`);
     
-    // Trigger container restart
-    try {
-      const { exec } = await import('child_process');
-      const { promisify } = await import('util');
-      const execAsync = promisify(exec);
-      
-      if (isWindows) {
-        // On Windows, use docker-compose from the comfy-bridge directory
-        await execAsync('docker-compose restart comfy-bridge', { 
-          cwd: 'c:\\dev\\comfy-bridge' 
-        });
-      } else {
-        // In Docker, use docker-compose
-        await execAsync('docker-compose -f /app/comfy-bridge/docker-compose.yml restart comfy-bridge');
-      }
-    } catch (restartError) {
-      console.error('Failed to restart container:', restartError);
-      // Don't fail the request, just note the warning
-      return NextResponse.json({
-        success: true,
-        requires_restart: true,
-        message: `Model ${model_id} configured for hosting. Manual restart may be required.`,
-        warning: 'Container restart failed - please restart manually'
-      });
-    }
-    
+    // Return success - the UI will handle the restart via countdown
     return NextResponse.json({
       success: true,
       requires_restart: true,
-      message: `Now hosting ${model_id}. Container is restarting...`
+      message: `Model ${model_id} configured for hosting. Container restart required.`
     });
     
   } catch (error: any) {

@@ -80,34 +80,12 @@ export async function POST(request: Request) {
     
     console.log(`Updated WORKFLOW_FILE to: ${newWorkflowValue}`);
     
-    // Trigger container restart
-    try {
-      const { exec } = await import('child_process');
-      const { promisify } = await import('util');
-      const execAsync = promisify(exec);
-      
-      if (isWindows) {
-        await execAsync('docker-compose restart comfy-bridge', { 
-          cwd: 'c:\\dev\\comfy-bridge' 
-        });
-      } else {
-        await execAsync('docker-compose -f /app/comfy-bridge/docker-compose.yml restart comfy-bridge');
-      }
-      
-      return NextResponse.json({
-        success: true,
-        restarted: true,
-        message: `Stopped hosting ${model_id}. Container is restarting...`
-      });
-    } catch (restartError) {
-      console.error('Failed to restart container:', restartError);
-      return NextResponse.json({
-        success: true,
-        restarted: false,
-        message: `Stopped hosting ${model_id}. Manual restart may be required.`,
-        warning: 'Container restart failed'
-      });
-    }
+    // Return success - the UI will handle the restart via countdown
+    return NextResponse.json({
+      success: true,
+      restarted: true,
+      message: `Stopped hosting ${model_id}. Container restart required.`
+    });
     
   } catch (error: any) {
     console.error('Error unhosting model:', error);

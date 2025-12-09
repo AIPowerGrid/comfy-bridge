@@ -1,18 +1,16 @@
 import { NextResponse } from 'next/server';
-import { exec, spawn } from 'child_process';
-import { promisify } from 'util';
-
-const execAsync = promisify(exec);
 
 export const dynamic = 'force-dynamic';
 
 const isWindows = process.platform === 'win32';
 
-function getComfyBridgePath() {
+// Get the comfy-bridge downloads API URL
+function getDownloadsApiUrl() {
   if (isWindows) {
-    return 'c:\\dev\\comfy-bridge';
+    return 'http://localhost:8002';
   }
-  return '/app/comfy-bridge';
+  // In Docker, use the container name
+  return 'http://comfy-bridge:8002';
 }
 
 export async function GET(request: Request) {
@@ -72,48 +70,76 @@ export async function POST(request: Request): Promise<Response> {
     const modelName = models[0];
     console.log('Starting download for model:', modelName);
     
-    // Create SSE stream for progress updates
+    // Create SSE stream that proxies from comfy-bridge downloads API
     const encoder = new TextEncoder();
     
     const stream = new ReadableStream({
       async start(controller) {
         const sendEvent = (data: any) => {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+          try {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+          } catch (e) {
+            // Stream may be closed
+          }
         };
         
         sendEvent({ type: 'start', model: modelName, message: `Starting download for ${modelName}...` });
         
         try {
-          const bridgePath = getComfyBridgePath();
+          const downloadsApiUrl = getDownloadsApiUrl();
+          console.log(`Calling downloads API at ${downloadsApiUrl}/downloads`);
           
-          // Use the download_models_from_chain.py script
-          const downloadScript = isWindows 
-            ? `python "${bridgePath}\\download_models_from_chain.py"`
-            : `python3 ${bridgePath}/download_models_from_chain.py`;
-          
-          // Set environment variables for the download
-          const env = {
-            ...process.env,
-            MODELS_TO_DOWNLOAD: modelName,
-            MODELVAULT_CONTRACT: process.env.MODELVAULT_CONTRACT || '0xF5caaB067Bae8ea6Be18903056E20e8DacB92182',
-            MODELVAULT_RPC: process.env.MODELVAULT_RPC || 'https://sepolia.base.org',
-          };
-          
-          sendEvent({ type: 'progress', model: modelName, message: 'Connecting to blockchain...', progress: 5 });
-          
-          // Execute the download script
-          // For now, we'll use exec with a timeout
-          const { stdout, stderr } = await execAsync(downloadScript, {
-            cwd: bridgePath,
-            env,
-            timeout: 3600000, // 1 hour timeout for large models
+          // Call the comfy-bridge downloads API
+          const response = await fetch(`${downloadsApiUrl}/downloads`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ models }),
           });
           
-          if (stderr && stderr.includes('Error')) {
-            throw new Error(stderr);
+          if (!response.ok) {
+            throw new Error(`Downloads API returned ${response.status}`);
           }
           
-          sendEvent({ type: 'complete', model: modelName, message: `${modelName} downloaded successfully!` });
+          // Check if response is SSE
+          const contentType = response.headers.get('content-type');
+          if (contentType?.includes('text/event-stream')) {
+            // Stream the SSE response
+            const reader = response.body?.getReader();
+            if (reader) {
+              const decoder = new TextDecoder();
+              let buffer = '';
+              
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+                
+                for (const line of lines) {
+                  if (line.startsWith('data: ')) {
+                    try {
+                      const data = JSON.parse(line.slice(6));
+                      sendEvent(data);
+                    } catch (e) {
+                      // Invalid JSON, skip
+                    }
+                  }
+                }
+              }
+            }
+          } else {
+            // JSON response
+            const result = await response.json();
+            if (result.success) {
+              sendEvent({ type: 'complete', model: modelName, message: result.message || 'Download complete' });
+            } else {
+              sendEvent({ type: 'error', model: modelName, message: result.message || 'Download failed' });
+            }
+          }
           
         } catch (error: any) {
           console.error('Download error:', error);

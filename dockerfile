@@ -94,16 +94,20 @@ COPY comfy_bridge ./comfy_bridge
 COPY workflows ./workflows
 COPY tests ./tests
 # Copy utility scripts (blockchain-based model download, no JSON catalogs)
-COPY download_models_from_chain.py model_manager.py get_gpu_info.py gpu_info_api.py downloads_api.py install-optional-deps.sh ./
-RUN chmod +x get_gpu_info.py download_models_from_chain.py gpu_info_api.py downloads_api.py install-optional-deps.sh
+COPY download_models_from_chain.py model_manager.py get_gpu_info.py gpu_info_api.py downloads_api.py ./
+RUN chmod +x get_gpu_info.py download_models_from_chain.py gpu_info_api.py downloads_api.py
 
-# Install optional performance dependencies
+# Install optional performance dependencies (inlined to avoid Windows CRLF issues)
 RUN --mount=type=cache,target=/root/.cache/pip \
-    ./install-optional-deps.sh
+    echo "Installing optional performance dependencies..." && \
+    pip3 install --timeout 60 onnxruntime>=1.15.0 || echo "onnxruntime not available" && \
+    pip3 install --timeout 60 flash-attn>=2.0.0 || echo "flash-attn not available" && \
+    pip3 install --timeout 60 sageattention>=1.0.0 || echo "sageattention not available" && \
+    echo "Optional dependencies installation complete"
 
-# Create startup script
+# Create startup script (strip CRLF for Windows compatibility)
 COPY docker-entrypoint.sh /app/
-RUN chmod +x /app/docker-entrypoint.sh
+RUN sed -i 's/\r$//' /app/docker-entrypoint.sh && chmod +x /app/docker-entrypoint.sh
 
 # Install PyTorch 2.9.1 with CUDA 12.8 for Blackwell GPU support (sm_120)
 # Use cache mount for pip to persist PyTorch wheels (900MB+ download)

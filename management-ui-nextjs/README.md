@@ -12,6 +12,17 @@ Web-based management interface for the AI Power Grid ComfyUI Bridge worker.
 - ⚙️ Configure API keys and worker settings
 - 🔄 Restart containers and manage workflows
 
+## Initial Setup
+
+**Important:** Before running any npm commands, install dependencies first:
+
+```bash
+cd management-ui-nextjs
+npm install
+```
+
+This installs all required packages including TypeScript types. If you see TypeScript errors about missing modules or `JSX.IntrinsicElements`, run `npm install` to resolve them.
+
 ## Quick Start
 
 ### Web Interface

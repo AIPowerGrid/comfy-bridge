@@ -17,6 +17,51 @@ MODELVAULT_CONTRACT_ADDRESS = os.getenv("MODELVAULT_CONTRACT", "0xe660455D4A83bb
 MODELVAULT_RPC_URL = os.getenv("MODELVAULT_RPC_URL", "https://sepolia.base.org")
 MODELVAULT_CHAIN_ID = 84532
 
+# Alias map: user-friendly names -> blockchain-registered names
+# This allows users to request models using familiar naming conventions
+MODEL_NAME_ALIASES = {
+    # WAN 2.2 Text-to-Video models - maps to catalog names
+    "wan2_2_t2v_14b": "wan2.2-t2v-a14b",
+    "wan2.2_t2v_a14b": "wan2.2-t2v-a14b",
+    "wan2.2_t2v_14b": "wan2.2-t2v-a14b",
+    "wan-2.2-t2v-14b": "wan2.2-t2v-a14b",
+    "wan2.2-t2v-14b": "wan2.2-t2v-a14b",
+    
+    # WAN 2.2 Text-to-Video HQ models
+    "wan2_2_t2v_14b_hq": "wan2.2-t2v-a14b-hq",
+    "wan2.2_t2v_a14b_hq": "wan2.2-t2v-a14b-hq",
+    "wan2.2_t2v_14b_hq": "wan2.2-t2v-a14b-hq",
+    "wan2.2-t2v-14b-hq": "wan2.2-t2v-a14b-hq",
+    
+    # WAN 2.2 Text/Image-to-Video 5B models  
+    "wan2_2_ti2v_5b": "wan2.2_ti2v_5B",
+    "wan2.2-ti2v-5b": "wan2.2_ti2v_5B",
+    "wan2.2-i2v-5b": "wan2.2_ti2v_5B",
+    
+    # FLUX models
+    "flux.1-dev": "FLUX.1-dev",
+    "flux1-dev": "FLUX.1-dev",
+    "flux1.dev": "FLUX.1-dev",
+    "flux1_dev": "FLUX.1-dev",
+    
+    # FLUX Kontext
+    "flux.1-dev-kontext-fp8-scaled": "FLUX.1-dev-Kontext-fp8-scaled",
+    "flux1-dev-kontext-fp8-scaled": "FLUX.1-dev-Kontext-fp8-scaled",
+    "flux1_dev_kontext_fp8_scaled": "FLUX.1-dev-Kontext-fp8-scaled",
+    
+    # FLUX Krea
+    "flux.1-krea-dev": "flux.1-krea-dev",
+    "flux1-krea-dev": "flux.1-krea-dev",
+    "flux1_krea_dev": "flux.1-krea-dev",
+    
+    # Other models
+    "sdxl": "SDXL 1.0",
+    "sdxl1": "SDXL 1.0",
+    "sdxl1.0": "SDXL 1.0",
+    "sdxl_1_0": "SDXL 1.0",
+    "chroma": "Chroma",
+}
+
 
 class ModelType(IntEnum):
     TEXT_MODEL = 0   # LLM/Text generation
@@ -289,6 +334,115 @@ class ModelVaultClient:
         # V1 contract doesn't store download URLs on-chain
         # Download URLs need to be provided via off-chain configuration
         return []
+    
+    def _load_fallback_download_urls(self, model_name: str) -> List[ModelFile]:
+        """Load download URLs from local reference files for V1 contract fallback."""
+        import json
+        import os
+        
+        files = []
+        
+        # Try multiple possible paths for the model reference repository
+        ref_path = os.environ.get("GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH", "")
+        
+        # Build list of possible catalog paths
+        catalog_paths = []
+        
+        if ref_path:
+            catalog_paths.append(os.path.join(ref_path, "stable_diffusion.json"))
+        
+        # Docker paths
+        catalog_paths.extend([
+            "/app/grid-image-model-reference/stable_diffusion.json",
+            "/app/comfy-bridge/model_configs.json",
+        ])
+        
+        # Auto-detect relative to this file's location (for local development)
+        this_dir = os.path.dirname(os.path.abspath(__file__))
+        comfy_bridge_root = os.path.dirname(this_dir)
+        dev_root = os.path.dirname(comfy_bridge_root)
+        
+        catalog_paths.extend([
+            os.path.join(dev_root, "grid-image-model-reference", "stable_diffusion.json"),
+            os.path.join(comfy_bridge_root, "model_configs.json"),
+        ])
+        
+        # Normalize model name for matching
+        name_variants = [
+            model_name,
+            model_name.lower(),
+            model_name.replace("-", "_"),
+            model_name.replace("_", "-"),
+            model_name.replace(".", "_"),
+            model_name.lower().replace("-", "_"),
+            model_name.lower().replace("_", "-"),
+        ]
+        
+        for catalog_path in catalog_paths:
+            try:
+                if not os.path.exists(catalog_path):
+                    continue
+                    
+                with open(catalog_path, 'r') as f:
+                    catalog = json.load(f)
+                
+                # Search for model in catalog
+                for name, data in catalog.items():
+                    name_lower = name.lower()
+                    if any(v.lower() == name_lower or v.lower() in name_lower or name_lower in v.lower() for v in name_variants):
+                        # Found matching model, extract files and download info
+                        config = data.get("config", {})
+                        model_files = config.get("files", []) or data.get("files", [])
+                        download_info = config.get("download", [])
+                        
+                        # Build maps of file_name -> download_url and file_name -> type from download array
+                        download_urls = {}
+                        download_types = {}
+                        for dl in download_info:
+                            if isinstance(dl, dict):
+                                fn = dl.get("file_name", "")
+                                url = dl.get("file_url") or dl.get("download_url") or dl.get("url", "")
+                                file_type = dl.get("type", "")
+                                if fn:
+                                    if url:
+                                        download_urls[fn] = url
+                                    if file_type:
+                                        download_types[fn] = file_type
+                        
+                        for file_info in model_files:
+                            if isinstance(file_info, dict):
+                                file_path = file_info.get("path", "")
+                                # Get URL from file_info first, then fall back to download_urls map
+                                url = (
+                                    file_info.get("url") or 
+                                    file_info.get("file_url") or 
+                                    file_info.get("download_url") or
+                                    download_urls.get(file_path, "")
+                                )
+                                # Get type from file_info first, then from download_types map
+                                file_type = (
+                                    file_info.get("type") or 
+                                    download_types.get(file_path, "") or
+                                    "checkpoint"
+                                )
+                                
+                                files.append(ModelFile(
+                                    file_name=file_path,
+                                    file_type=file_type,
+                                    download_url=url,
+                                    mirror_url=file_info.get("mirror_url", ""),
+                                    sha256_hash=file_info.get("sha256") or file_info.get("sha256sum", ""),
+                                    size_bytes=int(file_info.get("size_bytes", 0) or 0),
+                                ))
+                        
+                        if files:
+                            logger.info(f"Found {len(files)} download URL(s) for {model_name} from {catalog_path}")
+                            return files
+            except Exception as e:
+                logger.debug(f"Could not load catalog {catalog_path}: {e}")
+                continue
+        
+        return files
 
     def get_constraints(self, model_id: str) -> Optional[ModelConstraints]:
         """Get model constraints (steps, cfg, samplers, schedulers).
@@ -333,63 +487,195 @@ class ModelVaultClient:
         This is the primary method for getting the complete model registry.
         Results are cached and can be force-refreshed.
         
+        Falls back to local catalog if blockchain fetching fails.
+        
         Returns:
             Dict mapping display_name -> OnChainModelInfo
         """
         if self._cache_initialized and not force_refresh:
             return self._model_cache
         
-        if not self.enabled or not self._contract:
-            logger.warning("ModelVault not enabled, returning empty model registry")
-            return {}
+        self._model_cache = {}
+        temp_models = []
+        blockchain_success = False
         
-        try:
-            self._model_cache = {}
-            temp_models = []
-            
-            # Fetch all model hashes, then get each model's details
-            model_hashes = self.get_all_model_hashes()
-            logger.info(f"Fetching {len(model_hashes)} models from blockchain...")
-            
-            for model_hash in model_hashes:
-                try:
-                    model_info = self.get_model_by_hash(model_hash)
-                    if model_info:
-                        temp_models.append(model_info)
-                except Exception as e:
-                    logger.warning(f"Failed to fetch model {model_hash.hex()}: {e}")
-                    continue
-            
-            # Filter out duplicate WAN models (prefer underscore versions)
-            seen_names = set()
-            for model_info in temp_models:
-                name_lower = model_info.display_name.lower()
-                # Skip WAN models with dots in the name (prefer underscore versions)
-                if 'wan2.2' in name_lower:
-                    logger.debug(f"Filtering out duplicate WAN model: {model_info.display_name}")
-                    continue
+        # Try blockchain first
+        if self.enabled and self._contract:
+            try:
+                # Fetch all model hashes, then get each model's details
+                model_hashes = self.get_all_model_hashes()
+                logger.info(f"Fetching {len(model_hashes)} models from blockchain...")
                 
-                # Avoid duplicates
-                if model_info.display_name in seen_names:
+                for model_hash in model_hashes:
+                    try:
+                        model_info = self.get_model_by_hash(model_hash)
+                        if model_info:
+                            temp_models.append(model_info)
+                            blockchain_success = True
+                    except Exception as e:
+                        logger.warning(f"Failed to fetch model {model_hash.hex()}: {e}")
+                        continue
+            except Exception as e:
+                logger.error(f"Error fetching models from chain: {e}")
+        
+        # Fall back to local catalog if blockchain failed or returned no models
+        if not blockchain_success or not temp_models:
+            logger.info("Falling back to local catalog for model data...")
+            temp_models = self._load_models_from_catalog()
+        
+        # Process models
+        seen_names = set()
+        for model_info in temp_models:
+            name_lower = model_info.display_name.lower()
+            
+            # Avoid duplicates
+            if model_info.display_name in seen_names:
+                continue
+            seen_names.add(model_info.display_name)
+            
+            # Load download URLs from fallback if not available from chain
+            if not model_info.files:
+                model_info.files = self._load_fallback_download_urls(model_info.display_name)
+            
+            # Index by display_name for easy lookup
+            self._model_cache[model_info.display_name] = model_info
+            # Also index by common variants
+            if model_info.file_name:
+                self._model_cache[model_info.file_name] = model_info
+                self._model_cache[model_info.get_model_id()] = model_info
+        
+        self._cache_initialized = True
+        logger.info(f"Loaded {len(seen_names)} unique models")
+        return self._model_cache
+    
+    def _load_models_from_catalog(self) -> List[OnChainModelInfo]:
+        """Load models from local catalog files as fallback."""
+        import json
+        import os
+        
+        models = []
+        
+        # Try multiple possible paths for the model reference repository
+        ref_path = os.environ.get("GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH", "")
+        
+        # Build list of possible catalog paths
+        catalog_paths = []
+        
+        if ref_path:
+            catalog_paths.append(os.path.join(ref_path, "stable_diffusion.json"))
+        
+        # Docker paths
+        catalog_paths.extend([
+            "/app/grid-image-model-reference/stable_diffusion.json",
+            "/app/comfy-bridge/model_configs.json",
+        ])
+        
+        # Auto-detect relative to this file's location (for local development)
+        this_dir = os.path.dirname(os.path.abspath(__file__))
+        comfy_bridge_root = os.path.dirname(this_dir)
+        dev_root = os.path.dirname(comfy_bridge_root)
+        
+        catalog_paths.extend([
+            os.path.join(dev_root, "grid-image-model-reference", "stable_diffusion.json"),
+            os.path.join(comfy_bridge_root, "model_configs.json"),
+        ])
+        
+        for catalog_path in catalog_paths:
+            try:
+                if not os.path.exists(catalog_path):
                     continue
-                seen_names.add(model_info.display_name)
+                    
+                with open(catalog_path, 'r') as f:
+                    catalog = json.load(f)
                 
-                # Index by display_name for easy lookup
-                self._model_cache[model_info.display_name] = model_info
-                # Also index by common variants
-                if model_info.file_name:
-                    self._model_cache[model_info.file_name] = model_info
-                    self._model_cache[model_info.get_model_id()] = model_info
-            
-            self._cache_initialized = True
-            logger.info(f"Loaded {len(seen_names)} unique models from blockchain")
-            return self._model_cache
-            
-        except Exception as e:
-            logger.error(f"Error fetching all models from chain: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
-            return {}
+                logger.info(f"Loading models from {catalog_path}...")
+                
+                for name, data in catalog.items():
+                    # Determine model type
+                    model_type = ModelType.IMAGE_MODEL
+                    name_lower = name.lower()
+                    if 'video' in name_lower or 'wan' in name_lower or 'ltx' in name_lower:
+                        model_type = ModelType.VIDEO_MODEL
+                    elif 'llm' in name_lower or 'text' in name_lower:
+                        model_type = ModelType.TEXT_MODEL
+                    
+                    # Get file info from config.files or top-level files
+                    config = data.get("config", {})
+                    files_data = config.get("files", []) or data.get("files", [])
+                    download_info = config.get("download", [])
+                    
+                    # Build maps of file_name -> download_url and file_name -> type from download array
+                    download_urls = {}
+                    download_types = {}
+                    for dl in download_info:
+                        if isinstance(dl, dict):
+                            fn = dl.get("file_name", "")
+                            url = dl.get("file_url") or dl.get("download_url") or dl.get("url", "")
+                            file_type = dl.get("type", "")
+                            if fn:
+                                if url:
+                                    download_urls[fn] = url
+                                if file_type:
+                                    download_types[fn] = file_type
+                    
+                    files = []
+                    for file_info in files_data:
+                        if isinstance(file_info, dict):
+                            file_path = file_info.get("path", "")
+                            # Get URL from file_info first, then fall back to download_urls map
+                            url = (
+                                file_info.get("url") or 
+                                file_info.get("file_url") or 
+                                file_info.get("download_url") or
+                                download_urls.get(file_path, "")
+                            )
+                            # Get type from file_info first, then from download_types map
+                            file_type = (
+                                file_info.get("type") or 
+                                download_types.get(file_path, "") or
+                                "checkpoint"
+                            )
+                            
+                            files.append(ModelFile(
+                                file_name=file_path,
+                                file_type=file_type,
+                                download_url=url,
+                                mirror_url=file_info.get("mirror_url", ""),
+                                sha256_hash=file_info.get("sha256") or file_info.get("sha256sum", ""),
+                                size_bytes=int(file_info.get("size_bytes", 0) or 0),
+                            ))
+                    
+                    # Get size
+                    size_bytes = int((data.get("size_mb") or data.get("size_gb", 0) * 1024 or 0) * 1024 * 1024)
+                    
+                    model_info = OnChainModelInfo(
+                        model_hash="",
+                        model_type=model_type,
+                        file_name=data.get("filename", name),
+                        display_name=data.get("name") or data.get("display_name") or name,
+                        description=data.get("description", f"{name} model"),
+                        is_nsfw=data.get("nsfw", False),
+                        size_bytes=size_bytes,
+                        inpainting=data.get("inpainting", False),
+                        img2img=data.get("img2img", False),
+                        controlnet=data.get("controlnet", False),
+                        lora=data.get("type") == "loras",
+                        base_model=data.get("baseline") or data.get("base_model", ""),
+                        architecture=data.get("style") or data.get("type", "checkpoint"),
+                        is_active=True,
+                        files=files,
+                    )
+                    models.append(model_info)
+                
+                if models:
+                    logger.info(f"Loaded {len(models)} models from catalog")
+                    return models
+                    
+            except Exception as e:
+                logger.debug(f"Could not load catalog {catalog_path}: {e}")
+                continue
+        
+        return models
 
     def get_registered_model_names(self) -> List[str]:
         """
@@ -414,9 +700,10 @@ class ModelVaultClient:
 
     def find_model(self, name: str) -> Optional[OnChainModelInfo]:
         """
-        Find a model by name (case-insensitive, supports partial matching).
+        Find a model by name (case-insensitive, supports partial matching and aliases).
         
         Searches display_name, file_name, and model_id.
+        Also checks MODEL_NAME_ALIASES for user-friendly name mappings.
         """
         models = self.fetch_all_models()
         
@@ -424,10 +711,27 @@ class ModelVaultClient:
         if name in models:
             return models[name]
         
-        # Case-insensitive match
+        # Check aliases (case-insensitive)
         name_lower = name.lower()
+        alias_target = MODEL_NAME_ALIASES.get(name_lower)
+        if alias_target:
+            if alias_target in models:
+                return models[alias_target]
+            # Also try case-insensitive match on alias target
+            for key, model in models.items():
+                if key.lower() == alias_target.lower():
+                    return model
+        
+        # Case-insensitive match
         for key, model in models.items():
             if key.lower() == name_lower:
+                return model
+        
+        # Normalized match (replace dots/hyphens with underscores)
+        normalized = name_lower.replace(".", "_").replace("-", "_")
+        for key, model in models.items():
+            key_normalized = key.lower().replace(".", "_").replace("-", "_")
+            if key_normalized == normalized:
                 return model
         
         # Partial match on display_name

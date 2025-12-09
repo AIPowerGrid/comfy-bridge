@@ -1,6 +1,7 @@
 'use client';
 
-import { motion } from 'framer-motion';
+import { useState, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface GPUInfoProps {
   gpuInfo: {
@@ -20,6 +21,44 @@ interface GPUInfoProps {
 }
 
 export default function GPUInfo({ gpuInfo, isCollapsed = false, onToggleCollapse }: GPUInfoProps) {
+  const [sortField, setSortField] = useState<'name' | 'size'>('name');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  const sortedGpus = useMemo(() => {
+    if (!gpuInfo?.gpus) return [];
+    
+    return [...gpuInfo.gpus].sort((a, b) => {
+      let aVal: string | number;
+      let bVal: string | number;
+
+      switch (sortField) {
+        case 'name':
+          aVal = a.name.toLowerCase();
+          bVal = b.name.toLowerCase();
+          break;
+        case 'size':
+          aVal = a.memory_gb;
+          bVal = b.memory_gb;
+          break;
+        default:
+          return 0;
+      }
+
+      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [gpuInfo?.gpus, sortField, sortDirection]);
+
+  const handleSort = (field: 'name' | 'size') => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
   if (!gpuInfo) return null;
 
   return (
@@ -62,90 +101,101 @@ export default function GPUInfo({ gpuInfo, isCollapsed = false, onToggleCollapse
       </div>
 
       {/* Collapsible Content */}
-      <motion.div
-        initial={false}
-        animate={{ height: isCollapsed ? 0 : 'auto' }}
-        transition={{ duration: 0.3 }}
-        className="overflow-hidden"
-      >
-        <div className="px-6 pb-6">
-          {!gpuInfo.available ? (
-            <div className="text-center py-8">
-              <div className="text-yellow-500 text-6xl mb-4">⚠️</div>
-              <p className="text-xl text-gray-300 mb-2">No GPU Detected</p>
-              <p className="text-gray-500">Running in CPU mode. Some models may not be available.</p>
-            </div>
-          ) : (
-            <>
-              {gpuInfo.gpus.length > 1 && (
-                <div className="mb-4 p-3 rounded-lg bg-aipg-orange/10 border border-aipg-orange/30">
-                  <p className="text-sm text-gray-300">
-                    <span className="font-semibold text-aipg-orange">{gpuInfo.gpus.length} GPUs detected</span> - Total VRAM: {gpuInfo.total_memory_gb} GB
-                  </p>
+      <AnimatePresence>
+        {!isCollapsed && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div className="px-6 pb-6">
+              {!gpuInfo.available ? (
+                <div className="text-center py-8">
+                  <div className="text-yellow-500 text-6xl mb-4">⚠️</div>
+                  <p className="text-xl text-gray-300 mb-2">No GPU Detected</p>
+                  <p className="text-gray-500">Running in CPU mode. Some models may not be available.</p>
                 </div>
-              )}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {gpuInfo.gpus.map((gpu, index) => (
-                  <motion.div
-                    key={index}
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: index * 0.1 }}
-                    className="relative overflow-hidden rounded-lg p-6 bg-gradient-to-br from-aipg-orange/20 to-aipg-gold/20 border border-aipg-orange/30"
-                  >
-                    <div className="relative z-10">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-bold text-aipg-orange bg-aipg-orange/20 px-2 py-1 rounded-full">
-                          GPU {index + 1}
+              ) : (
+                <>
+                  {/* Table */}
+                  <div className="bg-gray-900/50 rounded-lg border border-aipg-orange/20 overflow-hidden">
+                    {/* Table Header */}
+                    <div className="bg-gray-800/80 px-4 py-3 border-b border-aipg-orange/20">
+                      <div className="grid grid-cols-12 gap-2 text-sm font-semibold text-gray-300">
+                        <div className="col-span-1 flex items-center justify-center">
+                          #
+                        </div>
+                        <div 
+                          className="col-span-7 cursor-pointer hover:text-aipg-orange transition-colors flex items-center gap-1" 
+                          onClick={(e) => { e.stopPropagation(); handleSort('name'); }}
+                        >
+                          GPU Name {sortField === 'name' && (sortDirection === 'asc' ? '↑' : '↓')}
+                        </div>
+                        <div 
+                          className="col-span-4 cursor-pointer hover:text-aipg-orange transition-colors flex items-center gap-1"
+                          onClick={(e) => { e.stopPropagation(); handleSort('size'); }}
+                        >
+                          VRAM {sortField === 'size' && (sortDirection === 'asc' ? '↑' : '↓')}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Table Body */}
+                    <div className="divide-y divide-gray-700/50">
+                      {sortedGpus.map((gpu, index) => (
+                        <motion.div
+                          key={index}
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: index * 0.05 }}
+                          className="px-4 py-4 hover:bg-aipg-orange/5 transition-colors"
+                        >
+                          <div className="grid grid-cols-12 gap-2 items-center text-sm">
+                            {/* Index */}
+                            <div className="col-span-1 flex items-center justify-center">
+                              <span className="text-xs font-bold text-aipg-orange bg-aipg-orange/20 px-2 py-1 rounded-full">
+                                {index + 1}
+                              </span>
+                            </div>
+
+                            {/* Name */}
+                            <div className="col-span-7">
+                              <div className="font-medium text-white text-base">{gpu.name}</div>
+                            </div>
+
+                            {/* VRAM Size */}
+                            <div className="col-span-4">
+                              <div className="text-2xl font-bold text-aipg-gold">
+                                {gpu.memory_gb} GB
+                              </div>
+                            </div>
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Summary Footer */}
+                  {gpuInfo.gpus.length > 1 && (
+                    <div className="mt-4 p-3 rounded-lg bg-aipg-orange/10 border border-aipg-orange/30">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-300">
+                          <span className="font-semibold text-aipg-orange">{gpuInfo.gpus.length} GPUs</span> configured
+                        </span>
+                        <span className="text-gray-300">
+                          Total VRAM: <span className="font-bold text-aipg-gold">{gpuInfo.total_memory_gb} GB</span>
                         </span>
                       </div>
-                      <h3 className="text-lg font-semibold mb-2 text-white">{gpu.name}</h3>
-                      
-                      {/* VRAM Usage Bar */}
-                      {gpu.vram_used_gb !== undefined && gpu.vram_used_gb > 0 && (
-                        <div className="mb-3">
-                          <div className="flex justify-between text-xs text-gray-400 mb-1">
-                            <span>VRAM Usage</span>
-                            <span>{gpu.vram_percent_used}%</span>
-                          </div>
-                          <div className="relative w-full h-2 bg-gray-700 rounded-full overflow-hidden">
-                            <motion.div
-                              initial={{ width: 0 }}
-                              animate={{ width: `${gpu.vram_percent_used}%` }}
-                              transition={{ duration: 1, ease: "easeOut" }}
-                              className={`absolute h-full rounded-full ${
-                                (gpu.vram_percent_used || 0) > 90 ? 'bg-red-500' :
-                                (gpu.vram_percent_used || 0) > 75 ? 'bg-yellow-500' :
-                                'bg-gradient-to-r from-aipg-orange to-aipg-gold'
-                              }`}
-                            />
-                          </div>
-                          <div className="flex justify-between text-xs text-gray-500 mt-1">
-                            <span>{gpu.vram_used_gb} GB used</span>
-                            <span>{gpu.vram_available_gb} GB free</span>
-                          </div>
-                        </div>
-                      )}
-                      
-                      <div className="text-4xl font-bold text-aipg-gold glow-text-gold">
-                        {gpu.vram_available_gb !== undefined ? gpu.vram_available_gb : gpu.memory_gb} GB
-                      </div>
-                      <p className="text-sm text-gray-400 mt-2">
-                        {gpu.vram_used_gb !== undefined && gpu.vram_used_gb > 0 
-                          ? `Available of ${gpu.memory_gb} GB Total`
-                          : 'Total VRAM Available'
-                        }
-                      </p>
                     </div>
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-aipg-orange/10 rounded-full blur-3xl"></div>
-                  </motion.div>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-      </motion.div>
+                  )}
+                </>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
-
