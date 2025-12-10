@@ -335,6 +335,42 @@ class ModelVaultClient:
         # Download URLs need to be provided via off-chain configuration
         return []
     
+    def _infer_file_type_from_url(self, url: str) -> str:
+        """Infer file type from download URL path."""
+        if not url:
+            return ""
+        url_lower = url.lower()
+        if "/diffusion_models/" in url_lower or "/unet/" in url_lower:
+            return "diffusion_models"
+        if "/vae/" in url_lower:
+            return "vae"
+        if "/text_encoders/" in url_lower or "/clip/" in url_lower:
+            return "text_encoders"
+        if "/loras/" in url_lower or "/lora/" in url_lower:
+            return "lora"
+        if "/checkpoints/" in url_lower or "/ckpt/" in url_lower:
+            return "checkpoint"
+        return ""
+    
+    def _infer_file_type_from_filename(self, filename: str) -> str:
+        """Infer file type from filename patterns."""
+        if not filename:
+            return ""
+        name_lower = filename.lower()
+        # VAE patterns
+        if "_vae" in name_lower or "vae_" in name_lower or name_lower.startswith("vae"):
+            return "vae"
+        # Text encoder patterns  
+        if "umt5" in name_lower or "t5xxl" in name_lower or "clip" in name_lower:
+            return "text_encoders"
+        # LoRA patterns
+        if "_lora" in name_lower or "lora_" in name_lower:
+            return "lora"
+        # Diffusion model patterns (WAN, etc.)
+        if "_noise_" in name_lower or "t2v_" in name_lower or "ti2v_" in name_lower or "i2v_" in name_lower:
+            return "diffusion_models"
+        return ""
+
     def _load_fallback_download_urls(self, model_name: str) -> List[ModelFile]:
         """Load download URLs from local reference files for V1 contract fallback."""
         import json
@@ -429,10 +465,12 @@ class ModelVaultClient:
                                     download_urls.get(file_path, "") or
                                     config_download_url
                                 )
-                                # Get type from file_info first, then from download_types map
+                                # Get type from file_info first, then from download_types map, then infer from URL
                                 file_type = (
                                     file_info.get("type") or 
                                     download_types.get(file_path, "") or
+                                    self._infer_file_type_from_url(url) or
+                                    self._infer_file_type_from_filename(file_path) or
                                     "checkpoint"
                                 )
                                 
@@ -649,10 +687,12 @@ class ModelVaultClient:
                                 download_urls.get(file_path, "") or
                                 config_download_url
                             )
-                            # Get type from file_info first, then from download_types map
+                            # Get type from file_info first, then from download_types map, then infer from URL/filename
                             file_type = (
                                 file_info.get("type") or 
                                 download_types.get(file_path, "") or
+                                self._infer_file_type_from_url(url) or
+                                self._infer_file_type_from_filename(file_path) or
                                 "checkpoint"
                             )
                             

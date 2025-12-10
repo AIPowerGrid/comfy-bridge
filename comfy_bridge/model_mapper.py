@@ -100,30 +100,31 @@ class ModelMapper:
         "flux1_dev": "flux1.dev",
         "flux1.dev": "flux1.dev",
         
-        # Flux Krea variants
-        "flux.1-krea-dev": "flux1_krea_dev",
-        "FLUX.1-krea-dev": "flux1_krea_dev",
-        "flux1-krea-dev": "flux1_krea_dev",
-        "flux1_krea_dev": "flux1_krea_dev",
-        "krea": "krea",
+        # Flux Krea variants - workflow file is flux.1_krea_dev.json
+        "flux.1-krea-dev": "flux.1_krea_dev",
+        "FLUX.1-krea-dev": "flux.1_krea_dev",
+        "flux1-krea-dev": "flux.1_krea_dev",
+        "flux1_krea_dev": "flux.1_krea_dev",
+        "krea": "flux.1_krea_dev",
         
-        # Flux Kontext variants
-        "flux1-krea-dev_fp8_scaled": "flux1-krea-dev_fp8_scaled",
-        "FLUX.1-dev-Kontext-fp8-scaled": "flux1-krea-dev_fp8_scaled",
-        "flux.1-dev-kontext-fp8-scaled": "flux1-krea-dev_fp8_scaled",
-        "flux1-dev-kontext-fp8-scaled": "flux1-krea-dev_fp8_scaled",
-        "flux1_dev_kontext_fp8_scaled": "flux1-krea-dev_fp8_scaled",
-        "flux_kontext_dev_basic": "flux_kontext_dev_basic",
-        "flux1-kontext-dev": "flux_kontext_dev_basic",
-        "flux1_kontext_dev": "flux_kontext_dev_basic",
+        # Flux Kontext variants - workflow file is FLUX.1-dev-Kontext-fp8-scaled.json
+        "flux1-krea-dev_fp8_scaled": "FLUX.1-dev-Kontext-fp8-scaled",
+        "FLUX.1-dev-Kontext-fp8-scaled": "FLUX.1-dev-Kontext-fp8-scaled",
+        "flux.1-dev-kontext-fp8-scaled": "FLUX.1-dev-Kontext-fp8-scaled",
+        "flux1-dev-kontext-fp8-scaled": "FLUX.1-dev-Kontext-fp8-scaled",
+        "flux1_dev_kontext_fp8_scaled": "FLUX.1-dev-Kontext-fp8-scaled",
+        "flux_kontext_dev_basic": "FLUX.1-dev-Kontext-fp8-scaled",
+        "flux1-kontext-dev": "FLUX.1-dev-Kontext-fp8-scaled",
+        "flux1_kontext_dev": "FLUX.1-dev-Kontext-fp8-scaled",
         
-        # Other image models
+        # Other image models - workflow file is Chroma_final.json
         "Chroma": "Chroma_final",
         "chroma_final": "Chroma_final",
         "chroma": "Chroma_final",
-        "SDXL 1.0": "sdxl",
-        "SDXL": "sdxl",
-        "sdxl": "sdxl",
+        # SDXL - workflow file is sdxl1.json
+        "SDXL 1.0": "sdxl1",
+        "SDXL": "sdxl1",
+        "sdxl": "sdxl1",
         "sdxl1": "sdxl1",
         "turbovision": "turbovision",
     }
@@ -420,32 +421,29 @@ class ModelMapper:
     WORKFLOW_TO_GRID_MODEL = {
         # Video Generation Models - use exact stable_diffusion.json names
         # Grid has both variants, but stable_diffusion.json names are canonical
-        "wan2.2-t2v-a14b": "wan2.2-t2v-a14b",
-        "wan2.2-t2v-a14b-hq": "wan2.2-t2v-a14b-hq",
+        "wan2.2-t2v-a14b": "wan2_2_t2v_14b",
+        "wan2.2-t2v-a14b-hq": "wan2_2_t2v_14b_hq",
         "wan2.2-t2v-a14b-best": "wan2.2-t2v-a14b-best",
-        "wan2.2_ti2v_5B": "wan2.2_ti2v_5B",       # Use stable_diffusion.json name (mixed case)
-        "wan2.2-ti2v-5B": "wan2.2_ti2v_5B",       # Map hyphen variant
+        "wan2.2_ti2v_5B": "wan2_2_ti2v_5b",       # Lowercase grid name
+        "wan2.2-ti2v-5B": "wan2_2_ti2v_5b",       # Map hyphen variant
         "ltxv": "ltxv",
         
-        # Flux Dev variants
+        # Flux Dev variants - workflow files are flux1.dev.json and FLUX.1-dev.json
         "flux1.dev": "FLUX.1-dev",
         "FLUX.1-dev": "FLUX.1-dev",
         "flux1-dev": "FLUX.1-dev",
         
-        # Flux Krea variants
-        "flux1_krea_dev": "flux.1-krea-dev",
+        # Flux Krea variants - workflow file is flux.1_krea_dev.json
+        "flux.1_krea_dev": "flux.1-krea-dev",
         "flux.1-krea-dev": "flux.1-krea-dev",
-        "krea": "krea",
+        "krea": "flux.1-krea-dev",
         
-        # Flux Kontext variants
+        # Flux Kontext variants - workflow file is FLUX.1-dev-Kontext-fp8-scaled.json
         "FLUX.1-dev-Kontext-fp8-scaled": "FLUX.1-dev-Kontext-fp8-scaled",
-        "flux1-krea-dev_fp8_scaled": "FLUX.1-dev-Kontext-fp8-scaled",
-        "flux_kontext_dev_basic": "flux_kontext_dev_basic",
         
         # Other image models
         "Chroma_final": "Chroma",
         "Chroma": "Chroma",
-        "sdxl": "SDXL 1.0",
         "sdxl1": "SDXL 1.0",
         "SDXL": "SDXL 1.0",
     }
@@ -453,9 +451,16 @@ class ModelMapper:
     # Map workflow IDs to ALL Grid model name variants that might have jobs
     # This ensures we advertise both naming conventions
     WORKFLOW_TO_ALL_GRID_NAMES = {
-        "wan2.2_ti2v_5B": ["wan2.2_ti2v_5B", "wan2_2_ti2v_5b"],  # Both variants
-        "wan2.2-t2v-a14b": ["wan2.2-t2v-a14b", "wan2_2_t2v_14b"],
-        "wan2.2-t2v-a14b-hq": ["wan2.2-t2v-a14b-hq", "wan2_2_t2v_14b_hq"],
+        "wan2.2_ti2v_5B": ["wan2_2_ti2v_5b", "wan2.2_ti2v_5B"],
+        "wan2.2-t2v-a14b": ["wan2_2_t2v_14b", "wan2.2-t2v-a14b"],
+        "wan2.2-t2v-a14b-hq": ["wan2_2_t2v_14b_hq", "wan2.2-t2v-a14b-hq"],
+        "flux.1_krea_dev": ["flux.1-krea-dev"],
+        "FLUX.1-dev-Kontext-fp8-scaled": ["FLUX.1-dev-Kontext-fp8-scaled"],
+        "flux1.dev": ["FLUX.1-dev"],
+        "FLUX.1-dev": ["FLUX.1-dev"],
+        "Chroma_final": ["Chroma"],
+        "sdxl1": ["SDXL 1.0"],
+        "ltxv": ["ltxv"],
     }
 
     def _build_workflow_map_from_env(self):

@@ -28,26 +28,40 @@ class APIClient:
         self._job_cache: Dict[str, Dict[str, Any]] = {}
 
     async def pop_job(self, models: Optional[List[str]] = None) -> Dict[str, Any]:
+        models_to_use = models or Settings.GRID_MODELS
         payload: Dict[str, Any] = {
             "name": Settings.GRID_WORKER_NAME,
-            "max_pixels": Settings.MAX_PIXELS,
+            "max_pixels": Settings.MAX_PIXELS,  # Very high - accept any resolution
             "nsfw": Settings.NSFW,
-            "threads": Settings.THREADS,
+            "threads": Settings.THREADS,  # Indicate higher capacity
             "require_upfront_kudos": False,
             "allow_img2img": True,
-            "allow_painting": False,
+            "allow_painting": True,
             "allow_post_processing": True,
-            "allow_controlnet": False,
-            "allow_sdxl_controlnet": False,
+            "allow_controlnet": True,
+            "allow_sdxl_controlnet": True,
             "allow_lora": True,
-            "allow_unsafe_ipaddr": False,
-            "extra_slow_worker": True,
+            "allow_unsafe_ipaddr": True,
+            "extra_slow_worker": False,
             "limit_max_steps": False,
-            "bridge_agent": "AI Horde Worker reGen:10.0.7:https://github.com/Haidra-Org/horde-worker-reGen",
-            "models": models or Settings.GRID_MODELS,
+            "bridge_agent": "AI Horde Worker reGen:10.1.0:https://github.com/Haidra-Org/horde-worker-reGen",
+            "models": models_to_use,
             "blacklist": [],
             "amount": 1,
+            "skip_models": False,  # Don't skip any model requests
         }
+
+        # Debug: Log models being advertised (every 50th call to reduce noise)
+        if not hasattr(self, '_pop_count'):
+            self._pop_count = 0
+        self._pop_count += 1
+        
+        if self._pop_count == 1 or self._pop_count % 50 == 0:
+            logger.info(f"📋 pop_job request #{self._pop_count}:")
+            logger.info(f"   API URL: {Settings.GRID_API_URL}/v2/generate/pop")
+            logger.info(f"   Worker: {Settings.GRID_WORKER_NAME}")
+            logger.info(f"   Models ({len(models_to_use)}): {models_to_use}")
+            logger.info(f"   max_pixels: {Settings.MAX_PIXELS}, nsfw: {Settings.NSFW}, threads: {Settings.THREADS}")
 
         try:
             response = await self.client.post(
@@ -61,16 +75,31 @@ class APIClient:
                 job_id = result.get("id")
                 self._job_cache[job_id] = result
                 logger.info(f"✅ Received job {job_id} for model {result.get('model', 'unknown')}")
+            else:
+                # Log full response when no job (periodically)
+                if self._pop_count == 1 or self._pop_count % 50 == 0:
+                    logger.info(f"📭 No job received. Full API response: {json.dumps(result, indent=2)}")
             
-            # Log skipped jobs for debugging (only if interesting)
+            # Log skipped jobs for debugging (ALWAYS log if there are skips)
             skipped = result.get("skipped", {})
             interesting_skips = {k: v for k, v in skipped.items() if v > 0}
             if interesting_skips:
-                logger.debug(f"Skipped: {interesting_skips}")
+                logger.warning(f"⚠️  Skipped jobs: {interesting_skips}")
+                # Explain what the skips mean
+                if skipped.get("max_pixels", 0) > 0:
+                    logger.warning(f"   → {skipped['max_pixels']} jobs skipped: requested resolution exceeds max_pixels ({Settings.MAX_PIXELS})")
+                if skipped.get("nsfw", 0) > 0:
+                    logger.warning(f"   → {skipped['nsfw']} jobs skipped: NSFW content (GRID_NSFW={Settings.NSFW})")
+                if skipped.get("models", 0) > 0:
+                    logger.warning(f"   → {skipped['models']} jobs skipped: model mismatch (jobs exist but for different models)")
+                if skipped.get("worker_id", 0) > 0:
+                    logger.warning(f"   → {skipped['worker_id']} jobs skipped: worker ID issue")
+                if skipped.get("performance", 0) > 0:
+                    logger.warning(f"   → {skipped['performance']} jobs skipped: performance requirements")
 
             return result
         except httpx.HTTPStatusError as e:
-            logger.error(f"pop_job payload: {payload}")
+            logger.error(f"pop_job payload: {json.dumps(payload, indent=2)}")
             logger.error(
                 f"pop_job response [{e.response.status_code}]: {e.response.text}"
             )
@@ -183,3 +212,23 @@ class APIClient:
                 exc.response.text if exc.response else exc,
             )
             raise
+
+    async def get_models_status(self) -> Dict[str, Any]:
+        """
+        Fetch current status of all models including queue counts.
+        This shows what models have jobs waiting.
+        """
+        try:
+            response = await self.client.get(
+                "/v2/status/models", headers=self.headers
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as exc:
+            logger.error(
+                f"Failed to get models status [{exc.response.status_code}]: {exc.response.text}"
+            )
+            return {}
+        except Exception as e:
+            logger.error(f"Error getting models status: {e}")
+            return {}

@@ -533,8 +533,8 @@ async def process_workflow(
         processed_workflow = update_loadimageoutput_nodes(processed_workflow, source_image_filename)
 
     # Pre-calculate commonly reused payload fields
-    payload_steps = payload.get("ddim_steps") or payload.get("steps")
-    payload_cfg = payload.get("cfg_scale") or payload.get("cfg") or payload.get("guidance")
+    # NOTE: steps and cfg are intentionally NOT read from payload - we always use workflow defaults
+    # payload_steps and payload_cfg are set to None below to ensure workflow values are used
     payload_sampler_raw = payload.get("sampler_name") or payload.get("sampler")
     payload_sampler = map_sampler_name(payload_sampler_raw) if payload_sampler_raw else None
     payload_scheduler = payload.get("scheduler")
@@ -542,18 +542,11 @@ async def process_workflow(
         payload_scheduler = "karras" if payload.get("karras") else "normal"
     payload_denoise = payload.get("denoising_strength") or payload.get("denoise")
     
-    # Validate payload values to prevent applying values that are too low
-    # Minimum thresholds for quality
-    MIN_STEPS = 10  # Minimum steps for reasonable quality
-    MIN_CFG = 3.0   # Minimum CFG for reasonable quality
-    
-    if payload_steps is not None and payload_steps < MIN_STEPS:
-        logger.warning(f"Payload steps ({payload_steps}) is below minimum ({MIN_STEPS}), ignoring payload value")
-        payload_steps = None
-    
-    if payload_cfg is not None and payload_cfg < MIN_CFG:
-        logger.warning(f"Payload cfg ({payload_cfg}) is below minimum ({MIN_CFG}), ignoring payload value")
-        payload_cfg = None
+    # Always use workflow defaults for steps and cfg
+    # Ignore whatever the API sends - workflow files have optimized values
+    payload_steps = None
+    payload_cfg = None
+    logger.debug(f"Using workflow defaults for steps and cfg (ignoring payload values)")
 
     def _apply_ksampler_dict(inputs: Dict[str, Any]) -> Dict[str, Any]:
         # Only apply steps if payload value is higher than workflow default
@@ -852,17 +845,14 @@ async def process_workflow(
                     widgets[1] = seed  # Update noise_seed
                     node["widgets_values"] = widgets
             
-            # Handle WanVideoEmptyEmbeds nodes - update dimensions and frame count (ComfyUI native format)
+            # Handle WanVideoEmptyEmbeds nodes - ALWAYS use workflow defaults (ComfyUI native format)
             elif class_type == "WanVideoEmptyEmbeds":
                 if isinstance(inputs, dict):
-                    if payload.get("width") and "width" in inputs:
-                        inputs["width"] = payload.get("width")
-                    if payload.get("height") and "height" in inputs:
-                        inputs["height"] = payload.get("height")
-                    if payload.get("length") or payload.get("video_length"):
-                        num_frames = payload.get("length") or payload.get("video_length")
-                        if "num_frames" in inputs:
-                            inputs["num_frames"] = num_frames
+                    # IMPORTANT: Always use workflow defaults for WAN video dimensions
+                    # The workflow is carefully designed with specific width/height/num_frames
+                    # that must match the WanVideoDecode tiling parameters to avoid tensor mismatches
+                    # DO NOT apply payload width/height/num_frames - they cause decoding errors
+                    logger.info(f"WanVideoEmptyEmbeds: Using workflow defaults - width={inputs.get('width')}, height={inputs.get('height')}, frames={inputs.get('num_frames')}")
                     node["inputs"] = inputs
 
             # Handle LoadImageOutput nodes for source images
@@ -1099,43 +1089,29 @@ async def process_workflow(
                 # Keep workflow tile settings - do not override with payload width/height
                 node_data["inputs"] = inputs
 
-            # Handle WanVideoEmptyEmbeds nodes - update dimensions and frame count
+            # Handle WanVideoEmptyEmbeds nodes - ALWAYS use workflow defaults
             # NOTE: Text-to-video models (t2v) don't support img2img properly.
             # Only image-to-video models (ti2v) can handle source images.
-            # VAEEncode outputs latents, not the image_embeds format that WanVideoSampler expects.
             elif class_type == "WanVideoEmptyEmbeds":
-                # Check if this is an img2img job
+                # Check if this is an img2img job - warn but continue with workflow defaults
                 if job.get("source_processing") == "img2img" and source_image_filename:
                     model_name = job.get("model", "").lower()
-                    # Check if this is a text-to-video model (t2v) vs image-to-video (ti2v)
                     if "t2v" in model_name and "ti2v" not in model_name:
-                        # This is a text-to-video only model - img2img won't work properly
                         logger.warning(
                             f"Model {job.get('model')} is text-to-video only (t2v), not image-to-video (ti2v). "
                             f"Ignoring source image and using empty embeddings for text-to-video generation."
                         )
-                        # Fall through to standard text-to-video handling
                     else:
-                        # This might be an image-to-video model - but we still can't properly convert
-                        # WanVideoEmptyEmbeds to image embeddings without a proper encoder node
                         logger.warning(
                             f"img2img requested for WanVideo model, but WanVideoEmptyEmbeds cannot be "
                             f"converted to image embeddings. Using empty embeddings (text-to-video mode)."
                         )
-                        # Fall through to standard text-to-video handling
                 
-                # Standard text-to-video: update dimensions
-                if payload.get("width") and "width" in inputs:
-                    logger.debug(f"Node {node_id}: Setting width from {inputs.get('width')} to {payload.get('width')}")
-                    inputs["width"] = payload.get("width")
-                if payload.get("height") and "height" in inputs:
-                    logger.debug(f"Node {node_id}: Setting height from {inputs.get('height')} to {payload.get('height')}")
-                    inputs["height"] = payload.get("height")
-                if payload.get("length") or payload.get("video_length"):
-                    num_frames = payload.get("length") or payload.get("video_length")
-                    if "num_frames" in inputs:
-                        logger.debug(f"Node {node_id}: Setting num_frames from {inputs.get('num_frames')} to {num_frames}")
-                        inputs["num_frames"] = num_frames
+                # IMPORTANT: Always use workflow defaults for WAN video dimensions
+                # The workflow is carefully designed with specific width/height/num_frames
+                # that must match the WanVideoDecode tiling parameters to avoid tensor mismatches
+                # DO NOT apply payload width/height/num_frames - they cause decoding errors
+                logger.info(f"Node {node_id} WanVideoEmptyEmbeds: Using workflow defaults - width={inputs.get('width')}, height={inputs.get('height')}, frames={inputs.get('num_frames')}")
                 node_data["inputs"] = inputs
 
     return processed_workflow
