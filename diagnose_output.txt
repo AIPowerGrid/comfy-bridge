@@ -1,0 +1,129 @@
+============================================================
+COMFY-BRIDGE MODEL DIAGNOSTIC
+============================================================
+
+[1] Environment Variables:
+    MODELS_PATH: c:/dev/comfy-bridge/persistent_volumes/models
+    GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH: c:/dev/grid-image-model-reference
+    WORKFLOW_FILE: wan2_2_t2v_14b,wan2_2_t2v_14b_hq,wan2_2_ti2v_5b,flux.1-krea-dev,FLUX.1-dev-Kontext-fp8-scaled,Chroma,SDXL 1.0,ltxv,FLUX.1-dev
+    Models path exists: True
+    Subdirectories: ['audio_encoders', 'checkpoints', 'clip', 'clip_vision', 'configs', 'controlnet', 'diffusers', 'diffusion_models', 'embeddings', 'gligen', 'hypernetworks', 'loras', 'model_patches', 'photomaker', 'style_models', 'text_encoders', 'unet', 'upscale_models', 'vae', 'vae_approx']
+    Catalog file exists: True
+
+[2] All Model Files Found:
+    Models path: C:\dev\comfy-bridge\persistent_volumes\models
+    checkpoints/:
+      - chroma-unlocked-v27_float8_e4m3fn_scaled_stochastic.safetensors
+      - chroma-unlocked-v39.safetensors
+      - flux1-dev.safetensors
+      - flux1-kontext-dev.safetensors
+      - flux1-krea-dev_fp8_scaled.safetensors
+      - ltxv-13b-0.9.8-dev.safetensors
+      - sd_xl_base_1.0.safetensors
+      - umt5_xxl_fp8_e4m3fn_scaled.safetensors
+    clip/:
+      - umt5_xxl_fp8_e4m3fn_scaled.safetensors
+    diffusion_models/:
+      - Wan14BT2VFusioniX_fp16_.safetensors
+      - wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors
+      - wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors
+      - wan2.2_ti2v_5B_fp16.safetensors
+    loras/:
+      - wan2.2_t2v_lightx2v_4steps_lora_v1.1_high_noise.safetensors
+      - wan2.2_t2v_lightx2v_4steps_lora_v1.1_low_noise.safetensors
+    text_encoders/:
+      - umt5_xxl_fp8_e4m3fn_scaled.safetensors
+    unet/:
+      - wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors
+      - wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors
+      - wan2.2_ti2v_5B_fp16.safetensors
+    vae/:
+      - wan2.2_vae.safetensors
+      - wan_2.1_vae.safetensors
+    Total files found: 21
+
+[3] Advertised Models Health Check:
+    Models to check: ['wan2_2_t2v_14b', 'wan2_2_t2v_14b_hq', 'wan2_2_ti2v_5b', 'flux.1-krea-dev', 'FLUX.1-dev-Kontext-fp8-scaled', 'Chroma', 'SDXL 1.0', 'ltxv', 'FLUX.1-dev']
+
+    [OK] wan2_2_t2v_14b:
+        Status: healthy
+        Found: ['text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors', 'vae/wan_2.1_vae.safetensors', 'diffusion_models/wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors', 'diffusion_models/wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors', 'lora/wan2.2_t2v_lightx2v_4steps_lora_v1.1_high_noise.safetensors', 'lora/wan2.2_t2v_lightx2v_4steps_lora_v1.1_low_noise.safetensors']
+
+    [OK] wan2_2_t2v_14b_hq:
+        Status: healthy
+        Found: ['text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors', 'vae/wan_2.1_vae.safetensors', 'diffusion_models/wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors', 'diffusion_models/wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors']
+
+    [OK] wan2_2_ti2v_5b:
+        Status: healthy
+        Found: ['diffusion_models/wan2.2_ti2v_5B_fp16.safetensors', 'text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors', 'vae/wan2.2_vae.safetensors']
+
+    [OK] flux.1-krea-dev:
+        Status: healthy
+        Found: ['checkpoint/flux1-krea-dev_fp8_scaled.safetensors']
+
+    [OK] FLUX.1-dev-Kontext-fp8-scaled:
+        Status: healthy
+        Found: ['checkpoint/flux1-kontext-dev.safetensors']
+
+    [FAIL] Chroma:
+        Status: incomplete
+        Found: ['checkpoint/chroma-unlocked-v39.safetensors']
+        Missing: ['checkpoint/chroma-unlocked-v30.safetensors', 'checkpoint/chroma-unlocked-v31.safetensors', 'checkpoint/chroma-unlocked-v32.safetensors', 'checkpoint/chroma-unlocked-v33.safetensors', 'checkpoint/chroma-unlocked-v34.safetensors', 'checkpoint/chroma-unlocked-v35.safetensors', 'checkpoint/chroma-unlocked-v36.safetensors', 'checkpoint/chroma-unlocked-v37.safetensors', 'checkpoint/chroma-unlocked-v38.safetensors', 'checkpoint/chroma-unlocked-v40.safetensors']
+        Message: 10 of 11 files missing
+
+    [OK] SDXL 1.0:
+        Status: healthy
+        Found: ['checkpoint/sd_xl_base_1.0.safetensors']
+
+    [OK] ltxv:
+        Status: healthy
+        Found: ['checkpoint/ltxv-13b-0.9.8-dev.safetensors']
+
+    [OK] FLUX.1-dev:
+        Status: healthy
+        Found: ['checkpoint/flux1-dev.safetensors']
+
+[4] Workflow Mapping:
+    Available models (0): []
+    wan2_2_t2v_14b -> wan2.2-t2v-a14b.json
+    wan2_2_t2v_14b_hq -> wan2.2-t2v-a14b-hq.json
+    wan2_2_ti2v_5b -> wan2.2_ti2v_5B.json
+    flux.1-krea-dev -> flux1_krea_dev.json
+    FLUX.1-dev-Kontext-fp8-scaled -> flux1-krea-dev_fp8_scaled.json
+
+[5] ModelVault Registry:
+    Total models in registry: 25
+    Sample models:
+      - stable_diffusion_2.1: 2 files
+          model_2_1.ckpt (type=checkpoint)
+          v2-inference-v.yaml (type=checkpoint)
+      - stable_diffusion: 2 files
+          model_1_5.ckpt (type=checkpoint)
+          v1-inference.yaml (type=checkpoint)
+      - Realistic Vision: 2 files
+          RealisticVision.ckpt (type=checkpoint)
+          v1-inference.yaml (type=checkpoint)
+      - Epic Diffusion: 2 files
+          EpicDiffusion.ckpt (type=checkpoint)
+          v1-inference.yaml (type=checkpoint)
+      - Deliberate: 2 files
+          Deliberate.ckpt (type=checkpoint)
+          v1-inference.yaml (type=checkpoint)
+      - Unstable Ink Dream: 2 files
+          unstableinkdream.ckpt (type=checkpoint)
+          v1-inference.yaml (type=checkpoint)
+      - Anything v3: 2 files
+          AnythingV3.ckpt (type=checkpoint)
+          v1-inference.yaml (type=checkpoint)
+      - Movie Diffusion: 2 files
+          movie-diffusion.ckpt (type=checkpoint)
+          v1-inference.yaml (type=checkpoint)
+      - ICBINP - I Can't Believe It's Not Photography: 2 files
+          icbinp.safetensors (type=checkpoint)
+          v1-inference.yaml (type=checkpoint)
+      - SDXL 1.0: 1 files
+          sd_xl_base_1.0.safetensors (type=checkpoint)
+
+============================================================
+END DIAGNOSTIC
+============================================================

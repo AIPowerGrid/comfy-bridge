@@ -14,6 +14,13 @@ from typing import Dict, List, Optional, Set
 from dataclasses import dataclass, field
 from enum import Enum
 
+# Ensure .env is loaded before reading environment variables
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 logger = logging.getLogger(__name__)
 
 
@@ -87,15 +94,24 @@ class ModelHealthChecker:
     Integrates with blockchain registry to know expected files.
     """
     
-    # ComfyUI model directories - search multiple possible locations
+    # All known model directories to search
+    ALL_MODEL_DIRS = [
+        'checkpoints', 'ckpt', 'vae', 'clip', 'text_encoders', 
+        'loras', 'diffusion_models', 'unet', 'embeddings', 'controlnet'
+    ]
+    
+    # ComfyUI model directories - search multiple possible locations by type
     MODEL_DIRS = {
-        'checkpoint': ['checkpoints', 'ckpt', 'diffusion_models'],
-        'vae': ['vae', 'vae/wan'],
-        'text_encoder': ['text_encoders', 'clip', 'text_encoders/wan'],
-        'text_encoders': ['text_encoders', 'clip', 'text_encoders/wan'],
-        'lora': ['loras', 'loras/wan'],
-        'diffusion_models': ['diffusion_models', 'diffusion_models/wan', 'unet', 'unet/wan'],
-        'unet': ['diffusion_models', 'diffusion_models/wan', 'unet', 'unet/wan'],
+        'checkpoint': ['checkpoints', 'ckpt', 'diffusion_models', 'unet'],
+        'checkpoints': ['checkpoints', 'ckpt', 'diffusion_models', 'unet'],
+        'vae': ['vae'],
+        'text_encoder': ['text_encoders', 'clip', 'checkpoints'],
+        'text_encoders': ['text_encoders', 'clip', 'checkpoints'],
+        'clip': ['clip', 'text_encoders', 'checkpoints'],
+        'lora': ['loras'],
+        'loras': ['loras'],
+        'diffusion_models': ['diffusion_models', 'unet'],
+        'unet': ['unet', 'diffusion_models'],
     }
     
     def __init__(self, models_path: str = "/app/ComfyUI/models"):
@@ -109,31 +125,90 @@ class ModelHealthChecker:
         # Clear cache when model list changes
         self._health_cache.clear()
     
+    def list_all_model_files(self) -> Dict[str, List[str]]:
+        """
+        List all model files found in the models directory.
+        
+        Returns:
+            Dict mapping directory name to list of files found
+        """
+        result = {}
+        if not self.models_path.exists():
+            logger.warning(f"Models path does not exist: {self.models_path}")
+            return result
+        
+        try:
+            for subdir in self.models_path.iterdir():
+                if subdir.is_dir():
+                    files = []
+                    # Walk this subdirectory recursively
+                    for root, dirs, filenames in os.walk(subdir):
+                        for f in filenames:
+                            if f.endswith(('.safetensors', '.ckpt', '.pt', '.pth', '.bin')):
+                                # Get relative path from the subdir
+                                rel_path = os.path.relpath(os.path.join(root, f), subdir)
+                                files.append(rel_path)
+                    if files:
+                        result[subdir.name] = sorted(files)
+        except PermissionError as e:
+            logger.warning(f"Permission error listing model files: {e}")
+        
+        return result
+    
+    def file_exists(self, filename: str) -> bool:
+        """Check if a model file exists anywhere in the models directory."""
+        return self.find_file(filename) is not None
+    
     def find_file(self, filename: str, file_type: str = "checkpoint") -> Optional[Path]:
         """Find a model file in the appropriate directories."""
         dirs_to_check = self.MODEL_DIRS.get(file_type, ['checkpoints'])
         
+        logger.debug(f"Looking for file '{filename}' (type={file_type}) in {self.models_path}")
+        
+        # First check the type-specific directories
         for dir_name in dirs_to_check:
             file_path = self.models_path / dir_name / filename
+            logger.debug(f"  Checking type-specific: {file_path}")
             if file_path.exists():
+                logger.debug(f"  ✓ Found at {file_path}")
                 return file_path
         
-        # Fallback: search all model dirs (one level)
-        for subdir in self.models_path.iterdir():
-            if subdir.is_dir():
-                file_path = subdir / filename
-                if file_path.exists():
-                    return file_path
+        # Fallback: search all immediate subdirs
+        if self.models_path.exists():
+            try:
+                for subdir in self.models_path.iterdir():
+                    if subdir.is_dir():
+                        file_path = subdir / filename
+                        if file_path.exists():
+                            logger.debug(f"  ✓ Found in immediate subdir: {file_path}")
+                            return file_path
+                        # Case-insensitive check
+                        for f in subdir.iterdir():
+                            if f.is_file() and f.name.lower() == filename.lower():
+                                logger.debug(f"  ✓ Found (case-insensitive) in subdir: {f}")
+                                return f
+            except PermissionError as e:
+                logger.warning(f"  Permission error scanning subdirs: {e}")
         
-        # Deep search: walk entire tree
-        for root, dirs, files in os.walk(self.models_path):
-            if filename in files:
-                return Path(root) / filename
-            # Case-insensitive fallback
-            for f in files:
-                if f.lower() == filename.lower():
-                    return Path(root) / f
+        # Deep search: walk entire tree (handles nested subdirs like diffusion_models/wan/)
+        if self.models_path.exists():
+            try:
+                for root, dirs, files in os.walk(self.models_path):
+                    # Exact match
+                    if filename in files:
+                        result = Path(root) / filename
+                        logger.debug(f"  ✓ Found in deep search: {result}")
+                        return result
+                    # Case-insensitive fallback
+                    for f in files:
+                        if f.lower() == filename.lower():
+                            result = Path(root) / f
+                            logger.debug(f"  ✓ Found (case-insensitive) in deep search: {result}")
+                            return result
+            except PermissionError as e:
+                logger.warning(f"  Permission error in deep search: {e}")
         
+        logger.debug(f"  ✗ File not found: {filename}")
         return None
     
     def check_model_files(
@@ -154,6 +229,8 @@ class ModelHealthChecker:
         missing = []
         present = []
         
+        logger.debug(f"Checking {len(expected_files)} files for model {model_name} in {self.models_path}")
+        
         for file_info in expected_files:
             filename = file_info.get('filename') or file_info.get('file_name', '')
             file_type = file_info.get('file_type', 'checkpoint')
@@ -164,8 +241,10 @@ class ModelHealthChecker:
             file_path = self.find_file(filename, file_type)
             if file_path and file_path.exists():
                 present.append(f"{file_type}/{filename}")
+                logger.debug(f"  ✓ Found {filename} at {file_path}")
             else:
                 missing.append(f"{file_type}/{filename}")
+                logger.debug(f"  ✗ Missing {filename} (type={file_type})")
         
         if not expected_files:
             # No file info available
@@ -310,15 +389,44 @@ def _find_models_path() -> str:
     """Find the actual models directory, checking multiple possible locations."""
     # Check env var first
     env_path = os.environ.get("MODELS_PATH")
-    if env_path and os.path.isdir(env_path):
-        return env_path
+    logger.info(f"MODELS_PATH env var: '{env_path}'")
     
-    # Check common paths
+    if env_path:
+        # Normalize path (handle forward slashes on Windows)
+        normalized = Path(env_path).resolve()
+        logger.info(f"MODELS_PATH normalized: '{normalized}'")
+        if normalized.is_dir():
+            logger.info(f"✓ Using MODELS_PATH from env: {normalized}")
+            return str(normalized)
+        else:
+            logger.warning(f"✗ MODELS_PATH exists but is not a directory or doesn't exist: {normalized}")
+    
+    # Check common Docker/Linux paths
     for path in ["/app/ComfyUI/models", "/persistent_volumes/models"]:
         if os.path.isdir(path):
+            logger.info(f"Found models at Docker path: {path}")
             return path
     
+    # Check paths relative to the comfy_bridge package (for local development)
+    this_dir = Path(__file__).parent.absolute()
+    comfy_bridge_root = this_dir.parent  # c:\dev\comfy-bridge
+    
+    # Check for persistent_volumes/models relative to project root
+    relative_paths = [
+        comfy_bridge_root / "persistent_volumes" / "models",
+        comfy_bridge_root.parent / "persistent_volumes" / "models",  # one level up
+        comfy_bridge_root / "models",
+        Path.home() / "ComfyUI" / "models",  # User's home directory
+    ]
+    
+    for path in relative_paths:
+        logger.debug(f"Checking relative path: {path}")
+        if path.is_dir():
+            logger.info(f"Found models at relative path: {path}")
+            return str(path)
+    
     # Fall back to default
+    logger.warning("Could not find models directory, using default /app/ComfyUI/models")
     return "/app/ComfyUI/models"
 
 
@@ -328,6 +436,13 @@ def get_health_checker() -> ModelHealthChecker:
     if _health_checker is None:
         models_path = _find_models_path()
         logger.info(f"Health checker using models path: {models_path}")
+        # Verify the path exists and list subdirs for debugging
+        p = Path(models_path)
+        if p.exists():
+            subdirs = [d.name for d in p.iterdir() if d.is_dir()]
+            logger.info(f"  Models path exists, subdirs: {subdirs[:10]}...")
+        else:
+            logger.warning(f"  Models path does NOT exist: {models_path}")
         _health_checker = ModelHealthChecker(models_path)
     return _health_checker
 

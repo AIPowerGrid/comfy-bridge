@@ -289,6 +289,44 @@ class ComfyUIBridge:
             logger.error("  1. Download the model files, or") 
             logger.error("  2. Check WORKFLOW_FILE configuration")
 
+        # Check what models have jobs in the queue
+        try:
+            logger.info("🔍 Checking API queue status...")
+            models_status = await self.api.get_models_status()
+            if models_status:
+                # Find models with queued jobs
+                models_with_jobs = []
+                for model_info in models_status:
+                    if isinstance(model_info, dict):
+                        name = model_info.get("name", "")
+                        queued = model_info.get("queued", 0)
+                        if queued > 0:
+                            models_with_jobs.append((name, queued))
+                
+                if models_with_jobs:
+                    logger.info(f"📊 Models with queued jobs in API:")
+                    for name, queued in sorted(models_with_jobs, key=lambda x: -x[1])[:20]:
+                        # Check if we support this model
+                        supported = "✓" if name in self.supported_models else "✗"
+                        logger.info(f"   {supported} {name}: {queued} jobs")
+                    
+                    # Check for matches
+                    our_models_set = set(self.supported_models)
+                    queue_models_set = set(name for name, _ in models_with_jobs)
+                    matching = our_models_set & queue_models_set
+                    if matching:
+                        logger.info(f"✅ We can serve {len(matching)} models with queued jobs: {list(matching)}")
+                    else:
+                        logger.warning("⚠️  NONE of our models have queued jobs!")
+                        logger.warning(f"   Our models: {self.supported_models}")
+                        logger.warning(f"   Models with jobs: {[n for n, _ in models_with_jobs[:10]]}")
+                else:
+                    logger.info("📭 No models have queued jobs right now")
+            else:
+                logger.warning("Could not fetch models status from API")
+        except Exception as e:
+            logger.warning(f"Failed to check queue status: {e}")
+
         job_count = 0
         logger.info("Starting job polling loop...")
         while True:
