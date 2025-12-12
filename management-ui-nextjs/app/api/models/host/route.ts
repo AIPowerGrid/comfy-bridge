@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { checkWorkflowModels, type WorkflowCheckResult } from '@/lib/workflowModelChecker';
 
 export const dynamic = 'force-dynamic';
 
@@ -99,6 +100,38 @@ export async function POST(request: Request) {
         success: false,
         error: `No workflow file found for ${model_id}. Please ensure a workflow file exists in the workflows directory.`
       }, { status: 400 });
+    }
+    
+    // Check if required models are installed
+    const workflowFullPath = path.join(workflowsPath, foundWorkflowFile);
+    let modelCheckResult: WorkflowCheckResult | null = null;
+    
+    try {
+      modelCheckResult = await checkWorkflowModels(workflowFullPath);
+      console.log(`Model check for ${model_id}:`, JSON.stringify(modelCheckResult, null, 2));
+      
+      if (!modelCheckResult.allModelsInstalled) {
+        const missingList = modelCheckResult.missingModels
+          .map(m => `${m.filename} (${m.loaderType})`)
+          .join(', ');
+        
+        console.log(`Missing models for ${model_id}: ${missingList}`);
+        
+        return NextResponse.json({
+          success: false,
+          error: `Cannot host ${model_id}: missing required model files`,
+          missing_models: modelCheckResult.missingModels.map(m => ({
+            filename: m.filename,
+            loader: m.loaderType
+          })),
+          message: `The following model files are required but not installed: ${missingList}`
+        }, { status: 400 });
+      }
+      
+      console.log(`All required models installed for ${model_id}`);
+    } catch (checkError: any) {
+      console.warn(`Could not verify models for ${model_id}:`, checkError.message);
+      // Continue anyway if we can't check - runtime will catch issues
     }
     
     // Get current WORKFLOW_FILE value

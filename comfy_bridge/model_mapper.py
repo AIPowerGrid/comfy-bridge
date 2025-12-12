@@ -725,6 +725,15 @@ def get_horde_models() -> List[str]:
     return model_mapper.get_available_horde_models()
 
 
+def get_workflow_validated_models() -> set:
+    """Get set of models that have valid workflow files.
+    
+    These models passed workflow validation and should be trusted even if 
+    traditional health checks fail (e.g., API-based models like ltxv).
+    """
+    return set(model_mapper.workflow_map.keys())
+
+
 def get_workflow_file(horde_model_name: str) -> str:
     """Get workflow file for a model."""
     return model_mapper.get_workflow_file(horde_model_name)
