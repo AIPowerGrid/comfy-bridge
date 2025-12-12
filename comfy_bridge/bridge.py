@@ -126,9 +126,19 @@ class ComfyUIBridge:
             logger.info(f"Building workflow for {model_name}")
             workflow = await self.workflow_builder(job)
             
+            # DEBUG: Log workflow RIGHT AFTER BUILD
+            logger.info(f"DEBUG AFTER BUILD - Node 45 text: {workflow.get('45', {}).get('inputs', {}).get('text', 'NOT FOUND')[:100]}")
+            logger.info(f"DEBUG AFTER BUILD - Node 31 seed: {workflow.get('31', {}).get('inputs', {}).get('seed', 'NOT FOUND')}")
+            logger.info(f"DEBUG AFTER BUILD - Node 40 clip_name2: {workflow.get('40', {}).get('inputs', {}).get('clip_name2', 'NOT FOUND')}")
+            
             # Validate and fix model filenames before submission
             logger.info("Starting model filename validation...")
             validation_failed = False
+            
+            # DEBUG: Log workflow BEFORE validation
+            logger.info(f"DEBUG BEFORE VALIDATION - Node 45 text: {workflow.get('45', {}).get('inputs', {}).get('text', 'NOT FOUND')[:100]}")
+            logger.info(f"DEBUG BEFORE VALIDATION - Node 31 seed: {workflow.get('31', {}).get('inputs', {}).get('seed', 'NOT FOUND')}")
+            
             try:
                 from .workflow import validate_and_fix_model_filenames
                 logger.info("Fetching available models from ComfyUI for validation...")
@@ -138,6 +148,10 @@ class ComfyUIBridge:
                     logger.info("Validating and fixing model filenames in workflow...")
                     workflow = await validate_and_fix_model_filenames(workflow, available_models, job_model_name=model_name)
                     logger.info("Model validation completed")
+                    
+                    # DEBUG: Log workflow AFTER validation
+                    logger.info(f"DEBUG AFTER VALIDATION - Node 45 text: {workflow.get('45', {}).get('inputs', {}).get('text', 'NOT FOUND')[:100]}")
+                    logger.info(f"DEBUG AFTER VALIDATION - Node 31 seed: {workflow.get('31', {}).get('inputs', {}).get('seed', 'NOT FOUND')}")
                 else:
                     logger.warning("Could not fetch available models - skipping validation")
             except ImportError as e:

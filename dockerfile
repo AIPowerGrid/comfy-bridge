@@ -93,8 +93,8 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 COPY comfy_bridge ./comfy_bridge
 COPY workflows ./workflows
 COPY tests ./tests
-# Copy utility scripts (blockchain-based model download, no JSON catalogs)
-COPY download_models_from_chain.py model_manager.py get_gpu_info.py gpu_info_api.py downloads_api.py ./
+# Copy utility scripts (blockchain-based model download with fallback catalog)
+COPY download_models_from_chain.py model_manager.py get_gpu_info.py gpu_info_api.py downloads_api.py model_catalog.py ./
 RUN chmod +x get_gpu_info.py download_models_from_chain.py gpu_info_api.py downloads_api.py
 
 # Install optional performance dependencies (inlined to avoid Windows CRLF issues)

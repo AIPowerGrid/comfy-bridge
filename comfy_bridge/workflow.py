@@ -620,18 +620,15 @@ async def process_workflow(
     # Pre-calculate commonly reused payload fields
     # NOTE: steps and cfg are intentionally NOT read from payload - we always use workflow defaults
     # payload_steps and payload_cfg are set to None below to ensure workflow values are used
-    payload_sampler_raw = payload.get("sampler_name") or payload.get("sampler")
-    payload_sampler = map_sampler_name(payload_sampler_raw) if payload_sampler_raw else None
-    payload_scheduler = payload.get("scheduler")
-    if not payload_scheduler and payload.get("karras") is not None:
-        payload_scheduler = "karras" if payload.get("karras") else "normal"
-    payload_denoise = payload.get("denoising_strength") or payload.get("denoise")
-    
-    # Always use workflow defaults for steps and cfg
-    # Ignore whatever the API sends - workflow files have optimized values
+    # WORKFLOW FILE IS SOURCE OF TRUTH
+    # Never override workflow values with payload values - workflow files have optimized settings
+    # Only prompt, seed, and dimensions come from payload
     payload_steps = None
     payload_cfg = None
-    logger.debug(f"Using workflow defaults for steps and cfg (ignoring payload values)")
+    payload_sampler = None
+    payload_scheduler = None
+    payload_denoise = None
+    logger.debug(f"Using workflow defaults for all KSampler parameters (steps, cfg, sampler, scheduler, denoise)")
 
     def _apply_ksampler_dict(inputs: Dict[str, Any]) -> Dict[str, Any]:
         # Only apply steps if payload value is higher than workflow default
