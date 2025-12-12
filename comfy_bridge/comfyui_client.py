@@ -41,6 +41,10 @@ class ComfyUIClient:
             logger.error(f"Workflow snippet: {workflow_str[:500]}")
             raise ValueError("Workflow contains invalid '#id' placeholder - this indicates a workflow processing error")
         
+        # Debug: dump FULL workflow JSON for comparison
+        workflow_json = json.dumps(workflow, indent=2)
+        logger.info(f"DEBUG FULL WORKFLOW:\n{workflow_json[:3000]}...")
+        
         resp = await self.client.post("/prompt", json={"prompt": workflow})
         if resp.status_code != 200:
             error_text = resp.text

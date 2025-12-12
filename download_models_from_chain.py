@@ -59,6 +59,14 @@ from comfy_bridge.modelvault_client import (
     ModelType,
 )
 
+# Import fallback catalog
+try:
+    from model_catalog import get_catalog_model, CatalogModel
+    CATALOG_AVAILABLE = True
+except ImportError:
+    CATALOG_AVAILABLE = False
+    print("[INFO] Fallback model catalog not available")
+
 
 def normalize_model_folder(file_type: str) -> str:
     """Normalize file type to ComfyUI folder name."""
@@ -323,6 +331,92 @@ def download_model_from_chain(
     return final_success
 
 
+def download_model_from_catalog(
+    catalog_model: 'CatalogModel',
+    models_path: str,
+    downloaded: set = None
+) -> bool:
+    """
+    Download a model from the fallback catalog.
+    Returns True if successful.
+    """
+    global _current_model
+    _current_model = catalog_model.name
+    
+    if downloaded is None:
+        downloaded = set()
+    
+    if catalog_model.name in downloaded:
+        emit_progress(100, message=f"[SKIP] {catalog_model.name} already processed")
+        return True
+    
+    emit_progress(0, message=f"[CATALOG] {catalog_model.name}")
+    emit_progress(0, message=f"  Description: {catalog_model.description}")
+    emit_progress(0, message=f"  Base: {catalog_model.base_model}")
+    emit_progress(0, message=f"  Files: {len(catalog_model.files)}")
+    
+    success_count = 0
+    total_files = len(catalog_model.files)
+    
+    for idx, file_info in enumerate(catalog_model.files, 1):
+        file_name = file_info.file_name
+        
+        # Check if already downloaded
+        if file_name in downloaded:
+            emit_progress(0, message=f"  [{idx}/{total_files}] {file_name} - already downloaded")
+            success_count += 1
+            continue
+        
+        # Determine target directory
+        target_dir = Path(models_path) / file_info.target_dir
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target_path = target_dir / file_name
+        
+        # Check if file already exists
+        if target_path.exists():
+            if file_info.size_bytes > 0:
+                actual_size = target_path.stat().st_size
+                if actual_size >= file_info.size_bytes * 0.95:  # 5% tolerance
+                    emit_progress(0, message=f"  [{idx}/{total_files}] {file_name} - already exists ({actual_size / 1e9:.1f}GB)")
+                    downloaded.add(file_name)
+                    success_count += 1
+                    continue
+                else:
+                    emit_progress(0, message=f"  [{idx}/{total_files}] {file_name} - incomplete ({actual_size / 1e9:.1f}GB), re-downloading")
+            else:
+                emit_progress(0, message=f"  [{idx}/{total_files}] {file_name} - already exists")
+                downloaded.add(file_name)
+                success_count += 1
+                continue
+        
+        # Download the file
+        emit_progress(0, message=f"  [{idx}/{total_files}] Downloading {file_name}...")
+        download_url = file_info.download_url
+        
+        if not download_url:
+            emit_progress(0, message=f"  [{idx}/{total_files}] {file_name} - NO URL", msg_type="warning")
+            continue
+        
+        success, error = download_file(download_url, target_path, progress_callback=emit_progress)
+        
+        if success:
+            downloaded.add(file_name)
+            success_count += 1
+            emit_progress(100, message=f"  [{idx}/{total_files}] {file_name} - downloaded successfully")
+        else:
+            emit_progress(0, message=f"  [{idx}/{total_files}] {file_name} - FAILED: {error}", msg_type="error")
+    
+    downloaded.add(catalog_model.name)
+    final_success = success_count == total_files
+    
+    if final_success:
+        emit_progress(100, message=f"[OK] {catalog_model.name} - all {total_files} files")
+    else:
+        emit_progress(100, message=f"[PARTIAL] {catalog_model.name} - {success_count}/{total_files} files", msg_type="warning")
+    
+    return final_success
+
+
 def download_models_from_chain(
     model_names: List[str],
     models_path: str = "/app/ComfyUI/models"
@@ -387,28 +481,63 @@ def download_models_from_chain(
         else:
             not_found.append(name)
     
-    if not_found:
+    # Try fallback catalog for models not found on chain
+    catalog_downloads = []
+    still_not_found = []
+    
+    if not_found and CATALOG_AVAILABLE:
+        emit_progress(0, message=f"[CATALOG] Checking fallback catalog for {len(not_found)} model(s)...")
+        for name in not_found:
+            catalog_model = get_catalog_model(name)
+            if catalog_model:
+                emit_progress(0, message=f"  ✓ Found '{name}' in fallback catalog")
+                catalog_downloads.append((name, catalog_model))
+            else:
+                still_not_found.append(name)
+        
+        if still_not_found:
+            emit_progress(0, message=f"[WARN] Models not found anywhere: {', '.join(still_not_found)}", msg_type="warning")
+    elif not_found:
+        still_not_found = not_found
         emit_progress(0, message=f"[WARN] Models not found on chain: {', '.join(not_found)}", msg_type="warning")
     
-    if not models_to_download:
-        emit_progress(0, message="[ERROR] No resolvable models found on blockchain", msg_type="error")
+    if not models_to_download and not catalog_downloads:
+        emit_progress(0, message="[ERROR] No resolvable models found", msg_type="error")
         return False
     
-    emit_progress(0, message=f"[DOWNLOAD] {len(models_to_download)} model(s) to process:")
+    # Check blockchain models for missing download URLs and use catalog fallback
+    if CATALOG_AVAILABLE:
+        for model in list(models_to_download):
+            if not model.files:
+                catalog_model = get_catalog_model(model.display_name)
+                if catalog_model:
+                    emit_progress(0, message=f"  ✓ Using catalog files for '{model.display_name}' (no blockchain URLs)")
+                    models_to_download.remove(model)
+                    catalog_downloads.append((model.display_name, catalog_model))
+    
+    emit_progress(0, message=f"[DOWNLOAD] {len(models_to_download) + len(catalog_downloads)} model(s) to process:")
     for m in models_to_download:
         files_str = f"{len(m.files)} files" if m.files else "NO FILES"
-        emit_progress(0, message=f"  • {m.display_name} ({files_str})")
+        emit_progress(0, message=f"  • {m.display_name} ({files_str}) [blockchain]")
+    for name, cm in catalog_downloads:
+        emit_progress(0, message=f"  • {name} ({len(cm.files)} files) [catalog]")
     
-    # Download each model
+    # Download each model from blockchain
     downloaded = set()
     success_count = 0
+    total_models = len(models_to_download) + len(catalog_downloads)
     
     for model in models_to_download:
         if download_model_from_chain(model, models_path, downloaded):
             success_count += 1
     
+    # Download models from fallback catalog
+    for name, catalog_model in catalog_downloads:
+        if download_model_from_catalog(catalog_model, models_path, downloaded):
+            success_count += 1
+    
     emit_progress(100, message="=" * 60)
-    all_success = success_count == len(models_to_download)
+    all_success = success_count == total_models
     if all_success:
         emit_progress(100, message=f"[COMPLETE] Downloaded: {success_count}/{len(models_to_download)} models")
     else:

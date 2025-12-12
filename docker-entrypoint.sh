@@ -186,4 +186,4 @@ if [ -z "$GRID_API_KEY" ]; then
 fi
 
 # Start the bridge
-exec python3 -m comfy_bridge.cli
+exec python3 -m comfy_bridge
