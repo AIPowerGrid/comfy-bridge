@@ -116,10 +116,12 @@ def _force_video_processing(job: Dict[str, Any], model_type: str) -> None:
 
 async def validate_and_fix_model_filenames(
     workflow: Dict[str, Any], 
-    available_models: Dict[str, Any]
+    available_models: Dict[str, Any],
+    job_model_name: Optional[str] = None
 ) -> Dict[str, Any]:
     """Validate and fix model filenames in workflow to match available models.
     
+    Uses job_model_name to select the best matching checkpoint when available.
     Only replaces models with compatible model types (e.g., Flux with Flux, WanVideo with WanVideo).
     Fails if no compatible models are available.
     
@@ -129,7 +131,7 @@ async def validate_and_fix_model_filenames(
     fixes_applied = []
     model_type = detect_workflow_model_type(workflow)
     
-    logger.info(f"Detected workflow model type: {model_type}")
+    logger.info(f"Detected workflow model type: {model_type}, job model: {job_model_name}")
     
     if model_type == "unknown":
         logger.warning("Could not detect workflow model type - proceeding with validation anyway")
@@ -230,95 +232,178 @@ async def validate_and_fix_model_filenames(
             class_type = node_data.get("class_type", "")
             inputs = node_data.get("inputs", {})
         
-        # Fix DualCLIPLoader (Flux models)
-        if class_type == "DualCLIPLoader":
-            if model_type != "flux":
-                logger.warning(f"Node {node_id}: DualCLIPLoader found but workflow type is {model_type} - may be incompatible")
+            # Fix DualCLIPLoader (Flux models)
+            if class_type == "DualCLIPLoader":
+                if model_type != "flux":
+                    logger.warning(f"Node {node_id}: DualCLIPLoader found but workflow type is {model_type} - may be incompatible")
+                
+                dual_clip_models = available_models.get("DualCLIPLoader") or {}
+                clip1_options = dual_clip_models.get("clip_name1", []) if isinstance(dual_clip_models, dict) else []
+                clip2_options = dual_clip_models.get("clip_name2", []) if isinstance(dual_clip_models, dict) else []
+                
+                # Filter to compatible models only
+                if model_type == "flux":
+                    clip1_options = [m for m in clip1_options if is_model_compatible(m, "flux")]
+                    clip2_options = [m for m in clip2_options if is_model_compatible(m, "flux")]
+                
+                # Check clip_name1 - must check if input exists FIRST, then validate options
+                if "clip_name1" in inputs:
+                    current_clip1 = inputs.get("clip_name1")
+                    if not clip1_options:
+                        logger.debug("No clip_name1 options available for DualCLIPLoader – keeping workflow value")
+                    elif current_clip1 not in clip1_options:
+                        new_clip1 = clip1_options[0]
+                        logger.warning(
+                            f"Node {node_id}: Replacing DualCLIPLoader clip_name1 '{current_clip1}' "
+                            f"with '{new_clip1}' (not in available models: {clip1_options})"
+                        )
+                        inputs["clip_name1"] = new_clip1
+                        fixes_applied.append(f"Node {node_id} clip_name1: {current_clip1} -> {new_clip1}")
+                
+                # Check clip_name2 - must check if input exists FIRST, then validate options
+                if "clip_name2" in inputs:
+                    current_clip2 = inputs.get("clip_name2")
+                    if not clip2_options:
+                        logger.debug("No clip_name2 options available for DualCLIPLoader – keeping workflow value")
+                    elif current_clip2 not in clip2_options:
+                        new_clip2 = clip2_options[0]
+                        logger.warning(
+                            f"Node {node_id}: Replacing DualCLIPLoader clip_name2 '{current_clip2}' "
+                            f"with '{new_clip2}' (not in available models: {clip2_options})"
+                        )
+                        inputs["clip_name2"] = new_clip2
+                        fixes_applied.append(f"Node {node_id} clip_name2: {current_clip2} -> {new_clip2}")
             
-            dual_clip_models = available_models.get("DualCLIPLoader") or {}
-            clip1_options = dual_clip_models.get("clip_name1", []) if isinstance(dual_clip_models, dict) else []
-            clip2_options = dual_clip_models.get("clip_name2", []) if isinstance(dual_clip_models, dict) else []
+            # Fix UNETLoader (Flux models)
+            elif class_type == "UNETLoader":
+                if model_type != "flux":
+                    logger.warning(f"Node {node_id}: UNETLoader found but workflow type is {model_type} - may be incompatible")
+                
+                unet_options = available_models.get("UNETLoader") or []
+                
+                # Filter to compatible models only
+                if model_type == "flux":
+                    unet_options = [m for m in unet_options if is_model_compatible(m, "flux")]
+                
+                if "unet_name" in inputs:
+                    current_unet = inputs.get("unet_name")
+                    if not unet_options:
+                        logger.debug("No UNETLoader options available – keeping workflow value")
+                    elif current_unet not in unet_options:
+                        # Try to find matching model based on job model name
+                        new_unet = None
+                        
+                        if job_model_name:
+                            job_name_normalized = job_model_name.lower().replace("-", "").replace("_", "").replace(".", "")
+                            for unet in unet_options:
+                                unet_normalized = unet.lower().replace("-", "").replace("_", "").replace(".", "")
+                                if job_name_normalized in unet_normalized or unet_normalized in job_name_normalized:
+                                    new_unet = unet
+                                    logger.info(f"Found matching UNETLoader model '{unet}' for job model '{job_model_name}'")
+                                    break
+                        
+                        # Fall back to first available only if no match found
+                        if not new_unet:
+                            new_unet = unet_options[0]
+                            logger.warning(f"No matching UNET for '{job_model_name}', using first available: {new_unet}")
+                        
+                        logger.warning(
+                            f"Node {node_id}: Replacing UNETLoader unet_name '{current_unet}' "
+                            f"with '{new_unet}' (available: {unet_options[:3]})"
+                        )
+                        inputs["unet_name"] = new_unet
+                        fixes_applied.append(f"Node {node_id} unet_name: {current_unet} -> {new_unet}")
             
-            # Filter to compatible models only
-            if model_type == "flux":
-                clip1_options = [m for m in clip1_options if is_model_compatible(m, "flux")]
-                clip2_options = [m for m in clip2_options if is_model_compatible(m, "flux")]
+            # Fix VAELoader (Flux models)
+            elif class_type == "VAELoader":
+                if model_type != "flux":
+                    logger.warning(f"Node {node_id}: VAELoader found but workflow type is {model_type} - may be incompatible")
+                
+                vae_options = available_models.get("VAELoader") or []
+                
+                # Filter to compatible models only
+                if model_type == "flux":
+                    vae_options = [m for m in vae_options if is_model_compatible(m, "flux")]
+                
+                if "vae_name" in inputs:
+                    current_vae = inputs.get("vae_name")
+                    if not vae_options:
+                        logger.debug("No VAELoader options available – keeping workflow value")
+                    elif current_vae not in vae_options:
+                        new_vae = vae_options[0]
+                        logger.warning(
+                            f"Node {node_id}: Replacing VAELoader vae_name '{current_vae}' "
+                            f"with '{new_vae}' (not in available models: {vae_options})"
+                        )
+                        inputs["vae_name"] = new_vae
+                        fixes_applied.append(f"Node {node_id} vae_name: {current_vae} -> {new_vae}")
             
-            # Check clip_name1 - must check if input exists FIRST, then validate options
-            if "clip_name1" in inputs:
-                current_clip1 = inputs.get("clip_name1")
-                if not clip1_options:
-                    logger.debug("No clip_name1 options available for DualCLIPLoader – keeping workflow value")
-                elif current_clip1 not in clip1_options:
-                    new_clip1 = clip1_options[0]
-                    logger.warning(
-                        f"Node {node_id}: Replacing DualCLIPLoader clip_name1 '{current_clip1}' "
-                        f"with '{new_clip1}' (not in available models: {clip1_options})"
-                    )
-                    inputs["clip_name1"] = new_clip1
-                    fixes_applied.append(f"Node {node_id} clip_name1: {current_clip1} -> {new_clip1}")
-            
-            # Check clip_name2 - must check if input exists FIRST, then validate options
-            if "clip_name2" in inputs:
-                current_clip2 = inputs.get("clip_name2")
-                if not clip2_options:
-                    logger.debug("No clip_name2 options available for DualCLIPLoader – keeping workflow value")
-                elif current_clip2 not in clip2_options:
-                    new_clip2 = clip2_options[0]
-                    logger.warning(
-                        f"Node {node_id}: Replacing DualCLIPLoader clip_name2 '{current_clip2}' "
-                        f"with '{new_clip2}' (not in available models: {clip2_options})"
-                    )
-                    inputs["clip_name2"] = new_clip2
-                    fixes_applied.append(f"Node {node_id} clip_name2: {current_clip2} -> {new_clip2}")
-        
-        # Fix UNETLoader (Flux models)
-        elif class_type == "UNETLoader":
-            if model_type != "flux":
-                logger.warning(f"Node {node_id}: UNETLoader found but workflow type is {model_type} - may be incompatible")
-            
-            unet_options = available_models.get("UNETLoader") or []
-            
-            # Filter to compatible models only
-            if model_type == "flux":
-                unet_options = [m for m in unet_options if is_model_compatible(m, "flux")]
-            
-            if "unet_name" in inputs:
-                current_unet = inputs.get("unet_name")
-                if not unet_options:
-                    logger.debug("No UNETLoader options available – keeping workflow value")
-                elif current_unet not in unet_options:
-                    new_unet = unet_options[0]
-                    logger.warning(
-                        f"Node {node_id}: Replacing UNETLoader unet_name '{current_unet}' "
-                        f"with '{new_unet}' (not in available models: {unet_options})"
-                    )
-                    inputs["unet_name"] = new_unet
-                    fixes_applied.append(f"Node {node_id} unet_name: {current_unet} -> {new_unet}")
-        
-        # Fix VAELoader (Flux models)
-        elif class_type == "VAELoader":
-            if model_type != "flux":
-                logger.warning(f"Node {node_id}: VAELoader found but workflow type is {model_type} - may be incompatible")
-            
-            vae_options = available_models.get("VAELoader") or []
-            
-            # Filter to compatible models only
-            if model_type == "flux":
-                vae_options = [m for m in vae_options if is_model_compatible(m, "flux")]
-            
-            if "vae_name" in inputs:
-                current_vae = inputs.get("vae_name")
-                if not vae_options:
-                    logger.debug("No VAELoader options available – keeping workflow value")
-                elif current_vae not in vae_options:
-                    new_vae = vae_options[0]
-                    logger.warning(
-                        f"Node {node_id}: Replacing VAELoader vae_name '{current_vae}' "
-                        f"with '{new_vae}' (not in available models: {vae_options})"
-                    )
-                    inputs["vae_name"] = new_vae
-                    fixes_applied.append(f"Node {node_id} vae_name: {current_vae} -> {new_vae}")
+            # Fix CheckpointLoaderSimple (SDXL/Flux checkpoint models)
+            elif class_type == "CheckpointLoaderSimple":
+                # Get checkpoint options from ComfyUI - use checkpoints key or fall back to CheckpointLoaderSimple
+                ckpt_options = available_models.get("checkpoints") or available_models.get("CheckpointLoaderSimple") or []
+                
+                # Filter out FP8 models - they don't contain CLIP and won't work with CheckpointLoaderSimple
+                # FP8 models need UNETLoader + DualCLIPLoader + VAELoader instead
+                full_ckpt_options = [c for c in ckpt_options if "fp8" not in c.lower()]
+                if full_ckpt_options:
+                    logger.debug(f"Filtered to {len(full_ckpt_options)} full checkpoints (excluding FP8)")
+                else:
+                    # If no non-FP8 options, use all options (will likely fail but better than nothing)
+                    full_ckpt_options = ckpt_options
+                    logger.warning("No full checkpoints available (only FP8 models found)")
+                
+                if "ckpt_name" in inputs:
+                    current_ckpt = inputs.get("ckpt_name")
+                    # Check for placeholder values
+                    placeholders = ["checkpoint_name.safetensors", "model.safetensors", "checkpoint.safetensors"]
+                    is_placeholder = current_ckpt in placeholders
+                    
+                    if not full_ckpt_options:
+                        logger.warning(f"No CheckpointLoaderSimple options available – cannot fix placeholder '{current_ckpt}'")
+                    elif is_placeholder or current_ckpt not in ckpt_options:
+                        # Try to find best matching checkpoint based on job model name
+                        new_ckpt = None
+                        
+                        if job_model_name:
+                            # Normalize job model name for matching (remove fp8, krea, etc for base model matching)
+                            job_base = job_model_name.lower()
+                            # Extract base model name (e.g., "flux.1-krea-dev" -> look for "flux")
+                            
+                            # First, try exact substring match on full checkpoints
+                            job_name_normalized = job_base.replace("-", "").replace("_", "").replace(".", "")
+                            for ckpt in full_ckpt_options:
+                                ckpt_normalized = ckpt.lower().replace("-", "").replace("_", "").replace(".", "")
+                                if job_name_normalized in ckpt_normalized or ckpt_normalized in job_name_normalized:
+                                    new_ckpt = ckpt
+                                    logger.info(f"Found matching full checkpoint '{ckpt}' for job model '{job_model_name}'")
+                                    break
+                            
+                            # Second, try base model matching (flux.1-krea-dev -> flux1-dev.safetensors)
+                            if not new_ckpt:
+                                # Extract base model keywords
+                                base_keywords = ["flux", "sdxl", "sd", "chroma", "stable"]
+                                for keyword in base_keywords:
+                                    if keyword in job_base:
+                                        for ckpt in full_ckpt_options:
+                                            if keyword in ckpt.lower():
+                                                new_ckpt = ckpt
+                                                logger.info(f"Found base-model matching checkpoint '{ckpt}' for job model '{job_model_name}' (matched '{keyword}')")
+                                                break
+                                    if new_ckpt:
+                                        break
+                        
+                        # Fall back to first available full checkpoint if no match found
+                        if not new_ckpt:
+                            new_ckpt = full_ckpt_options[0]
+                            logger.warning(f"No matching checkpoint for '{job_model_name}', using first available full checkpoint")
+                        
+                        logger.warning(
+                            f"Node {node_id}: Replacing CheckpointLoaderSimple ckpt_name '{current_ckpt}' "
+                            f"with '{new_ckpt}' (available full checkpoints: {full_ckpt_options[:3]})"
+                        )
+                        inputs["ckpt_name"] = new_ckpt
+                        fixes_applied.append(f"Node {node_id} ckpt_name: {current_ckpt} -> {new_ckpt}")
     
     if fixes_applied:
         logger.info(f"Applied {len(fixes_applied)} model filename fixes:")
@@ -914,18 +999,33 @@ async def process_workflow(
                                     logger.info(f"Node {node_id} identified as negative prompt (connected to KSampler {ks_id} negative input)")
                                     break
                     
-                    # If not negative, check if it's connected to positive input
+                    # If not negative, check if it's connected to positive input (directly or via FluxGuidance)
                     if not is_negative_prompt:
                         for ks_id, ks_data in processed_workflow.items():
                             if isinstance(ks_data, dict) and ks_data.get("class_type") in ["KSampler", "KSamplerAdvanced"]:
                                 ks_inputs = ks_data.get("inputs", {})
                                 if "positive" in ks_inputs:
                                     pos_ref = ks_inputs["positive"]
-                                    logger.info(f"Checking KSampler {ks_id}: positive ref={pos_ref}, node_id={node_id}, match={isinstance(pos_ref, list) and len(pos_ref) > 0 and str(pos_ref[0]) == str(node_id)}")
+                                    logger.info(f"Checking KSampler {ks_id}: positive ref={pos_ref}, node_id={node_id}")
+                                    
+                                    # Direct connection check
                                     if isinstance(pos_ref, list) and len(pos_ref) > 0 and str(pos_ref[0]) == str(node_id):
                                         is_positive_prompt = True
                                         logger.info(f"Node {node_id} identified as positive prompt (connected to KSampler {ks_id} positive input)")
                                         break
+                                    
+                                    # Check through FluxGuidance intermediary
+                                    if isinstance(pos_ref, list) and len(pos_ref) > 0:
+                                        intermediate_node_id = str(pos_ref[0])
+                                        intermediate_node = processed_workflow.get(intermediate_node_id, {})
+                                        if isinstance(intermediate_node, dict) and intermediate_node.get("class_type") == "FluxGuidance":
+                                            fg_inputs = intermediate_node.get("inputs", {})
+                                            cond_ref = fg_inputs.get("conditioning")
+                                            logger.info(f"Found FluxGuidance {intermediate_node_id}, conditioning ref={cond_ref}")
+                                            if isinstance(cond_ref, list) and len(cond_ref) > 0 and str(cond_ref[0]) == str(node_id):
+                                                is_positive_prompt = True
+                                                logger.info(f"Node {node_id} identified as positive prompt (via FluxGuidance {intermediate_node_id} -> KSampler {ks_id})")
+                                                break
                     
                     # Now handle the prompt based on connection type
                     if is_negative_prompt:

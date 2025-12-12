@@ -809,15 +809,19 @@ class ModelVaultClient:
         sampler: Optional[str] = None,
         scheduler: Optional[str] = None,
     ) -> ValidationResult:
-        """Validate job parameters against on-chain constraints."""
+        """Validate job parameters against on-chain constraints.
+        
+        If model is not registered on-chain, validation passes (no constraints to check).
+        This allows processing jobs for models with valid workflows but not yet on-chain.
+        """
         if not self.enabled:
             return ValidationResult(is_valid=True)
 
         if not self.is_model_registered(file_name):
-            return ValidationResult(
-                is_valid=False,
-                reason=f"Model '{file_name}' not registered on-chain",
-            )
+            # Model not on-chain - can't validate constraints, but don't reject
+            # Jobs should proceed if we have a valid workflow for the model
+            logger.debug(f"Model '{file_name}' not registered on-chain, skipping constraint validation")
+            return ValidationResult(is_valid=True)
 
         model_id = file_name.replace(".safetensors", "").replace(".ckpt", "").replace(".pt", "")
         constraints = self.get_constraints(model_id)

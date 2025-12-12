@@ -140,6 +140,21 @@ class ComfyUIClient:
             else:
                 logger.debug("VAELoader not found in object_info")
             
+            # Get CheckpointLoaderSimple models (for SDXL/Flux checkpoint-based workflows)
+            ckpt_loader = object_info.get("CheckpointLoaderSimple", {})
+            if ckpt_loader:
+                ckpt_inputs = ckpt_loader.get("input", {})
+                required = ckpt_inputs.get("required", {})
+                ckpt_config = required.get("ckpt_name", [[]])
+                ckpt_models = ckpt_config[0] if isinstance(ckpt_config, list) and len(ckpt_config) > 0 else []
+                
+                if ckpt_models:
+                    models["checkpoints"] = ckpt_models if isinstance(ckpt_models, list) else []
+                    models["CheckpointLoaderSimple"] = models["checkpoints"]  # Alias
+                    logger.debug(f"CheckpointLoaderSimple models: {ckpt_models[:3] if isinstance(ckpt_models, list) else ckpt_models}...")
+            else:
+                logger.debug("CheckpointLoaderSimple not found in object_info")
+            
             logger.info(f"Fetched available models: {len(models)} loader types found")
             return models
         except Exception as e:

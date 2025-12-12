@@ -334,8 +334,20 @@ export default function Home() {
           await loadData();
         }
       } else {
-        showStatus('error', 'Failed to start hosting: ' + (result.error || 'Unknown error'));
-        showError('Hosting Failed', 'Failed to start hosting: ' + (result.error || 'Unknown error'));
+        // Check if this is a missing models error
+        if (result.missing_models && result.missing_models.length > 0) {
+          const missingList = result.missing_models
+            .map((m: { filename: string; loader: string }) => m.filename)
+            .join(', ');
+          showStatus('error', `Missing model files: ${missingList}`);
+          showError(
+            'Missing Required Models', 
+            `Cannot host ${modelId}. Please download and install the required model files first:\n\n${result.missing_models.map((m: { filename: string; loader: string }) => `• ${m.filename}`).join('\n')}`
+          );
+        } else {
+          showStatus('error', 'Failed to start hosting: ' + (result.error || 'Unknown error'));
+          showError('Hosting Failed', 'Failed to start hosting: ' + (result.error || 'Unknown error'));
+        }
       }
     } catch (error: any) {
       showStatus('error', 'Error: ' + error.message);

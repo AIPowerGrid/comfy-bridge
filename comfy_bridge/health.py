@@ -276,6 +276,7 @@ class ModelHealthChecker:
         Check model health using blockchain registry.
         
         Falls back to simple file existence check if no blockchain data.
+        For model name variants (aliases), inherits health from canonical name.
         """
         # Check cache first
         if model_name in self._health_cache:
@@ -283,7 +284,7 @@ class ModelHealthChecker:
         
         # Try to get file info from blockchain client
         try:
-            from comfy_bridge.modelvault_client import get_modelvault_client
+            from comfy_bridge.modelvault_client import get_modelvault_client, MODEL_NAME_ALIASES
             client = get_modelvault_client()
             model_info = client.find_model(model_name)
             
@@ -292,9 +293,57 @@ class ModelHealthChecker:
                     {'filename': f.file_name, 'file_type': f.file_type}
                     for f in model_info.files
                 ]
-                return self.check_model_files(model_name, expected_files)
+                health = self.check_model_files(model_name, expected_files)
+                
+                # If this is an alias and the canonical model is healthy, inherit that status
+                canonical_name = MODEL_NAME_ALIASES.get(model_name.lower())
+                if canonical_name and canonical_name != model_name:
+                    # Check if we already validated the canonical name
+                    if canonical_name in self._health_cache:
+                        canonical_health = self._health_cache[canonical_name]
+                        if canonical_health.is_healthy or canonical_health.can_serve:
+                            # Inherit healthy status from canonical model
+                            health = ModelHealth(
+                                model_name=model_name,
+                                status=canonical_health.status,
+                                missing_files=canonical_health.missing_files,
+                                present_files=canonical_health.present_files,
+                            )
+                
+                self._health_cache[model_name] = health
+                return health
+            elif model_info:
+                # Model found in registry but no files info - assume it's valid if workflow exists
+                logger.debug(f"Model {model_name} found in registry without file info, marking as healthy")
+                health = ModelHealth(
+                    model_name=model_name,
+                    status=ModelStatus.HEALTHY,
+                    present_files=["registry/validated"],
+                )
+                self._health_cache[model_name] = health
+                return health
         except Exception as e:
             logger.debug(f"Could not get blockchain info for {model_name}: {e}")
+        
+        # Check if this is a known alias - if so, check canonical name first
+        try:
+            from comfy_bridge.modelvault_client import MODEL_NAME_ALIASES
+            canonical_name = MODEL_NAME_ALIASES.get(model_name.lower())
+            if canonical_name and canonical_name != model_name:
+                # Recursively check canonical name
+                canonical_health = self.check_model_by_name(canonical_name)
+                if canonical_health.is_healthy or canonical_health.can_serve:
+                    # Alias inherits health from canonical model
+                    health = ModelHealth(
+                        model_name=model_name,
+                        status=canonical_health.status,
+                        missing_files=canonical_health.missing_files,
+                        present_files=canonical_health.present_files,
+                    )
+                    self._health_cache[model_name] = health
+                    return health
+        except Exception as e:
+            logger.debug(f"Could not check alias for {model_name}: {e}")
         
         # Fallback: check for common checkpoint patterns
         common_patterns = [
@@ -302,21 +351,43 @@ class ModelHealthChecker:
             f"{model_name}.ckpt",
             f"{model_name.lower()}.safetensors",
             f"{model_name.replace(' ', '_').lower()}.safetensors",
+            # Also check normalized patterns (dots/hyphens -> underscores)
+            f"{model_name.replace('.', '_').replace('-', '_').lower()}.safetensors",
         ]
         
         for pattern in common_patterns:
             if self.find_file(pattern):
-                return ModelHealth(
+                health = ModelHealth(
                     model_name=model_name,
                     status=ModelStatus.HEALTHY,
                     present_files=[f"checkpoint/{pattern}"],
                 )
+                self._health_cache[model_name] = health
+                return health
         
-        return ModelHealth(
+        # Check if this model has a valid workflow (trust workflow validation)
+        try:
+            from comfy_bridge.model_mapper import get_workflow_validated_models
+            workflow_validated = get_workflow_validated_models()
+            if model_name in workflow_validated:
+                logger.debug(f"Model {model_name} has valid workflow, marking as healthy")
+                health = ModelHealth(
+                    model_name=model_name,
+                    status=ModelStatus.HEALTHY,
+                    present_files=["workflow/validated"],
+                )
+                self._health_cache[model_name] = health
+                return health
+        except Exception as e:
+            logger.debug(f"Could not check workflow validation for {model_name}: {e}")
+        
+        health = ModelHealth(
             model_name=model_name,
             status=ModelStatus.MISSING,
             error_message="Model checkpoint not found",
         )
+        self._health_cache[model_name] = health
+        return health
     
     def get_worker_health(self) -> WorkerHealth:
         """Get overall health status for all advertised models."""

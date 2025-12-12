@@ -136,7 +136,7 @@ class ComfyUIBridge:
                 logger.info(f"Available models fetched: {list(available_models.keys())} loader types")
                 if available_models:
                     logger.info("Validating and fixing model filenames in workflow...")
-                    workflow = await validate_and_fix_model_filenames(workflow, available_models)
+                    workflow = await validate_and_fix_model_filenames(workflow, available_models, job_model_name=model_name)
                     logger.info("Model validation completed")
                 else:
                     logger.warning("Could not fetch available models - skipping validation")
