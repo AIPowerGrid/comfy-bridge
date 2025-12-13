@@ -32,9 +32,6 @@ class JobPoller:
         while True:
             elapsed = time.time() - start_time
             
-            if elapsed > self.max_wait_time:
-                raise TimeoutError(f"Job timed out after {self.max_wait_time}s")
-            
             # Show progress periodically
             if not Settings.DEBUG and int(elapsed) % 30 == 0 and int(elapsed) > 0:
                 logger.info(f"Processing... ({elapsed:.0f}s)")
