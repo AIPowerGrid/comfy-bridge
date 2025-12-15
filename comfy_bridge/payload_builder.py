@@ -82,6 +82,9 @@ class PayloadBuilder:
             "media_type": media_type
         }
         
+        # Debug: log payload details (without the large base64)
+        logger.info(f"DEBUG payload: id={job_id}, seed={payload['seed']}, media_type={media_type}, b64_len={len(b64)}")
+        
         # Add video-specific parameters if needed
         if media_type == "video":
             original_filename = self._ensure_mp4_extension(filename, job_id)
