@@ -131,9 +131,23 @@ class APIClient:
 
         for attempt in range(max_retries):
             try:
+                # Log what we're sending
+                payload_debug = {k: v for k, v in payload.items() if k != "generation"}
+                payload_debug["generation_length"] = len(payload.get("generation", ""))
+                logger.info(f"DEBUG submit payload: {json.dumps(payload_debug)}")
+                
                 response = await self.client.post(
                     "/v2/generate/submit", headers=self.headers, json=payload
                 )
+                
+                # Log the response
+                logger.info(f"DEBUG submit response status: {response.status_code}")
+                try:
+                    resp_json = response.json()
+                    logger.info(f"DEBUG submit response body: {json.dumps(resp_json)}")
+                except:
+                    logger.info(f"DEBUG submit response text: {response.text[:500]}")
+                
                 response.raise_for_status()
 
                 # Clean up job cache
