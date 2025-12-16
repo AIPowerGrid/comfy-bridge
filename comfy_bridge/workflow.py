@@ -177,7 +177,16 @@ async def validate_and_fix_model_filenames(
                         clip2_options = [m for m in clip2_options if is_model_compatible(m, "flux")]
                     
                     if not clip1_options:
-                        logger.debug("No clip_name1 options available for DualCLIPLoader - keeping existing value")
+                        # If workflow requires DualCLIPLoader but no compatible models are available, fail
+                        current_clip1 = widgets[0] if len(widgets) > 0 else "unknown"
+                        all_dual_clip = available_models.get("DualCLIPLoader", {})
+                        all_clip1 = all_dual_clip.get("clip_name1", []) if isinstance(all_dual_clip, dict) else []
+                        raise ValueError(
+                            f"Required DualCLIPLoader clip_name1 '{current_clip1}' is not available. "
+                            f"No compatible clip_name1 models found in ComfyUI for {model_type} workflow. "
+                            f"Available clip_name1 models: {all_clip1}. "
+                            f"Please ensure required model files are installed in the ComfyUI models directory."
+                        )
                     elif widgets[0] not in clip1_options:
                         old_clip1 = widgets[0]
                         widgets[0] = clip1_options[0]
@@ -185,7 +194,16 @@ async def validate_and_fix_model_filenames(
                     
                     if len(widgets) >= 2:
                         if not clip2_options:
-                            logger.debug("No clip_name2 options available for DualCLIPLoader - keeping existing value")
+                            # If workflow requires DualCLIPLoader but no compatible models are available, fail
+                            current_clip2 = widgets[1] if len(widgets) > 1 else "unknown"
+                            all_dual_clip = available_models.get("DualCLIPLoader", {})
+                            all_clip2 = all_dual_clip.get("clip_name2", []) if isinstance(all_dual_clip, dict) else []
+                            raise ValueError(
+                                f"Required DualCLIPLoader clip_name2 '{current_clip2}' is not available. "
+                                f"No compatible clip_name2 models found in ComfyUI for {model_type} workflow. "
+                                f"Available clip_name2 models: {all_clip2}. "
+                                f"Please ensure required model files are installed in the ComfyUI models directory."
+                            )
                         elif widgets[1] not in clip2_options:
                             old_clip2 = widgets[1]
                             widgets[1] = clip2_options[0]
@@ -201,7 +219,15 @@ async def validate_and_fix_model_filenames(
                         unet_options = [m for m in unet_options if is_model_compatible(m, "flux")]
                     
                     if not unet_options:
-                        logger.debug("No UNETLoader options available - keeping existing value")
+                        # If workflow requires UNETLoader but no compatible models are available, fail
+                        current_unet = widgets[0] if len(widgets) > 0 else "unknown"
+                        all_unet_models = available_models.get("UNETLoader", [])
+                        raise ValueError(
+                            f"Required UNETLoader model '{current_unet}' is not available. "
+                            f"No compatible UNETLoader models found in ComfyUI for {model_type} workflow. "
+                            f"Available UNETLoader models: {all_unet_models}. "
+                            f"Please ensure required model files are installed in the ComfyUI models directory."
+                        )
                     elif widgets[0] not in unet_options:
                         old_unet = widgets[0]
                         widgets[0] = unet_options[0]
@@ -216,7 +242,15 @@ async def validate_and_fix_model_filenames(
                         vae_options = [m for m in vae_options if is_model_compatible(m, "flux")]
                     
                     if not vae_options:
-                        logger.debug("No VAELoader options available - keeping existing value")
+                        # If workflow requires VAELoader but no compatible models are available, fail
+                        current_vae = widgets[0] if len(widgets) > 0 else "unknown"
+                        all_vae_models = available_models.get("VAELoader", [])
+                        raise ValueError(
+                            f"Required VAELoader model '{current_vae}' is not available. "
+                            f"No compatible VAELoader models found in ComfyUI for {model_type} workflow. "
+                            f"Available VAELoader models: {all_vae_models}. "
+                            f"Please ensure required model files are installed in the ComfyUI models directory."
+                        )
                     elif widgets[0] not in vae_options:
                         old_vae = widgets[0]
                         widgets[0] = vae_options[0]
@@ -250,7 +284,15 @@ async def validate_and_fix_model_filenames(
                 if "clip_name1" in inputs:
                     current_clip1 = inputs.get("clip_name1")
                     if not clip1_options:
-                        logger.debug("No clip_name1 options available for DualCLIPLoader – keeping workflow value")
+                        # If workflow requires DualCLIPLoader but no compatible models are available, fail
+                        all_dual_clip = available_models.get("DualCLIPLoader", {})
+                        all_clip1 = all_dual_clip.get("clip_name1", []) if isinstance(all_dual_clip, dict) else []
+                        raise ValueError(
+                            f"Required DualCLIPLoader clip_name1 '{current_clip1}' is not available. "
+                            f"No compatible clip_name1 models found in ComfyUI for {model_type} workflow. "
+                            f"Available clip_name1 models: {all_clip1}. "
+                            f"Please ensure required model files are installed in the ComfyUI models directory."
+                        )
                     elif current_clip1 not in clip1_options:
                         new_clip1 = clip1_options[0]
                         logger.warning(
@@ -264,7 +306,15 @@ async def validate_and_fix_model_filenames(
                 if "clip_name2" in inputs:
                     current_clip2 = inputs.get("clip_name2")
                     if not clip2_options:
-                        logger.debug("No clip_name2 options available for DualCLIPLoader – keeping workflow value")
+                        # If workflow requires DualCLIPLoader but no compatible models are available, fail
+                        all_dual_clip = available_models.get("DualCLIPLoader", {})
+                        all_clip2 = all_dual_clip.get("clip_name2", []) if isinstance(all_dual_clip, dict) else []
+                        raise ValueError(
+                            f"Required DualCLIPLoader clip_name2 '{current_clip2}' is not available. "
+                            f"No compatible clip_name2 models found in ComfyUI for {model_type} workflow. "
+                            f"Available clip_name2 models: {all_clip2}. "
+                            f"Please ensure required model files are installed in the ComfyUI models directory."
+                        )
                     elif current_clip2 not in clip2_options:
                         new_clip2 = clip2_options[0]
                         logger.warning(
@@ -288,7 +338,14 @@ async def validate_and_fix_model_filenames(
                 if "unet_name" in inputs:
                     current_unet = inputs.get("unet_name")
                     if not unet_options:
-                        logger.debug("No UNETLoader options available – keeping workflow value")
+                        # If workflow requires UNETLoader but no compatible models are available, fail
+                        all_unet_models = available_models.get("UNETLoader", [])
+                        raise ValueError(
+                            f"Required UNETLoader model '{current_unet}' is not available. "
+                            f"No compatible UNETLoader models found in ComfyUI for {model_type} workflow. "
+                            f"Available UNETLoader models: {all_unet_models}. "
+                            f"Please ensure required model files are installed in the ComfyUI models directory."
+                        )
                     elif current_unet not in unet_options:
                         # Try to find matching model based on job model name
                         new_unet = None
@@ -328,7 +385,14 @@ async def validate_and_fix_model_filenames(
                 if "vae_name" in inputs:
                     current_vae = inputs.get("vae_name")
                     if not vae_options:
-                        logger.debug("No VAELoader options available – keeping workflow value")
+                        # If workflow requires VAELoader but no compatible models are available, fail
+                        all_vae_models = available_models.get("VAELoader", [])
+                        raise ValueError(
+                            f"Required VAELoader model '{current_vae}' is not available. "
+                            f"No compatible VAELoader models found in ComfyUI for {model_type} workflow. "
+                            f"Available VAELoader models: {all_vae_models}. "
+                            f"Please ensure required model files are installed in the ComfyUI models directory."
+                        )
                     elif current_vae not in vae_options:
                         new_vae = vae_options[0]
                         logger.warning(
@@ -360,7 +424,13 @@ async def validate_and_fix_model_filenames(
                     is_placeholder = current_ckpt in placeholders
                     
                     if not full_ckpt_options:
-                        logger.warning(f"No CheckpointLoaderSimple options available – cannot fix placeholder '{current_ckpt}'")
+                        # If workflow requires CheckpointLoaderSimple but no compatible models are available, fail
+                        raise ValueError(
+                            f"Required CheckpointLoaderSimple checkpoint '{current_ckpt}' is not available. "
+                            f"No compatible checkpoint models found in ComfyUI for {model_type} workflow. "
+                            f"Available checkpoint models: {ckpt_options}. "
+                            f"Please ensure required model files are installed in the ComfyUI models directory."
+                        )
                     elif is_placeholder or current_ckpt not in ckpt_options:
                         # Try to find best matching checkpoint based on job model name
                         new_ckpt = None
