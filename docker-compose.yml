@@ -6,6 +6,8 @@ services:
           dockerfile: Dockerfile
           # BuildKit cache mounts persist npm packages and Next.js build cache
           # Enable BuildKit for cache mounts (default in Docker Desktop)
+          args:
+            BUILD_ELECTRON: ${BUILD_ELECTRON:-true}  # Set to false to skip Electron build
         container_name: comfy-bridge-ui
         
         deploy:
@@ -44,6 +46,8 @@ services:
           - //var/run/docker.sock:/var/run/docker.sock
           # Share docker-compose.yml for restarts
           - ./docker-compose.yml:/app/comfy-bridge/docker-compose.yml:ro
+          # Electron build output (accessible from host)
+          - ./management-ui-nextjs/dist:/app/dist
         
         restart: unless-stopped
         healthcheck:
@@ -64,6 +68,14 @@ services:
       # This dramatically speeds up rebuilds (PyTorch wheels ~900MB cached)
       # To force a clean rebuild: DOCKER_BUILDKIT=1 docker-compose build --no-cache comfy-bridge
       # Enable BuildKit for cache mounts (default in Docker Desktop)
+      args:
+        # Pass model configuration as build args to download models during image build
+        GRID_MODEL: ${GRID_MODEL:-}
+        WORKFLOW_FILE: ${WORKFLOW_FILE:-}
+        MODELVAULT_CONTRACT: ${MODELVAULT_CONTRACT:-0xe660455D4A83bbbbcfDCF4219ad82447a831c8A1}
+        MODELVAULT_RPC: ${MODELVAULT_RPC:-https://sepolia.base.org}
+        HUGGING_FACE_API_KEY: ${HUGGING_FACE_API_KEY:-}
+        CIVITAI_API_KEY: ${CIVITAI_API_KEY:-}
     container_name: comfy-bridge
     
     deploy:

@@ -61,11 +61,35 @@ from comfy_bridge.modelvault_client import (
 
 # Import fallback catalog
 try:
-    from model_catalog import get_catalog_model, CatalogModel
+    from model_catalog import get_catalog_model, CatalogModel, MODEL_CATALOG
     CATALOG_AVAILABLE = True
-except ImportError:
+    # Debug: Verify catalog is loaded
+    catalog_size = len(MODEL_CATALOG) if MODEL_CATALOG else 0
+    if catalog_size == 0:
+        print(f"[WARN] MODEL_CATALOG is empty! This indicates an import or initialization issue.")
+        # Try importing the sub-dictionaries to see if they exist
+        try:
+            from model_catalog import WAN_MODELS, FLUX_MODELS
+            wan_size = len(WAN_MODELS) if WAN_MODELS else 0
+            flux_size = len(FLUX_MODELS) if FLUX_MODELS else 0
+            print(f"[DEBUG] WAN_MODELS size: {wan_size}, FLUX_MODELS size: {flux_size}")
+        except ImportError as e:
+            print(f"[DEBUG] Could not import WAN_MODELS/FLUX_MODELS: {e}")
+    elif "wan2.2_ti2v_5B" not in MODEL_CATALOG:
+        # Log available keys for debugging
+        wan_keys = [k for k in MODEL_CATALOG.keys() if 'wan2' in k.lower() or 'wan' in k.lower()]
+        all_keys = list(MODEL_CATALOG.keys())[:10]  # First 10 keys
+        print(f"[DEBUG] wan2.2_ti2v_5B not in catalog. Catalog size: {catalog_size}")
+        print(f"[DEBUG] Available WAN keys: {wan_keys}")
+        print(f"[DEBUG] Sample catalog keys: {all_keys}")
+except ImportError as e:
     CATALOG_AVAILABLE = False
-    print("[INFO] Fallback model catalog not available")
+    print(f"[INFO] Fallback model catalog not available: {e}")
+except Exception as e:
+    CATALOG_AVAILABLE = False
+    print(f"[ERROR] Error loading catalog: {e}")
+    import traceback
+    traceback.print_exc()
 
 
 def normalize_model_folder(file_type: str) -> str:
@@ -509,11 +533,61 @@ def download_models_from_chain(
     if CATALOG_AVAILABLE:
         for model in list(models_to_download):
             if not model.files:
+                emit_progress(0, message=f"[CATALOG] Checking fallback catalog for '{model.display_name}' (no blockchain files)...")
                 catalog_model = get_catalog_model(model.display_name)
+                found_in_catalog = False
+                
                 if catalog_model:
-                    emit_progress(0, message=f"  ✓ Using catalog files for '{model.display_name}' (no blockchain URLs)")
+                    emit_progress(0, message=f"  ✓ Found '{model.display_name}' in catalog, using catalog download URLs")
                     models_to_download.remove(model)
                     catalog_downloads.append((model.display_name, catalog_model))
+                    found_in_catalog = True
+                else:
+                    # Try alternative name variations (common patterns for WAN models)
+                    # IMPORTANT: Try the exact catalog key FIRST for best performance
+                    name_variations = [
+                        "wan2.2_ti2v_5B",  # Direct catalog key - try FIRST
+                        model.display_name.replace('_', '.'),  # wan2_2_ti2v_5B -> wan2.2.ti2v.5B
+                        model.display_name.replace('_', '-'),  # wan2_2_ti2v_5B -> wan2-2-ti2v-5B
+                        model.display_name.replace('.', '_'),  # wan2.2_ti2v_5B -> wan2_2_ti2v_5B
+                        model.display_name.replace('.', '-'),  # wan2.2_ti2v_5B -> wan2-2-ti2v-5B
+                        model.display_name.lower(),           # wan2_2_ti2v_5B -> wan2_2_ti2v_5b
+                        # Try with dots instead of underscores for numbers
+                        model.display_name.replace('_2_', '.2.').replace('_', '.'),  # wan2_2_ti2v_5B -> wan2.2.ti2v.5B
+                        model.display_name.replace('_2_', '-2-').replace('_', '-'),  # wan2_2_ti2v_5B -> wan2-2-ti2v-5B
+                        # Try normalized versions
+                        model.display_name.replace('_', '.').replace('-', '.').lower(),  # wan2_2_ti2v_5B -> wan2.2.ti2v.5b
+                        "wan2.2-ti2v-5B",  # Hyphen variant
+                    ]
+                    # Remove duplicates and the original
+                    name_variations = list(dict.fromkeys([v for v in name_variations if v != model.display_name]))
+                    
+                    for variant in name_variations:
+                        catalog_model = get_catalog_model(variant)
+                        if catalog_model:
+                            emit_progress(0, message=f"  ✓ Found '{model.display_name}' in catalog as '{variant}'")
+                            models_to_download.remove(model)
+                            catalog_downloads.append((model.display_name, catalog_model))
+                            found_in_catalog = True
+                            break
+                        # Debug: Check if exact key exists
+                        if variant == "wan2.2_ti2v_5B":
+                            try:
+                                from model_catalog import MODEL_CATALOG
+                                if variant in MODEL_CATALOG:
+                                    emit_progress(0, message=f"  [DEBUG] Key '{variant}' exists in MODEL_CATALOG")
+                                else:
+                                    available_keys = [k for k in MODEL_CATALOG.keys() if 'wan2' in k.lower()]
+                                    emit_progress(0, message=f"  [DEBUG] Key '{variant}' NOT in MODEL_CATALOG. Available WAN keys: {available_keys}")
+                            except Exception as e:
+                                emit_progress(0, message=f"  [DEBUG] Error checking catalog: {e}")
+                
+                if not found_in_catalog:
+                    # Show which variations were tried (if we have them)
+                    tried_variations = name_variations if 'name_variations' in locals() else []
+                    emit_progress(0, message=f"  ✗ '{model.display_name}' not found in catalog", msg_type="warning")
+                    if tried_variations:
+                        emit_progress(0, message=f"    Tried variations: {', '.join(tried_variations[:5])}...", msg_type="warning")
     
     emit_progress(0, message=f"[DOWNLOAD] {len(models_to_download) + len(catalog_downloads)} model(s) to process:")
     for m in models_to_download:

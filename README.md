@@ -45,20 +45,20 @@
 3. ▶️ **Right-click** and **"Run as Administrator"** the start script:
    - **Windows**: `start-worker.bat` (right-click → Run as Administrator)
    - **Mac/Linux**: `sudo ./start-worker.sh`
-4. ⏳ **Plan 45–60 minutes for the very first run.** Docker pulls, dependency installs, and the desktop app build all happen automatically—later launches are fast.
+4. ⏳ **Plan 45–60 minutes for the very first run.** Docker pulls, dependency installs, model downloads, and the desktop app build all happen automatically—later launches are fast.
 5. ✨ **That's it!** The script automatically:
    - ✅ Checks all requirements (disk space, Docker, etc.)
    - ✅ Starts Docker containers
+   - ✅ Downloads models listed in `.env` during image build
+   - ✅ Builds the desktop app automatically
    - ✅ Cleans up stale Docker volumes so upgrades stay reliable
-   - ✅ Builds the desktop app (if Node.js is installed)
-   - ✅ Creates a desktop shortcut for easy access
-6. 🖥️ **Desktop app shortcut** will appear on your desktop automatically!
+6. 🖥️ **Desktop app** is built automatically and available in `management-ui-nextjs/dist/`
 7. 🎨 Open the desktop app OR http://localhost:5000 in your browser
 8. 💰 Click "Start Hosting" → You're earning!
 
-> 💡 **No Node.js?** The script skips the desktop app build, tells you why, and keeps the worker online. Install Node later and rerun the script to add the app.
+> 💡 **Desktop App:** The Electron app is built automatically during Docker build - no Node.js needed on your host! Find it in `management-ui-nextjs/dist/` after building.
 
-> ⚡ **Pro Tip:** The script does everything automatically - just run it as admin and you're done! The desktop app shortcut makes it super easy to manage your worker.
+> ⚡ **Pro Tip:** Everything happens automatically - Docker builds the desktop app, downloads models, and sets everything up. Just run the script and you're done!
 
 ---
 
@@ -87,7 +87,82 @@ Join thousands of GPU owners helping build a decentralized AI network. Make AI g
 | 🔒 **Secure** | Your API keys stay private, never shared |
 | 📊 **Real-time Dashboard** | Track earnings and performance live |
 | 🌐 **Decentralized** | Support the open AI network |
-| ⚡ **Easy Management** | Web UI makes everything simple |
+| ⚡ **Easy Management** | Web UI and desktop app make everything simple |
+| 🖥️ **Desktop App** | Native desktop application built automatically during Docker build |
+
+---
+
+## 🖥️ Desktop App (Electron)
+
+**The Electron desktop app is automatically built during Docker image build!** No manual setup required - it's ready to use right after `docker-compose build`.
+
+### ✨ Automatic Build (Recommended)
+
+When you run `docker-compose build`, the Electron desktop app is built automatically:
+
+```bash
+# Build everything including Electron app
+docker-compose build
+
+# The built app is available at:
+# management-ui-nextjs/dist/
+```
+
+**What you get:**
+- ✅ **Built automatically** - No manual steps needed
+- ✅ **Ready to use** - Available in `management-ui-nextjs/dist/` after build
+- ✅ **Platform-specific** - Built for your container platform (Linux)
+- ✅ **Skip if needed** - Set `BUILD_ELECTRON=false` to skip
+
+**To skip Electron build:**
+```bash
+# Option 1: Environment variable
+BUILD_ELECTRON=false docker-compose build
+
+# Option 2: Add to .env file
+echo "BUILD_ELECTRON=false" >> .env
+```
+
+### 📦 Finding Your Built App
+
+After building, check the `dist/` directory:
+- **Linux**: `dist/linux-unpacked/` or `dist/*.AppImage` or `dist/*.deb`
+- **Windows/Mac**: Build on those platforms or use manual build scripts below
+
+### 🛠️ Manual Build (Optional)
+
+If you need to build manually outside Docker or for a different platform:
+
+**Prerequisites:**
+- Node.js 18+ installed
+- Docker containers running (app connects to `http://localhost:5000`)
+
+**Quick build:**
+```bash
+cd management-ui-nextjs
+npm install
+npm run electron:build    # Production build
+# OR
+npm run electron:pack     # Portable build (Windows)
+```
+
+**Development mode:**
+```bash
+npm run electron:dev      # Auto-reloads on code changes
+```
+
+### 🚀 Launching the App
+
+**From Docker build:**
+- Navigate to `management-ui-nextjs/dist/`
+- Run the executable for your platform
+- App connects to `http://localhost:5000` automatically
+
+**Features:**
+- ✅ Native window controls and system integration
+- ✅ No browser needed - standalone application
+- ✅ Better performance and offline capability
+- ✅ Same functionality as web interface
 
 ---
 
@@ -305,6 +380,37 @@ CIVITAI_API_KEY=your_civitai_token
 
 > 💡 These API keys are optional but can significantly speed up model downloads from Hugging Face and Civitai.
 
+### Download Models During Build 🏗️
+
+**Models listed in your `.env` file are automatically downloaded during the Docker image build!**
+
+This means:
+- ✅ Models are ready immediately when containers start (no waiting at runtime)
+- ✅ Faster container startup times
+- ✅ Models are baked into the image for consistent deployments
+
+**How it works:**
+1. Add models to your `.env` file:
+   ```bash
+   GRID_MODEL=FLUX.1-dev,SDXL,SD-1.5
+   # OR
+   WORKFLOW_FILE=flux.1_krea_dev.json,sdxl1.json
+   ```
+
+2. Rebuild the Docker image:
+   ```bash
+   docker-compose build --no-cache comfy-bridge
+   ```
+
+3. Models will be downloaded during the build process
+
+**Note:** If you add models to `.env` after the image is built, they'll be downloaded at runtime when the container starts. To download during build, rebuild the image with the updated `.env` file.
+
+**Build-time vs Runtime downloads:**
+- **Build-time**: Models are in the Docker image, faster container startup
+- **Runtime**: Models are downloaded when container starts (if not in image or .env changed)
+- Both methods work - choose based on your workflow!
+
 ### Custom Ports 🔌
 
 Edit `docker-compose.yml` to change ports if needed:
@@ -432,50 +538,6 @@ A: Yes! Use the ComfyUI interface at http://localhost:8188 to test models before
 
 **Q: Why are some models not available?**  
 A: Models may require more VRAM than your GPU has, or may not be supported yet. Check GPU requirements table above.
-
----
-
-## 🖥️ Desktop App
-
-**Automatic Setup:** The desktop app is automatically built and a shortcut is created on your desktop when you run the start script (`start-worker.bat` or `start-worker.sh`). No manual setup required!
-
-**Manual Building (if needed):**
-
-If you need to rebuild the desktop app manually:
-
-1. Navigate to the management UI directory:
-   ```bash
-   cd management-ui-nextjs
-   ```
-
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-
-3. Build the Electron app:
-   ```bash
-   npm run electron:build
-   ```
-
-4. Find the installer in the `dist/` directory:
-   - **Windows**: `.exe` installer or portable `.exe`
-   - **macOS**: `.dmg` disk image
-   - **Linux**: `.AppImage` or `.deb` package
-
-**Development Mode:**
-
-Run the app in development mode (connects to localhost:5000):
-```bash
-npm run electron:dev
-```
-
-The desktop app provides the same functionality as the web interface but with:
-- ✅ Native window controls
-- ✅ No browser needed
-- ✅ Better integration with your system
-- ✅ Desktop shortcut for easy access
-- ✅ Automatic creation during worker setup
 
 ---
 

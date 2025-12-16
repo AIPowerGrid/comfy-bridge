@@ -5,6 +5,11 @@ echo "================================================"
 echo "  ComfyUI Bridge - Blockchain Model Registry"
 echo "================================================"
 
+# Note: Models downloaded during build are in the image at /app/ComfyUI/models
+# When the volume is mounted, if it's empty, the image contents are visible
+# If the volume has files, those take precedence
+# Runtime downloads will add to whatever is in the volume
+
 # Function to download required models FROM BLOCKCHAIN
 download_models() {
     echo "Downloading models from blockchain registry..."
