@@ -109,12 +109,53 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 COPY docker-entrypoint.sh /app/
 RUN sed -i 's/\r$//' /app/docker-entrypoint.sh && chmod +x /app/docker-entrypoint.sh
 
+# Build arguments for model configuration (must be declared before use)
+ARG GRID_MODEL=""
+ARG WORKFLOW_FILE=""
+ARG MODELVAULT_CONTRACT=""
+ARG MODELVAULT_RPC=""
+ARG HUGGING_FACE_API_KEY=""
+ARG CIVITAI_API_KEY=""
+
 # Install PyTorch 2.9.1 with CUDA 12.8 for Blackwell GPU support (sm_120)
 # Use cache mount for pip to persist PyTorch wheels (900MB+ download)
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip3 uninstall -y torch torchvision torchaudio 2>/dev/null || true && \
     pip3 install --upgrade --force-reinstall --index-url https://download.pytorch.org/whl/cu128 torch==2.9.1 torchvision==0.24.1 torchaudio==2.9.1 && \
-    python3 -c "import torch, torchvision, torchaudio; print(f'PyTorch {torch.__version__} installed for CUDA {torch.version.cuda}'); print(f'torchvision {torchvision.__version__}'); print(f'torchaudio {torchaudio.__version__}')" 
+    python3 -c "import torch, torchvision, torchaudio; print(f'PyTorch {torch.__version__} installed for CUDA {torch.version.cuda}'); print(f'torchvision {torchvision.__version__}'); print(f'torchaudio {torchaudio.__version__}')"
+
+# Download models during build if GRID_MODEL or WORKFLOW_FILE is provided
+# Models are downloaded to /app/ComfyUI/models in the image
+# At runtime, bind mounts will show image contents if volume is empty
+RUN if [ -n "$GRID_MODEL" ] || [ -n "$WORKFLOW_FILE" ]; then \
+        echo "================================================" && \
+        echo "  Downloading models during image build..." && \
+        echo "================================================" && \
+        cd /app/comfy-bridge && \
+        python3 -c "import os, sys; \
+from download_models_from_chain import download_models_from_chain; \
+parse_model_env = lambda raw: [t.strip() for t in (raw.split(',') if ',' in raw else raw.split()) if t.strip()] if raw else []; \
+grid_env = os.environ.get('GRID_MODEL', ''); \
+workflow_env = os.environ.get('WORKFLOW_FILE', ''); \
+requested_models = parse_model_env(grid_env) or parse_model_env(workflow_env); \
+if not requested_models: \
+    print('No models configured in GRID_MODEL or WORKFLOW_FILE build args'); \
+    print('Models will be downloaded at runtime if configured in .env file'); \
+    sys.exit(0); \
+print(f\"Downloading models during build: {', '.join(requested_models)}\"); \
+success = download_models_from_chain(requested_models, '/app/ComfyUI/models'); \
+if success: \
+    print('Model download completed successfully during build'); \
+else: \
+    print('Some models may not have download URLs registered'); \
+    print('These models will need to be downloaded at runtime'); \
+sys.exit(0)" || true && \
+        echo "Model download step completed" && \
+        echo "================================================"; \
+    else \
+        echo "No models specified in build args (GRID_MODEL or WORKFLOW_FILE)"; \
+        echo "Models will be downloaded at runtime if configured in .env file"; \
+    fi
 
 # Create non-root user
 RUN groupadd --gid 1000 aiworker && \

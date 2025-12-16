@@ -13,6 +13,22 @@ RUN --mount=type=cache,target=/root/.npm \
 
 # Rebuild the source code only when needed
 FROM base AS builder
+# Install Electron build dependencies if needed
+ARG BUILD_ELECTRON=true
+RUN if [ "$BUILD_ELECTRON" = "true" ]; then \
+        apk add --no-cache \
+            python3 \
+            make \
+            g++ \
+            libx11-dev \
+            libxext-dev \
+            libxss-dev \
+            libgconf-2-4 \
+            libxtst6 \
+            libxrandr2 \
+            alsa-lib \
+            || echo "Some Electron build dependencies may be missing"; \
+    fi
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -20,6 +36,16 @@ COPY . .
 # Build Next.js app with cache mount for .next/cache
 RUN --mount=type=cache,target=/app/.next/cache \
     npm run build
+
+# Build Electron app (optional - can be skipped if BUILD_ELECTRON=false)
+RUN if [ "$BUILD_ELECTRON" = "true" ]; then \
+        echo "Building Electron desktop app..." && \
+        npm run electron:compile && \
+        CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --dir --linux || \
+        (echo "Electron build failed or skipped (may require platform-specific dependencies)" && true); \
+    else \
+        echo "Skipping Electron build (BUILD_ELECTRON=false)"; \
+    fi
 
 # Production image, copy all the files and run next
 FROM base AS runner
@@ -45,6 +71,8 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 # Copy public assets (logo, favicon)
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+# Copy Electron build output (if built)
+COPY --from=builder --chown=nextjs:nodejs /app/dist ./dist
 
 # Create cache directory with correct permissions
 RUN mkdir -p /app/.next/cache && chown -R nextjs:nodejs /app/.next/cache

@@ -76,7 +76,9 @@
       "target": [
         "dir"
       ],
-      "icon": "public/aipg.ico"
+      "icon": "public/aipg.ico",
+      "sign": null,
+      "signingHashAlgorithms": []
     },
     "linux": {
       "target": [
