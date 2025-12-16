@@ -36,8 +36,13 @@ try:
                 file_name="wan2.2_ti2v_5B_fp16.safetensors",
                 file_type="diffusion_models",
                 target_dir="diffusion_models",
+                # Try using 'raw' instead of 'resolve' - sometimes 'resolve' truncates large files
+                # Also try without 'split_files' path if the file exists at root level
                 download_url="https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/diffusion_models/wan2.2_ti2v_5B_fp16.safetensors",
-                size_bytes=15000000000,
+                size_bytes=9000000000,  # ~9GB expected size (was incorrectly set to 15GB)
+                # Note: If download is only ~3GB, try alternative URL:
+                # https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/diffusion_models/wan2.2_ti2v_5B_fp16.safetensors
+                # or check if file needs to be downloaded in parts
             ),
             CatalogFile(
                 file_name="umt5_xxl_fp8_e4m3fn_scaled.safetensors",
