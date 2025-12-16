@@ -183,6 +183,14 @@ def download_file(
                 separator = '&' if '?' in url else '?'
                 url = f"{url}{separator}token={civitai_key}"
         
+        # For HuggingFace, try using 'raw' endpoint if 'resolve' fails or gives wrong size
+        # Some HuggingFace repos serve incomplete files via 'resolve' for large files
+        original_url = url
+        if 'huggingface.co' in url and '/resolve/' in url:
+            # Try alternative: replace 'resolve' with 'raw' for more reliable downloads
+            # But keep resolve as primary since it's more common
+            pass
+        
         response = requests.get(url, headers=request_headers, stream=True, timeout=300, allow_redirects=True)
         response.raise_for_status()
         
@@ -192,6 +200,16 @@ def download_file(
             return False, "Received HTML instead of file - check if API key is required (set CIVITAI_API_KEY for CivitAI)"
         
         total_size = int(response.headers.get('content-length', 0))
+        
+        # Log expected size for debugging
+        if total_size > 0:
+            print(f"[INFO] Expected file size from server: {total_size / 1e9:.2f}GB")
+            # Warn if server reports a suspiciously small size for a large model file
+            if total_size < 5_000_000_000 and 'wan2' in filepath.name.lower() and 'ti2v' in filepath.name.lower():
+                print(f"[WARN] Server reports file size of only {total_size / 1e9:.2f}GB - this may be incomplete!")
+                print(f"[WARN] Expected ~9GB for wan2.2_ti2v_5B model. The URL may be incorrect or file may be split.")
+        else:
+            print(f"[WARN] Server did not provide content-length header - cannot verify download completeness")
         
         # Sanity check - model files should be at least 1MB
         if total_size > 0 and total_size < 1_000_000:
@@ -213,9 +231,16 @@ def download_file(
                         progress_callback(progress, downloaded, total_size, speed, eta)
         
         if total_size > 0 and downloaded != total_size:
-            print(f"[ERROR] Download incomplete: expected {total_size} bytes, got {downloaded}")
+            print(f"[ERROR] Download incomplete: expected {total_size} bytes ({total_size / 1e9:.2f}GB), got {downloaded} bytes ({downloaded / 1e9:.2f}GB)")
             filepath.unlink(missing_ok=True)
-            return False, "Incomplete download"
+            return False, f"Incomplete download: expected {total_size / 1e9:.2f}GB, got {downloaded / 1e9:.2f}GB"
+        
+        # Additional verification: if content-length was 0 or missing, verify file size is reasonable
+        # Large model files should be at least 100MB
+        if total_size == 0 and downloaded < 100_000_000:
+            print(f"[ERROR] Downloaded file is suspiciously small: {downloaded} bytes ({downloaded / 1e6:.2f}MB)")
+            filepath.unlink(missing_ok=True)
+            return False, f"Downloaded file too small: {downloaded / 1e6:.2f}MB (expected large model file)"
         
         # Verify hash if provided
         if expected_hash and len(expected_hash) == 64:
@@ -421,12 +446,81 @@ def download_model_from_catalog(
             emit_progress(0, message=f"  [{idx}/{total_files}] {file_name} - NO URL", msg_type="warning")
             continue
         
+        # For HuggingFace URLs, prepare alternative URLs in case primary fails or gives wrong size
+        alternative_urls = []
+        if 'huggingface.co' in download_url:
+            # Extract repo and file path
+            if '/resolve/' in download_url:
+                parts = download_url.split('/resolve/')
+                if len(parts) == 2:
+                    repo_part = parts[0]
+                    file_part = parts[1]
+                    # Try without 'split_files' path if present
+                    if 'split_files' in file_part:
+                        alt_file_part = file_part.replace('/split_files', '')
+                        alternative_urls.append(f"{repo_part}/resolve/{alt_file_part}")
+                    # Try with 'raw' instead of 'resolve' (sometimes more reliable for large files)
+                    alternative_urls.append(f"{repo_part}/raw/{file_part}")
+        
         success, error = download_file(download_url, target_path, progress_callback=emit_progress)
         
+        # If download succeeded but file size is wrong, try alternatives
+        if success and file_info.size_bytes > 0:
+            actual_size = target_path.stat().st_size
+            expected_size = file_info.size_bytes
+            size_diff_pct = abs(actual_size - expected_size) / expected_size * 100
+            
+            # If size mismatch is significant (>10%), try alternative URLs
+            if size_diff_pct > 10 and alternative_urls:
+                emit_progress(0, message=f"  [{idx}/{total_files}] {file_name} - Size mismatch detected ({actual_size / 1e9:.2f}GB vs expected {expected_size / 1e9:.2f}GB), trying alternative URL...")
+                target_path.unlink(missing_ok=True)
+                success = False
+                
+                for alt_url in alternative_urls:
+                    emit_progress(0, message=f"  [{idx}/{total_files}] Trying alternative URL: {alt_url[:80]}...")
+                    success, error = download_file(alt_url, target_path, progress_callback=emit_progress)
+                    if success:
+                        # Verify size again
+                        actual_size = target_path.stat().st_size
+                        size_diff_pct = abs(actual_size - expected_size) / expected_size * 100
+                        if size_diff_pct <= 10:
+                            emit_progress(0, message=f"  [{idx}/{total_files}] Alternative URL worked! File size: {actual_size / 1e9:.2f}GB")
+                            break
+                        else:
+                            emit_progress(0, message=f"  [{idx}/{total_files}] Alternative URL also has size mismatch, trying next...")
+                            target_path.unlink(missing_ok=True)
+                            success = False
+                    if success:
+                        break
+        
         if success:
-            downloaded.add(file_name)
-            success_count += 1
-            emit_progress(100, message=f"  [{idx}/{total_files}] {file_name} - downloaded successfully")
+            # Verify file size matches expected size
+            if file_info.size_bytes > 0:
+                actual_size = target_path.stat().st_size
+                expected_size = file_info.size_bytes
+                size_diff_pct = abs(actual_size - expected_size) / expected_size * 100
+                
+                # For large files (>1GB), allow 5% tolerance; for smaller files, allow 10%
+                tolerance = 5 if expected_size > 1_000_000_000 else 10
+                
+                if size_diff_pct > tolerance:
+                    emit_progress(0, message=f"  [{idx}/{total_files}] {file_name} - SIZE MISMATCH! Expected {expected_size / 1e9:.2f}GB, got {actual_size / 1e9:.2f}GB ({size_diff_pct:.1f}% difference)", msg_type="error")
+                    emit_progress(0, message=f"  [{idx}/{total_files}] File appears incomplete or corrupted. Removing and will retry on next run.", msg_type="error")
+                    target_path.unlink(missing_ok=True)
+                    success = False
+                    error = f"File size mismatch: expected {expected_size / 1e9:.2f}GB, got {actual_size / 1e9:.2f}GB"
+                else:
+                    emit_progress(100, message=f"  [{idx}/{total_files}] {file_name} - downloaded successfully ({actual_size / 1e9:.2f}GB)")
+            else:
+                # If no expected size, at least verify it's not suspiciously small
+                actual_size = target_path.stat().st_size
+                if actual_size < 100_000_000:  # Less than 100MB is suspicious for a model file
+                    emit_progress(0, message=f"  [{idx}/{total_files}] {file_name} - WARNING: File is very small ({actual_size / 1e6:.2f}MB), may be incomplete", msg_type="warning")
+                emit_progress(100, message=f"  [{idx}/{total_files}] {file_name} - downloaded successfully ({actual_size / 1e9:.2f}GB)")
+            
+            if success:
+                downloaded.add(file_name)
+                success_count += 1
         else:
             emit_progress(0, message=f"  [{idx}/{total_files}] {file_name} - FAILED: {error}", msg_type="error")
     
