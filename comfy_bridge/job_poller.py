@@ -74,8 +74,8 @@ class JobPoller:
                 if result:
                     return result
             
-            # Adaptive polling interval
-            await asyncio.sleep(0.5 if elapsed > 200 else 1.0)
+            # Fast polling interval for responsive progress updates
+            await asyncio.sleep(0.3)
     
     def _check_for_errors(self, data: Dict[str, Any]) -> None:
         status = data.get("status", {})
