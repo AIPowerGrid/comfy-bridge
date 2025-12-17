@@ -100,12 +100,12 @@ class ModelMapper:
         "flux1_dev": "flux1.dev",
         "flux1.dev": "flux1.dev",
         
-        # Flux Krea variants - workflow file is flux.1_krea_dev.json
-        "flux.1-krea-dev": "flux.1_krea_dev",
-        "FLUX.1-krea-dev": "flux.1_krea_dev",
-        "flux1-krea-dev": "flux.1_krea_dev",
-        "flux1_krea_dev": "flux.1_krea_dev",
-        "krea": "flux.1_krea_dev",
+        # Flux Krea variants - workflow file is flux.1-krea-dev.json
+        "flux.1-krea-dev": "flux.1-krea-dev",
+        "FLUX.1-krea-dev": "flux.1-krea-dev",
+        "flux1-krea-dev": "flux.1-krea-dev",
+        "flux1_krea_dev": "flux.1-krea-dev",
+        "krea": "flux.1-krea-dev",
         
         # Flux Kontext variants - workflow file is FLUX.1-dev-Kontext-fp8-scaled.json
         "flux1-krea-dev_fp8_scaled": "FLUX.1-dev-Kontext-fp8-scaled",
@@ -433,8 +433,7 @@ class ModelMapper:
         "FLUX.1-dev": "FLUX.1-dev",
         "flux1-dev": "FLUX.1-dev",
         
-        # Flux Krea variants - workflow file is flux.1_krea_dev.json
-        "flux.1_krea_dev": "flux.1-krea-dev",
+        # Flux Krea variants - workflow file is flux.1-krea-dev.json
         "flux.1-krea-dev": "flux.1-krea-dev",
         "krea": "flux.1-krea-dev",
         
@@ -454,7 +453,7 @@ class ModelMapper:
         "wan2.2_ti2v_5B": ["wan2_2_ti2v_5b", "wan2.2_ti2v_5B"],
         "wan2.2-t2v-a14b": ["wan2_2_t2v_14b", "wan2.2-t2v-a14b"],
         "wan2.2-t2v-a14b-hq": ["wan2_2_t2v_14b_hq", "wan2.2-t2v-a14b-hq"],
-        "flux.1_krea_dev": ["flux.1-krea-dev"],
+        "flux.1-krea-dev": ["flux.1-krea-dev"],
         "FLUX.1-dev-Kontext-fp8-scaled": ["FLUX.1-dev-Kontext-fp8-scaled"],
         "flux1.dev": ["FLUX.1-dev", "flux1.dev"],
         "FLUX.1-dev": ["FLUX.1-dev", "flux1.dev"],
