@@ -231,20 +231,17 @@ def download_dependency(dep_info: Dict[str, str], models_path: str) -> bool:
     
     target_path = target_dir / dep_file
     
-    # Check if already exists
+    # Check if already exists (don't log - already checked before calling)
     if target_path.exists() and _is_file_complete(target_path):
-        emit_progress(0, message=f"[SKIP] Dependency {dep_name} ({dep_file}) already exists")
         return True
     
     # Download the dependency
-    emit_progress(0, message=f"[DEP] Downloading {dep_name} ({dep_file})...")
+    emit_progress(0, message=f"  → Downloading {dep_name}...")
     
     success, error = download_file(download_url, target_path, expected_hash=None, progress_callback=None)
     
-    if success:
-        emit_progress(0, message=f"[OK] Dependency {dep_name} downloaded")
-    else:
-        emit_progress(0, message=f"[ERROR] Failed to download {dep_name}: {error}", msg_type="error")
+    if not success:
+        emit_progress(0, message=f"  ✗ Failed to download {dep_name}: {error}", msg_type="error")
     
     return success
 
@@ -446,25 +443,39 @@ def download_model_from_chain(
         emit_progress(100, message=f"[SKIP] {model_info.display_name} already processed")
         return True
     
-    emit_progress(0, message=f"[MODEL] {model_info.display_name}")
-    emit_progress(0, message=f"  Type: {model_info.model_type.name}")
-    emit_progress(0, message=f"  Base: {model_info.base_model}")
-    
     # Check for dependencies (e.g., T5XXL for Flux models)
     dependencies = get_model_dependencies(model_info.display_name, models_path)
+    missing_deps = []
     if dependencies:
-        emit_progress(0, message=f"  Dependencies: {len(dependencies)} required")
         for dep in dependencies:
             dep_path = Path(models_path) / ("text_encoders" if dep["type"] == "text_encoder" else dep["type"]) / dep["file"]
             if not dep_path.exists():
-                emit_progress(0, message=f"    → {dep['name']} ({dep['file']}) - missing")
-            else:
-                emit_progress(0, message=f"    ✓ {dep['name']} ({dep['file']}) - exists")
+                missing_deps.append(dep)
+    
+    # Check if model files exist
+    all_model_files_exist = True
+    if model_info.files:
+        for file_info in model_info.files:
+            folder = normalize_model_folder(file_info.file_type)
+            filepath = Path(models_path) / folder / file_info.file_name
+            if not (filepath.exists() and _is_file_complete(filepath)):
+                all_model_files_exist = False
+                break
+    
+    # If everything exists, just log success and return
+    if not missing_deps and all_model_files_exist and model_info.files:
+        total_files = len(model_info.files)
+        emit_progress(100, message=f"✓ {model_info.display_name} - All files found ({total_files} files)")
+        downloaded.add(model_info.display_name)
+        return True
+    
+    # Need to download something - log model name
+    if missing_deps or not all_model_files_exist:
+        emit_progress(0, message=f"[MODEL] {model_info.display_name}")
         
         # Download missing dependencies
-        missing_deps = [d for d in dependencies if not (Path(models_path) / ("text_encoders" if d["type"] == "text_encoder" else d["type"]) / d["file"]).exists()]
         if missing_deps:
-            emit_progress(0, message=f"  Downloading {len(missing_deps)} missing dependency(ies)...")
+            emit_progress(0, message=f"  Dependencies: {len(missing_deps)} missing, downloading...")
             for dep in missing_deps:
                 download_dependency(dep, models_path)
     
@@ -477,6 +488,23 @@ def download_model_from_chain(
     success_count = 0
     total_files = len(model_info.files)
     
+    # First pass: check if all files already exist
+    all_exist = True
+    for file_info in model_info.files:
+        folder = normalize_model_folder(file_info.file_type)
+        filepath = Path(models_path) / folder / file_info.file_name
+        if not (filepath.exists() and _is_file_complete(filepath)):
+            all_exist = False
+            break
+    
+    # If all files exist, just log success and return
+    if all_exist:
+        emit_progress(100, message=f"✓ All files found ({total_files} files)")
+        downloaded.add(model_info.display_name)
+        return True
+    
+    # Some files need downloading - proceed with download
+    files_downloaded = False
     for idx, file_info in enumerate(model_info.files, 1):
         folder = normalize_model_folder(file_info.file_type)
         filepath = Path(models_path) / folder / file_info.file_name
@@ -485,13 +513,12 @@ def download_model_from_chain(
         file_base_progress = ((idx - 1) / total_files) * 100
         file_progress_range = 100 / total_files
         
-        emit_progress(file_base_progress, message=f"[{idx}/{total_files}] {file_info.file_name}")
-        
-        # Check if already exists
+        # Check if already exists (silently skip)
         if filepath.exists() and _is_file_complete(filepath):
-            emit_progress(file_base_progress + file_progress_range, message=f"  ✓ {file_info.file_name} (exists)")
             success_count += 1
             continue
+        
+        files_downloaded = True  # Mark that we're downloading something
         
         # Remove incomplete file
         if filepath.exists():
@@ -546,10 +573,12 @@ def download_model_from_chain(
     downloaded.add(model_info.display_name)
     final_success = success_count == total_files
     
-    if final_success:
-        emit_progress(100, message=f"[SUCCESS] {model_info.display_name} - {success_count}/{total_files} files")
-    else:
-        emit_progress(100, message=f"[PARTIAL] {model_info.display_name} - {success_count}/{total_files} files", msg_type="warning")
+    # Only log if we actually downloaded files (all-exists case already logged above)
+    if files_downloaded:
+        if final_success:
+            emit_progress(100, message=f"✓ {model_info.display_name} - {success_count}/{total_files} files")
+        else:
+            emit_progress(100, message=f"⚠ {model_info.display_name} - {success_count}/{total_files} files", msg_type="warning")
     
     return final_success
 
