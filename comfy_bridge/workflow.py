@@ -83,9 +83,16 @@ def is_model_compatible(model_name: str, model_type: str) -> bool:
     model_lower = model_name.lower()
     
     if model_type == "flux":
-        # Flux models: flux1CompactCLIP, umt5, flux1-krea-dev, ae.safetensors
+        # Flux models: flux1CompactCLIP, umt5_xxl (T5XXL only, not regular T5), flux1-krea-dev, ae.safetensors
+        # For T5/UMT5 models, Flux requires T5XXL specifically (not regular T5)
+        # Check for T5XXL variants: t5xxl, umt5_xxl, umt5xxl, or anything with "xxl" in the name
+        if "t5" in model_lower or "umt5" in model_lower:
+            # Only accept T5/UMT5 models if they are T5XXL variants (have "xxl" in name)
+            return "xxl" in model_lower or "t5xxl" in model_lower
+        
+        # Other Flux-compatible models
         return any(keyword in model_lower for keyword in [
-            "flux", "umt5", "clip_l", "t5xxl", "ae.safetensors"
+            "flux", "clip_l", "ae.safetensors"
         ])
     elif model_type == "wanvideo":
         # WanVideo models: wan2.2, wan_2.1
@@ -193,9 +200,15 @@ async def validate_and_fix_model_filenames(
                         fixes_applied.append(f"Node {node_id} clip_name1: {old_clip1} -> {widgets[0]}")
                     
                     if len(widgets) >= 2:
+                        current_clip2 = widgets[1] if len(widgets) > 1 else "unknown"
+                        current_clip2_lower = current_clip2.lower() if current_clip2 else ""
+                        
+                        # For Flux models, clip_name2 must be T5XXL (not regular T5)
+                        # Check if workflow requires T5XXL specifically
+                        requires_t5xxl = model_type == "flux" and ("t5xxl" in current_clip2_lower or "xxl" in current_clip2_lower)
+                        
                         if not clip2_options:
                             # If workflow requires DualCLIPLoader but no compatible models are available, fail
-                            current_clip2 = widgets[1] if len(widgets) > 1 else "unknown"
                             all_dual_clip = available_models.get("DualCLIPLoader", {})
                             all_clip2 = all_dual_clip.get("clip_name2", []) if isinstance(all_dual_clip, dict) else []
                             raise ValueError(
@@ -205,8 +218,23 @@ async def validate_and_fix_model_filenames(
                                 f"Please ensure required model files are installed in the ComfyUI models directory."
                             )
                         elif widgets[1] not in clip2_options:
-                            old_clip2 = widgets[1]
-                            widgets[1] = clip2_options[0]
+                            # If workflow requires T5XXL, only replace with another T5XXL model
+                            if requires_t5xxl:
+                                t5xxl_options = [m for m in clip2_options if "t5xxl" in m.lower() or "xxl" in m.lower()]
+                                if not t5xxl_options:
+                                    all_dual_clip = available_models.get("DualCLIPLoader", {})
+                                    all_clip2 = all_dual_clip.get("clip_name2", []) if isinstance(all_dual_clip, dict) else []
+                                    raise ValueError(
+                                        f"Required DualCLIPLoader clip_name2 '{current_clip2}' (T5XXL) is not available. "
+                                        f"Flux models require T5XXL text encoder, but no T5XXL models found. "
+                                        f"Available clip_name2 models: {all_clip2}. "
+                                        f"Please install a T5XXL model (e.g., t5xxl_fp16.safetensors or umt5_xxl_*.safetensors)."
+                                    )
+                                old_clip2 = widgets[1]
+                                widgets[1] = t5xxl_options[0]
+                            else:
+                                old_clip2 = widgets[1]
+                                widgets[1] = clip2_options[0]
                             fixes_applied.append(f"Node {node_id} clip_name2: {old_clip2} -> {widgets[1]}")
                     
                     node["widgets_values"] = widgets
@@ -305,6 +333,12 @@ async def validate_and_fix_model_filenames(
                 # Check clip_name2 - must check if input exists FIRST, then validate options
                 if "clip_name2" in inputs:
                     current_clip2 = inputs.get("clip_name2")
+                    current_clip2_lower = current_clip2.lower() if current_clip2 else ""
+                    
+                    # For Flux models, clip_name2 must be T5XXL (not regular T5)
+                    # Check if workflow requires T5XXL specifically
+                    requires_t5xxl = model_type == "flux" and ("t5xxl" in current_clip2_lower or "xxl" in current_clip2_lower)
+                    
                     if not clip2_options:
                         # If workflow requires DualCLIPLoader but no compatible models are available, fail
                         all_dual_clip = available_models.get("DualCLIPLoader", {})
@@ -316,7 +350,22 @@ async def validate_and_fix_model_filenames(
                             f"Please ensure required model files are installed in the ComfyUI models directory."
                         )
                     elif current_clip2 not in clip2_options:
-                        new_clip2 = clip2_options[0]
+                        # If workflow requires T5XXL, only replace with another T5XXL model
+                        if requires_t5xxl:
+                            t5xxl_options = [m for m in clip2_options if "t5xxl" in m.lower() or "xxl" in m.lower()]
+                            if not t5xxl_options:
+                                all_dual_clip = available_models.get("DualCLIPLoader", {})
+                                all_clip2 = all_dual_clip.get("clip_name2", []) if isinstance(all_dual_clip, dict) else []
+                                raise ValueError(
+                                    f"Required DualCLIPLoader clip_name2 '{current_clip2}' (T5XXL) is not available. "
+                                    f"Flux models require T5XXL text encoder, but no T5XXL models found. "
+                                    f"Available clip_name2 models: {all_clip2}. "
+                                    f"Please install a T5XXL model (e.g., t5xxl_fp16.safetensors or umt5_xxl_*.safetensors)."
+                                )
+                            new_clip2 = t5xxl_options[0]
+                        else:
+                            new_clip2 = clip2_options[0]
+                        
                         logger.warning(
                             f"Node {node_id}: Replacing DualCLIPLoader clip_name2 '{current_clip2}' "
                             f"with '{new_clip2}' (not in available models: {clip2_options})"
