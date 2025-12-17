@@ -80,22 +80,24 @@ class APIClient:
                 if self._pop_count == 1 or self._pop_count % 50 == 0:
                     logger.info(f"📭 No job received. Full API response: {json.dumps(result, indent=2)}")
             
-            # Log skipped jobs for debugging (ALWAYS log if there are skips)
+            # Log skipped jobs for debugging (log periodically to reduce noise)
             skipped = result.get("skipped", {})
             interesting_skips = {k: v for k, v in skipped.items() if v > 0}
             if interesting_skips:
-                logger.warning(f"⚠️  Skipped jobs: {interesting_skips}")
-                # Explain what the skips mean
-                if skipped.get("max_pixels", 0) > 0:
-                    logger.warning(f"   → {skipped['max_pixels']} jobs skipped: requested resolution exceeds max_pixels ({Settings.MAX_PIXELS})")
-                if skipped.get("nsfw", 0) > 0:
-                    logger.warning(f"   → {skipped['nsfw']} jobs skipped: NSFW content (GRID_NSFW={Settings.NSFW})")
-                if skipped.get("models", 0) > 0:
-                    logger.warning(f"   → {skipped['models']} jobs skipped: model mismatch (jobs exist but for different models)")
-                if skipped.get("worker_id", 0) > 0:
-                    logger.warning(f"   → {skipped['worker_id']} jobs skipped: worker ID issue")
-                if skipped.get("performance", 0) > 0:
-                    logger.warning(f"   → {skipped['performance']} jobs skipped: performance requirements")
+                # Log skipped jobs periodically (every 50th poll) or on first poll
+                if self._pop_count == 1 or self._pop_count % 50 == 0:
+                    logger.info(f"ℹ️  Skipped jobs (poll #{self._pop_count}): {interesting_skips}")
+                    # Explain what the skips mean
+                    if skipped.get("max_pixels", 0) > 0:
+                        logger.info(f"   → {skipped['max_pixels']} jobs skipped: requested resolution exceeds max_pixels ({Settings.MAX_PIXELS})")
+                    if skipped.get("nsfw", 0) > 0:
+                        logger.info(f"   → {skipped['nsfw']} jobs skipped: NSFW content (GRID_NSFW={Settings.NSFW})")
+                    if skipped.get("models", 0) > 0:
+                        logger.info(f"   → {skipped['models']} jobs skipped: model mismatch (jobs exist but for models we don't support)")
+                    if skipped.get("worker_id", 0) > 0:
+                        logger.info(f"   → {skipped['worker_id']} jobs skipped: worker ID issue")
+                    if skipped.get("performance", 0) > 0:
+                        logger.info(f"   → {skipped['performance']} jobs skipped: performance requirements")
 
             return result
         except httpx.HTTPStatusError as e:
