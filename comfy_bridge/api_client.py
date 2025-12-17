@@ -76,9 +76,10 @@ class APIClient:
                 self._job_cache[job_id] = result
                 logger.info(f"✅ Received job {job_id} for model {result.get('model', 'unknown')}")
             else:
-                # Log full response when no job (periodically)
-                if self._pop_count == 1 or self._pop_count % 50 == 0:
-                    logger.info(f"📭 No job received. Full API response: {json.dumps(result, indent=2)}")
+                # Log full response when no job (periodically or when models are skipped)
+                if self._pop_count == 1 or self._pop_count % 50 == 0 or skipped.get("models", 0) > 0:
+                    if Settings.DEBUG or skipped.get("models", 0) > 0:
+                        logger.info(f"📭 No job received. Full API response: {json.dumps(result, indent=2)}")
             
             # Log skipped jobs for debugging (log periodically to reduce noise)
             skipped = result.get("skipped", {})
