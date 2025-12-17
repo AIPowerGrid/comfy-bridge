@@ -102,22 +102,30 @@ class APIClient:
                         # Check which models actually have jobs in the queue
                         try:
                             models_status = await self.get_models_status()
-                            if models_status and isinstance(models_status, list):
-                                models_with_jobs = []
-                                for model_info in models_status:
-                                    if isinstance(model_info, dict):
-                                        name = model_info.get("name", "")
-                                        queued = model_info.get("queued", 0)
-                                        if queued > 0:
-                                            models_with_jobs.append((name, queued))
-                                
-                                if models_with_jobs:
-                                    logger.info(f"      Models with queued jobs:")
-                                    for name, queued in sorted(models_with_jobs, key=lambda x: -x[1])[:10]:
-                                        supported = "✓" if name in models_to_use else "✗"
-                                        logger.info(f"         {supported} {name}: {queued} jobs")
+                            if models_status:
+                                if isinstance(models_status, list):
+                                    models_with_jobs = []
+                                    for model_info in models_status:
+                                        if isinstance(model_info, dict):
+                                            name = model_info.get("name", "")
+                                            queued = model_info.get("queued", 0)
+                                            if queued > 0:
+                                                models_with_jobs.append((name, queued))
+                                    
+                                    if models_with_jobs:
+                                        logger.info(f"      Models with queued jobs:")
+                                        for name, queued in sorted(models_with_jobs, key=lambda x: -x[1])[:10]:
+                                            supported = "✓" if name in models_to_use else "✗"
+                                            logger.info(f"         {supported} {name}: {queued} jobs")
+                                    else:
+                                        logger.info(f"      No models with queued jobs found in status response")
+                                else:
+                                    logger.info(f"      Models status response is not a list: {type(models_status)}")
+                                    logger.debug(f"      Response content: {models_status}")
+                            else:
+                                logger.info(f"      Could not get models status (empty response)")
                         except Exception as e:
-                            logger.debug(f"      Could not check queue status: {e}")
+                            logger.warning(f"      Could not check queue status: {e}", exc_info=Settings.DEBUG)
                         # Always log full response when models are skipped to help diagnose
                         logger.info(f"      Full API response: {json.dumps(result, indent=2)}")
                         # Log full response details if available
