@@ -95,6 +95,9 @@ class APIClient:
                     if skipped.get("models", 0) > 0:
                         logger.info(f"   → {skipped['models']} jobs skipped: model mismatch (jobs exist but for models we don't support)")
                         logger.info(f"      We are advertising: {models_to_use[:10]}{'...' if len(models_to_use) > 10 else ''}")
+                        # Log full response when DEBUG is enabled to see what models are being requested
+                        if Settings.DEBUG:
+                            logger.debug(f"      Full API response: {json.dumps(result, indent=2)}")
                         # Log full response details if available (for debugging)
                         if Settings.DEBUG and "skipped_info" in result:
                             logger.debug(f"      Skipped details: {result.get('skipped_info', {})}")
