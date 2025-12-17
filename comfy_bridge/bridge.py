@@ -183,8 +183,8 @@ class ComfyUIBridge:
             # Submit workflow to ComfyUI
             prompt_id = await self.comfy.submit_workflow(workflow)
             
-            # Start WebSocket listener for ComfyUI logs
-            websocket_task = asyncio.create_task(self.listen_comfyui_logs(prompt_id))
+            # Start WebSocket listener for ComfyUI logs (with job_id for progress reporting)
+            websocket_task = asyncio.create_task(self.listen_comfyui_logs(prompt_id, job_id))
             
             # Poll for completion with filesystem fallback
             async def filesystem_checker(jid: str):
@@ -465,8 +465,17 @@ class ComfyUIBridge:
             # No job received - wait before next poll (shorter interval for faster pickup)
             await asyncio.sleep(1.0)
 
-    async def listen_comfyui_logs(self, prompt_id: str):
-        """Listen to ComfyUI WebSocket for real-time logs and progress"""
+    async def listen_comfyui_logs(self, prompt_id: str, job_id: str = None):
+        """Listen to ComfyUI WebSocket for real-time logs and progress.
+        
+        Args:
+            prompt_id: The ComfyUI prompt ID
+            job_id: The API job ID (for reporting progress to the API)
+        """
+        # Track last progress update to avoid spamming the API
+        last_progress_update = 0
+        progress_update_interval = 2.0  # Update API every 2 seconds max
+        
         try:
             # Convert http:// to ws:// and https:// to wss://
             ws_url = Settings.COMFYUI_URL.replace("http://", "ws://").replace("https://", "wss://")
@@ -504,6 +513,16 @@ class ComfyUIBridge:
                             if total_steps > 0:
                                 percentage = (current_step / total_steps) * 100
                                 logger.info(f"Progress: {percentage:.0f}% ({current_step}/{total_steps}) [node:{node}]")
+                                
+                                # Report progress to the API (throttled)
+                                import time
+                                now = time.time()
+                                if job_id and (now - last_progress_update) >= progress_update_interval:
+                                    last_progress_update = now
+                                    # Fire and forget - don't await to avoid blocking
+                                    asyncio.create_task(
+                                        self.api.update_progress(job_id, current_step, total_steps)
+                                    )
                         
                         # Handle node execution
                         elif msg_type == "executing":
