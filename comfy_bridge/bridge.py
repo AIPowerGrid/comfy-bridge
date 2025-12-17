@@ -420,12 +420,36 @@ class ComfyUIBridge:
             logger.warning(f"Failed to check queue status: {e}")
 
         job_count = 0
+        last_queue_check = 0
         logger.info("Starting job polling loop...")
         while True:
             job_count += 1
             # Show polling message every 15 attempts (every ~30 seconds)
             if job_count % 15 == 1:
                 logger.info(f"👀 Polling for jobs... (poll #{job_count}, models: {len(self.supported_models)})")
+            
+            # Periodically check which models have jobs (every 100 polls)
+            if job_count - last_queue_check >= 100:
+                last_queue_check = job_count
+                try:
+                    models_status = await self.api.get_models_status()
+                    if models_status:
+                        models_with_jobs = []
+                        for model_info in models_status:
+                            if isinstance(model_info, dict):
+                                name = model_info.get("name", "")
+                                queued = model_info.get("queued", 0)
+                                if queued > 0:
+                                    models_with_jobs.append((name, queued))
+                        
+                        if models_with_jobs:
+                            logger.info(f"📊 Models with queued jobs (poll #{job_count}):")
+                            for name, queued in sorted(models_with_jobs, key=lambda x: -x[1])[:10]:
+                                supported = "✓" if name in self.supported_models else "✗"
+                                logger.info(f"   {supported} {name}: {queued} jobs")
+                except Exception as e:
+                    logger.debug(f"Could not check queue status: {e}")
+            
             try:
                 await self.process_once()
             except Exception as e:
