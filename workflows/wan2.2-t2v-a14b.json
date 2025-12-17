@@ -64,10 +64,10 @@
         0
       ],
       "enable_vae_tiling": true,
-      "tile_x": 384,
-      "tile_y": 384,
-      "tile_stride_x": 192,
-      "tile_stride_y": 192,
+      "tile_x": 320,
+      "tile_y": 240,
+      "tile_stride_x": 160,
+      "tile_stride_y": 120,
       "normalization": "default"
     },
     "class_type": "WanVideoDecode",
