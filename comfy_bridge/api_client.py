@@ -94,6 +94,10 @@ class APIClient:
                         logger.info(f"   → {skipped['nsfw']} jobs skipped: NSFW content (GRID_NSFW={Settings.NSFW})")
                     if skipped.get("models", 0) > 0:
                         logger.info(f"   → {skipped['models']} jobs skipped: model mismatch (jobs exist but for models we don't support)")
+                        logger.info(f"      We are advertising: {models_to_use[:10]}{'...' if len(models_to_use) > 10 else ''}")
+                        # Log full response details if available (for debugging)
+                        if Settings.DEBUG and "skipped_info" in result:
+                            logger.debug(f"      Skipped details: {result.get('skipped_info', {})}")
                     if skipped.get("worker_id", 0) > 0:
                         logger.info(f"   → {skipped['worker_id']} jobs skipped: worker ID issue")
                     if skipped.get("performance", 0) > 0:
