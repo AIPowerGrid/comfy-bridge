@@ -18,8 +18,30 @@ from typing import Optional, Dict, List, Tuple
 # Global model name for progress tracking
 _current_model = ""
 
+# Throttle progress messages to reduce log spam
+_last_progress_time = {}
+_progress_throttle_interval = 2.0  # Only emit progress every 2 seconds
+
 def emit_progress(progress: float, speed: str = "", eta: str = "", message: str = "", msg_type: str = "info"):
-    """Emit a JSON progress message for the management UI."""
+    """Emit a JSON progress message for the management UI.
+    
+    Throttles progress updates to reduce log spam - only emits every 2 seconds
+    unless it's an error, warning, or completion message.
+    """
+    global _last_progress_time
+    
+    # Always emit errors, warnings, and important messages
+    is_important = msg_type in ("error", "warning") or "ERROR" in message.upper() or "WARN" in message.upper()
+    is_completion = progress >= 100 or "SUCCESS" in message.upper() or "COMPLETE" in message.upper()
+    
+    # Throttle regular progress updates
+    if not is_important and not is_completion:
+        now = time.time()
+        last_time = _last_progress_time.get(_current_model, 0)
+        if now - last_time < _progress_throttle_interval:
+            return  # Skip this update
+        _last_progress_time[_current_model] = now
+    
     data = {
         "type": msg_type,
         "progress": round(progress, 1),
@@ -90,6 +112,141 @@ except Exception as e:
     print(f"[ERROR] Error loading catalog: {e}")
     import traceback
     traceback.print_exc()
+
+
+def get_model_dependencies(model_name: str, models_path: str) -> List[Dict[str, str]]:
+    """
+    Detect dependencies required by a model's workflow file.
+    Returns list of dependency info dicts: [{"name": "...", "type": "...", "file": "..."}, ...]
+    """
+    dependencies = []
+    
+    try:
+        from comfy_bridge.model_mapper import get_workflow_file
+        from comfy_bridge.workflow import detect_workflow_model_type
+        from comfy_bridge.config import Settings
+        import json
+        
+        # Get workflow file
+        workflow_filename = get_workflow_file(model_name)
+        workflow_path = Path(Settings.WORKFLOW_DIR) / workflow_filename
+        
+        if not workflow_path.exists():
+            return dependencies
+        
+        # Load workflow
+        with open(workflow_path, 'r') as f:
+            workflow = json.load(f)
+        
+        model_type = detect_workflow_model_type(workflow)
+        
+        # Flux models need T5XXL, clip_l, and ae.safetensors
+        if model_type == "flux":
+            # Check for DualCLIPLoader to find required text encoders
+            nodes = workflow.get("nodes", []) if isinstance(workflow, dict) and "nodes" in workflow else list(workflow.values())
+            
+            for node in nodes:
+                if not isinstance(node, dict):
+                    continue
+                
+                class_type = node.get("class_type") or node.get("type", "")
+                
+                if class_type == "DualCLIPLoader":
+                    inputs = node.get("inputs", {})
+                    # Check clip_name2 (T5XXL)
+                    clip2 = inputs.get("clip_name2", "")
+                    if clip2 and ("t5xxl" in clip2.lower() or "xxl" in clip2.lower()):
+                        text_encoder_path = Path(models_path) / "text_encoders" / clip2
+                        if not text_encoder_path.exists():
+                            dependencies.append({
+                                "name": "T5XXL Text Encoder",
+                                "type": "text_encoder",
+                                "file": clip2,
+                                "required_for": model_name
+                            })
+                    
+                    # Check clip_name1 (CLIP-L)
+                    clip1 = inputs.get("clip_name1", "")
+                    if clip1 and "clip_l" in clip1.lower():
+                        clip_path = Path(models_path) / "text_encoders" / clip1
+                        if not clip_path.exists():
+                            dependencies.append({
+                                "name": "CLIP-L Text Encoder",
+                                "type": "text_encoder",
+                                "file": clip1,
+                                "required_for": model_name
+                            })
+                
+                elif class_type == "VAELoader":
+                    inputs = node.get("inputs", {})
+                    vae_name = inputs.get("vae_name", "")
+                    if vae_name == "ae.safetensors":
+                        vae_path = Path(models_path) / "vae" / vae_name
+                        if not vae_path.exists():
+                            dependencies.append({
+                                "name": "Flux VAE",
+                                "type": "vae",
+                                "file": vae_name,
+                                "required_for": model_name
+                            })
+        
+    except Exception as e:
+        # Don't fail if dependency detection fails
+        print(f"[DEBUG] Could not detect dependencies for {model_name}: {e}")
+    
+    return dependencies
+
+
+def download_dependency(dep_info: Dict[str, str], models_path: str) -> bool:
+    """
+    Download a single dependency file.
+    Returns True if successful.
+    """
+    dep_name = dep_info["name"]
+    dep_file = dep_info["file"]
+    dep_type = dep_info["type"]
+    
+    # Map dependency types to download URLs
+    # These are common shared dependencies
+    dependency_urls = {
+        "t5xxl_fp16.safetensors": "https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/t5xxl_fp16.safetensors",
+        "t5xxl_fp8_e4m3fn.safetensors": "https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/t5xxl_fp8_e4m3fn.safetensors",
+        "clip_l.safetensors": "https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/clip_l.safetensors",
+        "ae.safetensors": "https://huggingface.co/black-forest-labs/FLUX.1-dev/resolve/main/ae.safetensors",
+    }
+    
+    # Check if we have a URL for this dependency
+    download_url = dependency_urls.get(dep_file)
+    if not download_url:
+        emit_progress(0, message=f"[SKIP] No download URL for dependency: {dep_file}", msg_type="warning")
+        return False
+    
+    # Determine target directory
+    if dep_type == "text_encoder":
+        target_dir = Path(models_path) / "text_encoders"
+    elif dep_type == "vae":
+        target_dir = Path(models_path) / "vae"
+    else:
+        target_dir = Path(models_path) / dep_type
+    
+    target_path = target_dir / dep_file
+    
+    # Check if already exists
+    if target_path.exists() and _is_file_complete(target_path):
+        emit_progress(0, message=f"[SKIP] Dependency {dep_name} ({dep_file}) already exists")
+        return True
+    
+    # Download the dependency
+    emit_progress(0, message=f"[DEP] Downloading {dep_name} ({dep_file})...")
+    
+    success, error = download_file(download_url, target_path, expected_hash=None, progress_callback=None)
+    
+    if success:
+        emit_progress(0, message=f"[OK] Dependency {dep_name} downloaded")
+    else:
+        emit_progress(0, message=f"[ERROR] Failed to download {dep_name}: {error}", msg_type="error")
+    
+    return success
 
 
 def normalize_model_folder(file_type: str) -> str:
@@ -201,15 +358,14 @@ def download_file(
         
         total_size = int(response.headers.get('content-length', 0))
         
-        # Log expected size for debugging
+        # Only log warnings for suspicious sizes (reduce spam)
         if total_size > 0:
-            print(f"[INFO] Expected file size from server: {total_size / 1e9:.2f}GB")
             # Warn if server reports a suspiciously small size for a large model file
             if total_size < 5_000_000_000 and 'wan2' in filepath.name.lower() and 'ti2v' in filepath.name.lower():
-                print(f"[WARN] Server reports file size of only {total_size / 1e9:.2f}GB - this may be incomplete!")
-                print(f"[WARN] Expected ~9GB for wan2.2_ti2v_5B model. The URL may be incorrect or file may be split.")
-        else:
-            print(f"[WARN] Server did not provide content-length header - cannot verify download completeness")
+                print(f"[WARN] Server reports file size of only {total_size / 1e9:.2f}GB - this may be incomplete!", flush=True)
+        elif total_size == 0:
+            # Only warn if it's a large file that should have content-length
+            pass  # Don't spam logs for missing content-length
         
         # Sanity check - model files should be at least 1MB
         if total_size > 0 and total_size < 1_000_000:
@@ -231,34 +387,35 @@ def download_file(
                         progress_callback(progress, downloaded, total_size, speed, eta)
         
         if total_size > 0 and downloaded != total_size:
-            print(f"[ERROR] Download incomplete: expected {total_size} bytes ({total_size / 1e9:.2f}GB), got {downloaded} bytes ({downloaded / 1e9:.2f}GB)")
+            print(f"[ERROR] Download incomplete: expected {total_size / 1e9:.2f}GB, got {downloaded / 1e9:.2f}GB", flush=True)
             filepath.unlink(missing_ok=True)
             return False, f"Incomplete download: expected {total_size / 1e9:.2f}GB, got {downloaded / 1e9:.2f}GB"
         
         # Additional verification: if content-length was 0 or missing, verify file size is reasonable
         # Large model files should be at least 100MB
         if total_size == 0 and downloaded < 100_000_000:
-            print(f"[ERROR] Downloaded file is suspiciously small: {downloaded} bytes ({downloaded / 1e6:.2f}MB)")
+            print(f"[ERROR] Downloaded file too small: {downloaded / 1e6:.2f}MB", flush=True)
             filepath.unlink(missing_ok=True)
             return False, f"Downloaded file too small: {downloaded / 1e6:.2f}MB (expected large model file)"
         
-        # Verify hash if provided
+        # Verify hash if provided (silently, only log on failure)
         if expected_hash and len(expected_hash) == 64:
-            print(f"[VERIFY] Checking SHA256 hash...")
             sha256 = hashlib.sha256()
             with open(filepath, 'rb') as f:
                 for chunk in iter(lambda: f.read(32 * 1024 * 1024), b''):
                     sha256.update(chunk)
             actual_hash = sha256.hexdigest().upper()
             if actual_hash != expected_hash.upper():
-                print(f"[ERROR] Hash mismatch! Expected: {expected_hash}, Got: {actual_hash}")
+                print(f"[ERROR] Hash mismatch! Expected: {expected_hash}, Got: {actual_hash}", flush=True)
                 filepath.unlink(missing_ok=True)
                 return False, "Hash verification failed"
         
+        # Only log completion for large files or if verbose mode
         size_mb = downloaded / (1024 * 1024)
-        elapsed = time.time() - start_time
-        speed_mb = size_mb / elapsed if elapsed > 0 else 0
-        print(f"[OK] Downloaded {filepath.name} ({size_mb:.2f} MB in {elapsed:.1f}s @ {speed_mb:.2f} MB/s)")
+        if size_mb > 100:  # Only log files > 100MB
+            elapsed = time.time() - start_time
+            speed_mb = size_mb / elapsed if elapsed > 0 else 0
+            print(f"[OK] {filepath.name} ({size_mb:.1f}MB @ {speed_mb:.1f}MB/s)", flush=True)
         
         return True, None
         
@@ -293,6 +450,24 @@ def download_model_from_chain(
     emit_progress(0, message=f"  Type: {model_info.model_type.name}")
     emit_progress(0, message=f"  Base: {model_info.base_model}")
     
+    # Check for dependencies (e.g., T5XXL for Flux models)
+    dependencies = get_model_dependencies(model_info.display_name, models_path)
+    if dependencies:
+        emit_progress(0, message=f"  Dependencies: {len(dependencies)} required")
+        for dep in dependencies:
+            dep_path = Path(models_path) / ("text_encoders" if dep["type"] == "text_encoder" else dep["type"]) / dep["file"]
+            if not dep_path.exists():
+                emit_progress(0, message=f"    → {dep['name']} ({dep['file']}) - missing")
+            else:
+                emit_progress(0, message=f"    ✓ {dep['name']} ({dep['file']}) - exists")
+        
+        # Download missing dependencies
+        missing_deps = [d for d in dependencies if not (Path(models_path) / ("text_encoders" if d["type"] == "text_encoder" else d["type"]) / d["file"]).exists()]
+        if missing_deps:
+            emit_progress(0, message=f"  Downloading {len(missing_deps)} missing dependency(ies)...")
+            for dep in missing_deps:
+                download_dependency(dep, models_path)
+    
     # Check if model has download files
     if not model_info.files:
         emit_progress(0, message=f"[WARN] No download files registered for {model_info.display_name}", msg_type="warning")
@@ -310,26 +485,25 @@ def download_model_from_chain(
         file_base_progress = ((idx - 1) / total_files) * 100
         file_progress_range = 100 / total_files
         
-        emit_progress(file_base_progress, message=f"[FILE] [{idx}/{total_files}] {file_info.file_name} -> {folder}/")
+        emit_progress(file_base_progress, message=f"[{idx}/{total_files}] {file_info.file_name}")
         
         # Check if already exists
         if filepath.exists() and _is_file_complete(filepath):
-            emit_progress(file_base_progress + file_progress_range, message=f"  ✓ Already downloaded: {file_info.file_name}")
+            emit_progress(file_base_progress + file_progress_range, message=f"  ✓ {file_info.file_name} (exists)")
             success_count += 1
             continue
         
         # Remove incomplete file
         if filepath.exists():
-            emit_progress(file_base_progress, message=f"  Removing incomplete file...")
             filepath.unlink()
         
         # Download with progress output
         last_emit_time = [0]  # Use list to allow modification in nested function
         
         def progress_cb(pct, dl, total, speed, eta):
-            # Throttle progress updates to every 0.5 seconds
+            # Throttle progress updates to every 2 seconds (reduced spam)
             now = time.time()
-            if now - last_emit_time[0] < 0.5 and pct < 99:
+            if now - last_emit_time[0] < 2.0 and pct < 99:
                 return
             last_emit_time[0] = now
             
@@ -340,12 +514,12 @@ def download_model_from_chain(
             # Calculate overall progress including file position
             overall_pct = file_base_progress + (pct / 100) * file_progress_range
             
-            message = f"  [{pct:.1f}%] {file_info.file_name}: {dl/(1024*1024):.1f}/{total/(1024*1024):.1f} MB"
+            # More concise message
+            message = f"  [{pct:.0f}%] {file_info.file_name}"
             emit_progress(overall_pct, speed=speed_str, eta=eta_str, message=message)
         
-        # Try primary URL
-        url_preview = file_info.download_url[:80] + "..." if len(file_info.download_url) > 80 else file_info.download_url
-        emit_progress(file_base_progress, message=f"  Downloading: {url_preview}")
+        # Try primary URL (don't log URL to reduce spam)
+        emit_progress(file_base_progress, message=f"  Downloading {file_info.file_name}...")
         success, error = download_file(
             file_info.download_url,
             filepath,
@@ -355,7 +529,7 @@ def download_model_from_chain(
         
         # Try mirror if primary fails
         if not success and file_info.mirror_url:
-            emit_progress(file_base_progress, message=f"  Primary failed, trying mirror...")
+            emit_progress(file_base_progress, message=f"  Trying mirror URL...")
             success, error = download_file(
                 file_info.mirror_url,
                 filepath,
@@ -365,9 +539,9 @@ def download_model_from_chain(
         
         if success:
             success_count += 1
-            emit_progress(file_base_progress + file_progress_range, message=f"  ✓ Downloaded: {file_info.file_name}")
+            emit_progress(file_base_progress + file_progress_range, message=f"  ✓ {file_info.file_name}")
         else:
-            emit_progress(file_base_progress, message=f"  [ERROR] {error}", msg_type="error")
+            emit_progress(file_base_progress, message=f"  ✗ {file_info.file_name}: {error}", msg_type="error")
     
     downloaded.add(model_info.display_name)
     final_success = success_count == total_files
