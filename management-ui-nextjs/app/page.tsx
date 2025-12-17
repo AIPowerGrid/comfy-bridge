@@ -623,7 +623,7 @@ export default function Home() {
       }
 
       const fileName = model.config?.files?.[0]?.path || model.filename || modelId;
-      const sizeBytes = BigInt(Math.floor((model.size_gb || 0) * 1024 * 1024 * 1024));
+      const sizeBytes = Math.floor((model.size_gb || 0) * 1024 * 1024 * 1024);
 
       const result = await registerModel({
         modelId,
