@@ -99,6 +99,25 @@ class APIClient:
                     if skipped.get("models", 0) > 0:
                         logger.info(f"   → {skipped['models']} jobs skipped: model mismatch (jobs exist but for models we don't support)")
                         logger.info(f"      We are advertising: {models_to_use[:10]}{'...' if len(models_to_use) > 10 else ''}")
+                        # Check which models actually have jobs in the queue
+                        try:
+                            models_status = await self.get_models_status()
+                            if models_status and isinstance(models_status, list):
+                                models_with_jobs = []
+                                for model_info in models_status:
+                                    if isinstance(model_info, dict):
+                                        name = model_info.get("name", "")
+                                        queued = model_info.get("queued", 0)
+                                        if queued > 0:
+                                            models_with_jobs.append((name, queued))
+                                
+                                if models_with_jobs:
+                                    logger.info(f"      Models with queued jobs:")
+                                    for name, queued in sorted(models_with_jobs, key=lambda x: -x[1])[:10]:
+                                        supported = "✓" if name in models_to_use else "✗"
+                                        logger.info(f"         {supported} {name}: {queued} jobs")
+                        except Exception as e:
+                            logger.debug(f"      Could not check queue status: {e}")
                         # Always log full response when models are skipped to help diagnose
                         logger.info(f"      Full API response: {json.dumps(result, indent=2)}")
                         # Log full response details if available
