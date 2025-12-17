@@ -632,7 +632,7 @@ export default function Home() {
         description: model.description || '',
         modelType,
         isNSFW: model.nsfw || false,
-        sizeBytes,
+        sizeBytes: Number(sizeBytes),
         inpainting: model.inpainting || false,
         img2img: false,
         controlnet: false,
