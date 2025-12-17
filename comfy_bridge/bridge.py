@@ -5,10 +5,11 @@ import websockets  # type: ignore  # websockets installed via requirements.txt i
 from typing import List, Dict, Any, Optional, Set, Callable
 
 from .api_client import APIClient
-from .workflow import build_workflow
+from .workflow import build_workflow, detect_workflow_model_type, is_model_compatible
 from .config import Settings
-from .model_mapper import initialize_model_mapper, get_horde_models
+from .model_mapper import initialize_model_mapper, get_horde_models, get_workflow_file
 from .comfyui_client import ComfyUIClient
+import os
 from .result_processor import ResultProcessor
 from .payload_builder import PayloadBuilder
 from .job_poller import JobPoller
@@ -288,8 +289,68 @@ class ComfyUIBridge:
                         for f in health.missing_files[:3]:
                             logger.warning(f"        Missing: {f}")
         
-        # Only advertise healthy models
-        self.supported_models = healthy_models
+        # Additional validation: cross-check against ComfyUI's available models
+        # This catches cases where files exist but ComfyUI can't load them
+        try:
+            available_models = await self.comfy.get_available_models()
+            
+            # Validate each healthy model against ComfyUI's available loaders
+            comfyui_validated = []
+            for model_name in healthy_models:
+                try:
+                    workflow_file = get_workflow_file(model_name)
+                    workflow_path = os.path.join(Settings.WORKFLOW_DIR, workflow_file)
+                    
+                    if os.path.exists(workflow_path):
+                        with open(workflow_path, 'r') as f:
+                            workflow = json.load(f)
+                        
+                        model_type = detect_workflow_model_type(workflow)
+                        
+                        # Check if required loaders have compatible models available
+                        can_serve = True
+                        if model_type == "flux":
+                            unet_models = available_models.get("UNETLoader", [])
+                            dual_clip = available_models.get("DualCLIPLoader", {})
+                            vae_models = available_models.get("VAELoader", [])
+                            
+                            flux_unet = [m for m in unet_models if is_model_compatible(m, "flux")]
+                            clip1 = dual_clip.get("clip_name1", []) if isinstance(dual_clip, dict) else []
+                            clip2 = dual_clip.get("clip_name2", []) if isinstance(dual_clip, dict) else []
+                            flux_clip1 = [m for m in clip1 if is_model_compatible(m, "flux")]
+                            flux_clip2 = [m for m in clip2 if is_model_compatible(m, "flux")]
+                            flux_vae = [m for m in vae_models if is_model_compatible(m, "flux")]
+                            
+                            if not flux_unet or not (flux_clip1 or flux_clip2) or not flux_vae:
+                                can_serve = False
+                                logger.warning(f"    ✗ {model_name}: Flux models not available in ComfyUI (UNET: {len(flux_unet)}, CLIP: {len(flux_clip1 + flux_clip2)}, VAE: {len(flux_vae)})")
+                        elif model_type == "sdxl":
+                            checkpoints = available_models.get("checkpoints", []) or available_models.get("CheckpointLoaderSimple", [])
+                            if not checkpoints:
+                                can_serve = False
+                                logger.warning(f"    ✗ {model_name}: No checkpoint models available in ComfyUI")
+                        
+                        if can_serve:
+                            comfyui_validated.append(model_name)
+                    else:
+                        # Workflow file missing - shouldn't happen but handle gracefully
+                        logger.warning(f"    ✗ {model_name}: Workflow file not found: {workflow_path}")
+                except Exception as e:
+                    logger.warning(f"    ✗ {model_name}: Error validating against ComfyUI: {e}")
+                    # On error, include the model to be safe (might be a transient issue)
+                    comfyui_validated.append(model_name)
+            
+            # Update supported models to only include ComfyUI-validated ones
+            comfyui_invalid = set(healthy_models) - set(comfyui_validated)
+            if comfyui_invalid:
+                logger.warning(f"⚠️  {len(comfyui_invalid)} models filtered out (not available in ComfyUI): {list(comfyui_invalid)}")
+            
+            self.supported_models = comfyui_validated
+        except Exception as e:
+            logger.warning(f"Failed to validate models against ComfyUI: {e}")
+            logger.warning("Falling back to health checker results only")
+            # Fallback to health checker results if ComfyUI validation fails
+            self.supported_models = healthy_models
         
         logger.info(f"Advertising {len(self.supported_models)} healthy models:")
         for i, model in enumerate(self.supported_models, 1):
