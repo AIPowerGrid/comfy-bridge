@@ -356,9 +356,15 @@ class ComfyUIBridge:
             if comfyui_invalid:
                 logger.warning(f"⚠️  {len(comfyui_invalid)} models filtered out (not available in ComfyUI): {list(comfyui_invalid)}")
             
-            self.supported_models = comfyui_validated
+            # Only use ComfyUI validation if we got some results - otherwise fall back to health checker
+            if comfyui_validated:
+                self.supported_models = comfyui_validated
+                logger.info(f"✅ ComfyUI validation: {len(comfyui_validated)} models validated")
+            else:
+                logger.warning("⚠️  ComfyUI validation filtered out all models - falling back to health checker results")
+                self.supported_models = healthy_models
         except Exception as e:
-            logger.warning(f"Failed to validate models against ComfyUI: {e}")
+            logger.error(f"Failed to validate models against ComfyUI: {e}", exc_info=True)
             logger.warning("Falling back to health checker results only")
             # Fallback to health checker results if ComfyUI validation fails
             self.supported_models = healthy_models
