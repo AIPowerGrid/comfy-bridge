@@ -329,6 +329,17 @@ class ComfyUIBridge:
                             if not checkpoints:
                                 can_serve = False
                                 logger.warning(f"    ✗ {model_name}: No checkpoint models available in ComfyUI")
+                        elif model_type == "wanvideo":
+                            # WanVideo models use custom loaders - if workflow exists and health check passed, trust it
+                            # The health checker already validated file existence
+                            can_serve = True
+                        elif model_type == "unknown":
+                            # Unknown model type - if health check passed, trust it
+                            # This handles edge cases and new model types
+                            can_serve = True
+                        else:
+                            # Other model types - if health check passed, trust it
+                            can_serve = True
                         
                         if can_serve:
                             comfyui_validated.append(model_name)
