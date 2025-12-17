@@ -61,15 +61,15 @@ class ComfyUIBridge:
         # Track models that have failed validation (don't advertise)
         self.unhealthy_models: Set[str] = set()
     
-    async def process_once(self) -> None:
-        """Process a single job from the queue."""
+    async def process_once(self) -> bool:
+        """Process a single job from the queue. Returns True if a job was processed."""
         
         job = await self.api.pop_job(self.supported_models)
         
         # Handle the case where no job is available
         if not job or not job.get("id"):
             logger.debug(f"No job available (response: {job})")
-            return
+            return False
             
         job_id = job.get("id")
         model_name = job.get('model', 'unknown')
@@ -77,7 +77,7 @@ class ComfyUIBridge:
         # Check if we're already processing this job (prevent duplicates)
         if job_id in self.processing_jobs:
             logger.warning(f"Job {job_id} already being processed, skipping duplicate")
-            return
+            return False
             
         # Mark job as being processed
         self.processing_jobs.add(job_id)
@@ -96,7 +96,7 @@ class ComfyUIBridge:
                 except Exception as cancel_error:
                     logger.error(f"Failed to cancel job {job_id}: {cancel_error}")
                 self.processing_jobs.discard(job_id)
-                return
+                return False
             
             # On-chain model validation (if enabled)
             if self.modelvault.enabled:
@@ -121,7 +121,7 @@ class ComfyUIBridge:
                     except Exception as cancel_error:
                         logger.error(f"Failed to cancel job {job_id}: {cancel_error}")
                     self.processing_jobs.discard(job_id)
-                    return
+                    return False
 
             # Build workflow
             logger.info(f"Building workflow for {model_name}")
@@ -221,6 +221,7 @@ class ComfyUIBridge:
             
             # Remove job from processing set
             self.processing_jobs.discard(job_id)
+            return True
             
         except Exception as e:
             # Clean up job from processing set on any error
@@ -451,13 +452,18 @@ class ComfyUIBridge:
                     logger.debug(f"Could not check queue status: {e}")
             
             try:
-                await self.process_once()
+                job_received = await self.process_once()
+                # If we got a job, poll again immediately for more work
+                if job_received:
+                    continue
             except Exception as e:
                 logger.error(f"Error processing job: {e}", exc_info=Settings.DEBUG)
                 
                 # Clean up any jobs that might be stuck in processing
                 # Note: We can't easily determine which job failed here, so we'll clean up on next cycle
-            await asyncio.sleep(2)
+            
+            # No job received - wait before next poll (shorter interval for faster pickup)
+            await asyncio.sleep(1.0)
 
     async def listen_comfyui_logs(self, prompt_id: str):
         """Listen to ComfyUI WebSocket for real-time logs and progress"""
