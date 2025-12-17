@@ -1,8 +1,14 @@
 import pytest
 import json
 import os
+import tempfile
 from unittest.mock import patch, MagicMock, AsyncMock
-from comfy_bridge.model_mapper import initialize_model_mapper, get_horde_models
+from comfy_bridge.model_mapper import (
+    initialize_model_mapper, 
+    get_horde_models,
+    normalize_workflow_name,
+    find_workflow_file,
+)
 
 
 class TestModelMapper:
@@ -163,3 +169,193 @@ class TestModelMapper:
                 result = get_horde_models()
 
                 assert result == ["model1", "model2", "model3"]
+
+
+class TestNormalizeWorkflowName:
+    """Test the normalize_workflow_name function."""
+
+    def test_underscore_to_hyphen(self):
+        """Test that underscores are converted to hyphens."""
+        assert normalize_workflow_name("flux_1_krea_dev") == "flux-1-krea-dev"
+
+    def test_already_hyphenated(self):
+        """Test that already hyphenated names are unchanged."""
+        assert normalize_workflow_name("flux-1-krea-dev") == "flux-1-krea-dev"
+
+    def test_mixed_separators(self):
+        """Test names with mixed underscores and hyphens."""
+        assert normalize_workflow_name("wan2_2-t2v_14b") == "wan2-2-t2v-14b"
+
+    def test_no_separators(self):
+        """Test names without separators."""
+        assert normalize_workflow_name("ltxv") == "ltxv"
+
+    def test_empty_string(self):
+        """Test empty string input."""
+        assert normalize_workflow_name("") == ""
+
+    def test_dots_preserved(self):
+        """Test that dots are preserved."""
+        assert normalize_workflow_name("flux.1_krea_dev") == "flux.1-krea-dev"
+
+
+class TestFindWorkflowFile:
+    """Test the find_workflow_file function with various naming variations."""
+
+    @pytest.fixture
+    def temp_workflow_dir(self):
+        """Create a temporary directory with test workflow files."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create test workflow files with various naming conventions
+            test_files = [
+                "flux.1-krea-dev.json",      # Hyphens
+                "wan2.2_ti2v_5B.json",        # Underscores
+                "FLUX.1-dev.json",            # Uppercase
+                "ltxv.json",                   # Simple name
+                "Chroma_final.json",          # Mixed
+                "sdxl1.json",                  # Simple
+            ]
+            for filename in test_files:
+                filepath = os.path.join(tmpdir, filename)
+                with open(filepath, 'w') as f:
+                    f.write('{}')  # Empty JSON
+            yield tmpdir
+
+    def test_exact_match(self, temp_workflow_dir):
+        """Test finding file with exact name match."""
+        result = find_workflow_file(temp_workflow_dir, "ltxv")
+        assert result is not None
+        assert os.path.basename(result) == "ltxv.json"
+
+    def test_hyphen_to_underscore(self, temp_workflow_dir):
+        """Test finding file when searching with hyphens but file has underscores."""
+        # Search for "wan2.2-ti2v-5B" but file is "wan2.2_ti2v_5B.json"
+        result = find_workflow_file(temp_workflow_dir, "wan2.2-ti2v-5B")
+        assert result is not None
+        assert os.path.basename(result) == "wan2.2_ti2v_5B.json"
+
+    def test_underscore_to_hyphen(self, temp_workflow_dir):
+        """Test finding file when searching with underscores but file has hyphens."""
+        # Search for "flux.1_krea_dev" but file is "flux.1-krea-dev.json"
+        result = find_workflow_file(temp_workflow_dir, "flux.1_krea_dev")
+        assert result is not None
+        assert os.path.basename(result) == "flux.1-krea-dev.json"
+
+    def test_case_insensitive(self, temp_workflow_dir):
+        """Test case-insensitive matching."""
+        # Search for lowercase but file is uppercase
+        result = find_workflow_file(temp_workflow_dir, "flux.1-dev")
+        assert result is not None
+        # Case may vary by filesystem, so compare case-insensitively
+        assert os.path.basename(result).lower() == "flux.1-dev.json"
+
+    def test_case_insensitive_with_normalization(self, temp_workflow_dir):
+        """Test case-insensitive matching combined with normalization."""
+        # Search for "chroma-final" (lowercase, hyphens) but file is "Chroma_final.json"
+        result = find_workflow_file(temp_workflow_dir, "chroma-final")
+        assert result is not None
+        # Case may vary by filesystem, so compare case-insensitively
+        assert os.path.basename(result).lower() == "chroma_final.json"
+
+    def test_with_json_extension(self, temp_workflow_dir):
+        """Test that .json extension in input is handled."""
+        result = find_workflow_file(temp_workflow_dir, "ltxv.json")
+        assert result is not None
+        assert os.path.basename(result) == "ltxv.json"
+
+    def test_not_found(self, temp_workflow_dir):
+        """Test that None is returned when file is not found."""
+        result = find_workflow_file(temp_workflow_dir, "nonexistent-workflow")
+        assert result is None
+
+    def test_empty_name(self, temp_workflow_dir):
+        """Test that empty name returns None."""
+        result = find_workflow_file(temp_workflow_dir, "")
+        assert result is None
+
+    def test_none_name(self, temp_workflow_dir):
+        """Test that None name returns None."""
+        result = find_workflow_file(temp_workflow_dir, None)
+        assert result is None
+
+    def test_nonexistent_directory(self):
+        """Test that nonexistent directory returns None."""
+        result = find_workflow_file("/nonexistent/path", "some-workflow")
+        assert result is None
+
+    def test_multiple_variations_priority(self, temp_workflow_dir):
+        """Test that exact match takes priority over variations."""
+        # Create both variations
+        exact_file = os.path.join(temp_workflow_dir, "test-exact.json")
+        with open(exact_file, 'w') as f:
+            f.write('{}')
+        
+        result = find_workflow_file(temp_workflow_dir, "test-exact")
+        assert result is not None
+        assert os.path.basename(result) == "test-exact.json"
+
+    def test_real_world_flux_krea(self, temp_workflow_dir):
+        """Test real-world flux.1-krea-dev scenario."""
+        # This was the actual bug: mapper had "flux.1_krea_dev" but file was "flux.1-krea-dev.json"
+        result = find_workflow_file(temp_workflow_dir, "flux.1_krea_dev")
+        assert result is not None
+        assert os.path.basename(result) == "flux.1-krea-dev.json"
+
+    def test_real_world_wan_video(self, temp_workflow_dir):
+        """Test real-world wan video scenario."""
+        # Mapper might have "wan2.2-ti2v-5B" but file is "wan2.2_ti2v_5B.json"
+        result = find_workflow_file(temp_workflow_dir, "wan2.2-ti2v-5B")
+        assert result is not None
+        assert os.path.basename(result) == "wan2.2_ti2v_5B.json"
+
+
+class TestWorkflowNormalizationIntegration:
+    """Integration tests for workflow normalization in the ModelMapper."""
+
+    @pytest.fixture
+    def temp_workflow_dir(self):
+        """Create a temporary directory with test workflow files."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create test workflow files
+            test_files = [
+                "flux.1-krea-dev.json",
+                "wan2.2_ti2v_5B.json",
+            ]
+            for filename in test_files:
+                filepath = os.path.join(tmpdir, filename)
+                with open(filepath, 'w') as f:
+                    json.dump({"test": True}, f)
+            yield tmpdir
+
+    def test_find_handles_all_common_variations(self, temp_workflow_dir):
+        """Test that find_workflow_file handles all common naming variations."""
+        # All these should find "flux.1-krea-dev.json"
+        flux_variations = [
+            "flux.1-krea-dev",      # Exact
+            "flux.1_krea_dev",      # Underscores
+            "FLUX.1-krea-dev",      # Uppercase
+            "FLUX.1_krea_dev",      # Uppercase + underscores
+            "flux.1-krea-dev.json", # With extension
+        ]
+        
+        for variation in flux_variations:
+            result = find_workflow_file(temp_workflow_dir, variation)
+            assert result is not None, f"Failed to find file for variation: {variation}"
+            # Case may vary by filesystem, so compare case-insensitively
+            assert os.path.basename(result).lower() == "flux.1-krea-dev.json"
+
+    def test_find_handles_wan_variations(self, temp_workflow_dir):
+        """Test that find_workflow_file handles WAN video naming variations."""
+        # All these should find "wan2.2_ti2v_5B.json"
+        wan_variations = [
+            "wan2.2_ti2v_5B",       # Exact
+            "wan2.2-ti2v-5B",       # Hyphens
+            "wan2.2_ti2v_5b",       # Lowercase B
+            "WAN2.2_ti2v_5B",       # Uppercase WAN
+        ]
+        
+        for variation in wan_variations:
+            result = find_workflow_file(temp_workflow_dir, variation)
+            assert result is not None, f"Failed to find file for variation: {variation}"
+            # Case may vary by filesystem, so compare case-insensitively
+            assert os.path.basename(result).lower() == "wan2.2_ti2v_5b.json"
