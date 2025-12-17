@@ -84,11 +84,12 @@ class APIClient:
                     if Settings.DEBUG or skipped.get("models", 0) > 0:
                         logger.info(f"📭 No job received. Full API response: {json.dumps(result, indent=2)}")
             
-            # Log skipped jobs for debugging (log periodically to reduce noise)
+            # Log skipped jobs for debugging
             interesting_skips = {k: v for k, v in skipped.items() if v > 0}
             if interesting_skips:
-                # Log skipped jobs periodically (every 50th poll) or on first poll
-                if self._pop_count == 1 or self._pop_count % 50 == 0:
+                # Log skipped jobs periodically (every 50th poll) or on first poll, OR always if models are skipped
+                should_log = self._pop_count == 1 or self._pop_count % 50 == 0 or skipped.get("models", 0) > 0
+                if should_log:
                     logger.info(f"ℹ️  Skipped jobs (poll #{self._pop_count}): {interesting_skips}")
                     # Explain what the skips mean
                     if skipped.get("max_pixels", 0) > 0:
