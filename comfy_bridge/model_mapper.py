@@ -10,6 +10,61 @@ from .modelvault_client import get_modelvault_client, OnChainModelInfo, ModelTyp
 logger = logging.getLogger(__name__)
 
 
+def normalize_workflow_name(name: str) -> str:
+    """Normalize workflow name by converting underscores to hyphens for consistency."""
+    return name.replace("_", "-")
+
+
+def find_workflow_file(workflow_dir: str, workflow_name: str) -> Optional[str]:
+    """
+    Find a workflow file by name, handling dash/underscore variations.
+    
+    Tries multiple variations:
+    1. Exact match
+    2. With underscores replaced by hyphens
+    3. With hyphens replaced by underscores
+    4. Case-insensitive versions of all above
+    
+    Returns the absolute path if found, None otherwise.
+    """
+    if not workflow_name:
+        return None
+    
+    # Add .json extension if not present
+    base_name = workflow_name[:-5] if workflow_name.endswith('.json') else workflow_name
+    
+    # Generate all variations to try
+    variations = [
+        base_name,                           # Original
+        base_name.replace("_", "-"),         # Underscores to hyphens
+        base_name.replace("-", "_"),         # Hyphens to underscores
+    ]
+    
+    # Add .json extension to all variations
+    filenames_to_try = [f"{v}.json" for v in variations]
+    
+    try:
+        available_files = os.listdir(workflow_dir)
+    except FileNotFoundError:
+        return None
+    
+    # Create lowercase lookup map for case-insensitive matching
+    file_map = {f.lower(): f for f in available_files}
+    
+    for filename in filenames_to_try:
+        # Try exact match first
+        full_path = os.path.join(workflow_dir, filename)
+        if os.path.exists(full_path):
+            return full_path
+        
+        # Try case-insensitive match
+        actual_name = file_map.get(filename.lower())
+        if actual_name:
+            return os.path.join(workflow_dir, actual_name)
+    
+    return None
+
+
 async def fetch_comfyui_models(comfy_url: str) -> List[str]:
     """Fetch available models from ComfyUI (for local availability check)."""
     endpoints = ["/object_info", "/model_list"]
@@ -183,26 +238,9 @@ class ModelMapper:
         from .config import Settings
         import os
         
-        def resolve_case_insensitive(dir_path: str, filename: str) -> str:
-            """Return absolute path to filename in dir_path, matched case-insensitively.
-            Returns empty string if not found."""
-            target = filename.lower()
-            try:
-                for fname in os.listdir(dir_path):
-                    if fname.lower() == target:
-                        return os.path.join(dir_path, fname)
-            except FileNotFoundError:
-                pass
-            return ""
-        
         def check_workflow_exists(workflow_file: str) -> bool:
-            """Check if workflow file exists (case-insensitive)."""
-            filename = workflow_file if workflow_file.endswith('.json') else f"{workflow_file}.json"
-            workflow_path = os.path.join(Settings.WORKFLOW_DIR, filename)
-            if os.path.exists(workflow_path):
-                return True
-            ci = resolve_case_insensitive(Settings.WORKFLOW_DIR, filename)
-            return bool(ci and os.path.exists(ci))
+            """Check if workflow file exists (handles dash/underscore/case variations)."""
+            return find_workflow_file(Settings.WORKFLOW_DIR, workflow_file) is not None
         
         # 1. Build workflow mappings from blockchain models (primary source)
         for model_name, model_info in self.chain_models.items():
@@ -306,23 +344,12 @@ class ModelMapper:
             if not mapped_workflow:
                 mapped_workflow = model_name
             
-            # Add .json extension if not present
-            filename = mapped_workflow if mapped_workflow.endswith('.json') else f"{mapped_workflow}.json"
-            abs_path = os.path.join(Settings.WORKFLOW_DIR, filename)
-            if not os.path.exists(abs_path):
-                # Case-insensitive fallback
-                target = filename.lower()
-                try:
-                    for fname in os.listdir(Settings.WORKFLOW_DIR):
-                        if fname.lower() == target:
-                            abs_path = os.path.join(Settings.WORKFLOW_DIR, fname)
-                            break
-                except FileNotFoundError:
-                    pass
-            if os.path.exists(abs_path):
+            # Use find_workflow_file which handles dash/underscore normalization
+            abs_path = find_workflow_file(Settings.WORKFLOW_DIR, mapped_workflow)
+            if abs_path:
                 resolved_paths.append((model_name, abs_path))
             else:
-                logger.warning(f"Workflow file not found from env: {abs_path}")
+                logger.warning(f"Workflow file not found for '{model_name}' (tried: {mapped_workflow} with dash/underscore variants)")
         return resolved_paths
 
     def _extract_model_files_from_workflow(self, workflow_path: str) -> List[str]:
@@ -652,34 +679,34 @@ class ModelMapper:
             logger.info(f"Removed {len(workflows_to_remove)} workflows due to missing models")
 
     def get_workflow_file(self, horde_model_name: str) -> str:
-        """Get the workflow file for a Grid model"""
-        # Look up workflow for model
+        """Get the workflow file for a Grid model.
+        
+        Returns the actual filename found on disk, handling dash/underscore variations.
+        """
+        from .config import Settings
+        
+        # Try to find workflow file for each potential match
+        candidates = []
         
         # Direct lookup
         direct_match = self.workflow_map.get(horde_model_name)
         if direct_match:
-            # Add .json extension
-            return f"{direct_match}.json"
+            candidates.append(direct_match)
         
         # Check chain models for dynamic resolution
         chain_model = self.chain_models.get(horde_model_name)
         if chain_model:
             workflow = self._derive_workflow_from_chain_model(chain_model)
             if workflow:
-                return f"{workflow}.json"
+                candidates.append(workflow)
         
         # Partial match
         partial_match = next(
-            (
-                v
-                for k, v in self.workflow_map.items()
-                if horde_model_name.lower() in k.lower()
-            ),
+            (v for k, v in self.workflow_map.items() if horde_model_name.lower() in k.lower()),
             None,
         )
         if partial_match:
-            # Add .json extension
-            return f"{partial_match}.json"
+            candidates.append(partial_match)
         
         # Fallback to defaults mapping (case-insensitive)
         lower_name = horde_model_name.lower()
@@ -688,10 +715,17 @@ class ModelMapper:
             None,
         )
         if default_match:
-            return default_match if default_match.endswith(".json") else f"{default_match}.json"
+            candidates.append(default_match)
+        
+        # Try to find each candidate file (with dash/underscore normalization)
+        for candidate in candidates:
+            found_path = find_workflow_file(Settings.WORKFLOW_DIR, candidate)
+            if found_path:
+                # Return just the filename, not the full path
+                return os.path.basename(found_path)
         
         # Last-resort default
-        return "Dreamshaper.json"  # Default workflow
+        return "Dreamshaper.json"
 
     def get_available_horde_models(self) -> List[str]:
         """Get list of available models (only installed models with workflows).
