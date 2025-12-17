@@ -98,10 +98,13 @@ class APIClient:
                         logger.info(f"   → {skipped['nsfw']} jobs skipped: NSFW content (GRID_NSFW={Settings.NSFW})")
                     if skipped.get("models", 0) > 0:
                         logger.info(f"   → {skipped['models']} jobs skipped: model mismatch (jobs exist but for models we don't support)")
-                        logger.info(f"      We are advertising: {models_to_use[:10]}{'...' if len(models_to_use) > 10 else ''}")
+                        logger.info(f"      We are advertising: {models_to_use}")
                         # Check which models actually have jobs in the queue
+                        logger.info(f"      Fetching models status from API...")
                         try:
                             models_status = await self.get_models_status()
+                            logger.info(f"      Models status API returned: type={type(models_status).__name__}, len={len(models_status) if hasattr(models_status, '__len__') else 'N/A'}")
+                            
                             if models_status:
                                 if isinstance(models_status, list):
                                     models_with_jobs = []
@@ -112,25 +115,29 @@ class APIClient:
                                             if queued > 0:
                                                 models_with_jobs.append((name, queued))
                                     
+                                    logger.info(f"      Found {len(models_with_jobs)} models with queued jobs")
                                     if models_with_jobs:
-                                        logger.info(f"      Models with queued jobs:")
-                                        for name, queued in sorted(models_with_jobs, key=lambda x: -x[1])[:10]:
-                                            supported = "✓" if name in models_to_use else "✗"
-                                            logger.info(f"         {supported} {name}: {queued} jobs")
+                                        logger.info(f"      🔍 MODELS WITH QUEUED JOBS (sorted by queue size):")
+                                        for name, queued in sorted(models_with_jobs, key=lambda x: -x[1])[:20]:
+                                            supported = "✓ SUPPORTED" if name in models_to_use else "✗ NOT SUPPORTED"
+                                            logger.info(f"         {supported}: '{name}' has {queued} job(s)")
+                                        
+                                        # Check for near-matches to help with naming issues
+                                        unsupported = [n for n, _ in models_with_jobs if n not in models_to_use]
+                                        if unsupported:
+                                            logger.info(f"      ⚠️  UNSUPPORTED MODELS WITH JOBS: {unsupported}")
+                                            logger.info(f"         These are the models you need to add to WORKFLOW_FILE or create mappings for")
                                     else:
-                                        logger.info(f"      No models with queued jobs found in status response")
+                                        logger.info(f"      No models with queued jobs found (all models have 0 queued)")
+                                        # Log first few models to see structure
+                                        logger.info(f"      Sample of models status: {models_status[:3] if len(models_status) > 0 else 'empty'}")
                                 else:
                                     logger.info(f"      Models status response is not a list: {type(models_status)}")
-                                    logger.debug(f"      Response content: {models_status}")
+                                    logger.info(f"      Raw response: {str(models_status)[:500]}")
                             else:
-                                logger.info(f"      Could not get models status (empty response)")
+                                logger.info(f"      Models status returned empty/None")
                         except Exception as e:
-                            logger.warning(f"      Could not check queue status: {e}", exc_info=Settings.DEBUG)
-                        # Always log full response when models are skipped to help diagnose
-                        logger.info(f"      Full API response: {json.dumps(result, indent=2)}")
-                        # Log full response details if available
-                        if "skipped_info" in result:
-                            logger.info(f"      Skipped details: {result.get('skipped_info', {})}")
+                            logger.error(f"      ❌ Failed to check queue status: {e}", exc_info=True)
                     if skipped.get("worker_id", 0) > 0:
                         logger.info(f"   → {skipped['worker_id']} jobs skipped: worker ID issue")
                     if skipped.get("performance", 0) > 0:
@@ -270,22 +277,26 @@ class APIClient:
             )
             raise
 
-    async def get_models_status(self) -> Dict[str, Any]:
+    async def get_models_status(self) -> list:
         """
         Fetch current status of all models including queue counts.
         This shows what models have jobs waiting.
+        Returns a list of model status dicts.
         """
         try:
+            logger.debug(f"Fetching /v2/status/models...")
             response = await self.client.get(
                 "/v2/status/models", headers=self.headers
             )
             response.raise_for_status()
-            return response.json()
+            data = response.json()
+            logger.debug(f"Models status response: status={response.status_code}, type={type(data).__name__}, len={len(data) if hasattr(data, '__len__') else 'N/A'}")
+            return data
         except httpx.HTTPStatusError as exc:
             logger.error(
-                f"Failed to get models status [{exc.response.status_code}]: {exc.response.text}"
+                f"Failed to get models status [{exc.response.status_code}]: {exc.response.text[:500]}"
             )
-            return {}
+            return []
         except Exception as e:
-            logger.error(f"Error getting models status: {e}")
-            return {}
+            logger.error(f"Error getting models status: {e}", exc_info=True)
+            return []
