@@ -70,6 +70,9 @@ class APIClient:
             response.raise_for_status()
             result = response.json()
 
+            # Get skipped jobs info early for use in logging
+            skipped = result.get("skipped", {})
+
             # Cache job metadata for potential reuse
             if result.get("id"):
                 job_id = result.get("id")
@@ -82,7 +85,6 @@ class APIClient:
                         logger.info(f"📭 No job received. Full API response: {json.dumps(result, indent=2)}")
             
             # Log skipped jobs for debugging (log periodically to reduce noise)
-            skipped = result.get("skipped", {})
             interesting_skips = {k: v for k, v in skipped.items() if v > 0}
             if interesting_skips:
                 # Log skipped jobs periodically (every 50th poll) or on first poll
