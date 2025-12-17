@@ -118,7 +118,11 @@ class APIClient:
             response.raise_for_status()
             logger.info(f"Successfully cancelled job {job_id}")
         except httpx.HTTPStatusError as e:
-            logger.error(f"Failed to cancel job {job_id}: {e.response.status_code} - {e.response.text}")
+            # 404 is expected if job was never submitted (e.g., rejected during validation)
+            if e.response.status_code == 404:
+                logger.debug(f"Job {job_id} not found for cancellation (may have been rejected before submission)")
+            else:
+                logger.error(f"Failed to cancel job {job_id}: {e.response.status_code} - {e.response.text}")
 
     async def submit_result(self, payload: Dict[str, Any]) -> None:
         job_id = payload.get("id")
