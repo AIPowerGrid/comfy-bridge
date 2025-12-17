@@ -300,3 +300,40 @@ class APIClient:
         except Exception as e:
             logger.error(f"Error getting models status: {e}", exc_info=True)
             return []
+
+    async def update_progress(self, job_id: str, current_step: int, total_steps: int) -> bool:
+        """
+        Report progress on an active generation job to the API.
+        This allows clients (like Discord) to see real-time step progress.
+        
+        Args:
+            job_id: The processing generation ID (from the popped job)
+            current_step: Current step in the generation (e.g., 15)
+            total_steps: Total steps for the generation (e.g., 30)
+            
+        Returns:
+            True if update succeeded, False otherwise
+        """
+        payload = {
+            "id": job_id,
+            "current_step": current_step,
+            "total_steps": total_steps,
+        }
+        
+        try:
+            response = await self.client.post(
+                "/v2/generate/progress",
+                headers=self.headers,
+                json=payload,
+            )
+            response.raise_for_status()
+            return True
+        except httpx.HTTPStatusError as exc:
+            # Don't log as error - job may have completed/faulted already
+            logger.debug(
+                f"Progress update for job {job_id} failed [{exc.response.status_code}]: {exc.response.text[:200]}"
+            )
+            return False
+        except Exception as e:
+            logger.debug(f"Progress update error for job {job_id}: {e}")
+            return False
