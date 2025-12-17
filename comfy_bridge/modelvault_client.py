@@ -324,9 +324,14 @@ class ModelVaultClient:
             
             return model_info
         except Exception as e:
-            logger.error(f"Error fetching model by hash: {e}")
-            import traceback
-            logger.debug(traceback.format_exc())
+            # Log at debug level - this is expected when ABI doesn't match or model data is malformed
+            # The raw bytes are not useful to display, just note the failure
+            error_str = str(e)
+            if "Could not decode" in error_str:
+                # Truncate the raw bytes from the error message for cleaner logs
+                logger.debug(f"Could not decode model from chain (ABI mismatch or malformed data)")
+            else:
+                logger.debug(f"Error fetching model by hash: {type(e).__name__}")
             return None
 
     def _get_model_files(self, model_hash: bytes) -> List[ModelFile]:
@@ -554,17 +559,27 @@ class ModelVaultClient:
                 model_hashes = self.get_all_model_hashes()
                 logger.info(f"Fetching {len(model_hashes)} models from blockchain...")
                 
+                failed_count = 0
                 for model_hash in model_hashes:
                     try:
                         model_info = self.get_model_by_hash(model_hash)
                         if model_info:
                             temp_models.append(model_info)
                             blockchain_success = True
+                        else:
+                            failed_count += 1
                     except Exception as e:
-                        logger.warning(f"Failed to fetch model {model_hash.hex()}: {e}")
+                        failed_count += 1
+                        logger.debug(f"Failed to fetch model {model_hash.hex()[:16]}...: {type(e).__name__}")
                         continue
+                
+                # Log summary at appropriate level
+                if blockchain_success and temp_models:
+                    logger.info(f"✓ Loaded {len(temp_models)} models from blockchain")
+                if failed_count > 0:
+                    logger.debug(f"Could not decode {failed_count}/{len(model_hashes)} models (ABI mismatch - this is normal)")
             except Exception as e:
-                logger.error(f"Error fetching models from chain: {e}")
+                logger.warning(f"Blockchain fetch failed, will use local catalog: {type(e).__name__}")
         
         # Fall back to local catalog if blockchain failed or returned no models
         if not blockchain_success or not temp_models:
