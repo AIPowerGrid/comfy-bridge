@@ -84,6 +84,16 @@ class JobPoller:
         if status_str == "error":
             error_msg = self._extract_error_message(status)
             logger.error(f"ComfyUI workflow failed: {error_msg}")
+            
+            # Log additional context for WanVideoDecode errors
+            if "WanVideoDecode" in error_msg and "tensor" in error_msg.lower():
+                logger.error(
+                    "WanVideoDecode tensor dimension error detected. "
+                    "This usually indicates a mismatch between WanVideoDecode tile_x/tile_y "
+                    "and the WanVideoSampler output dimensions. "
+                    "Check the workflow file's tile parameters match the model's expected dimensions."
+                )
+            
             if Settings.DEBUG:
                 logger.debug(f"Full status data: {status}")
             raise Exception(f"ComfyUI workflow failed: {error_msg}")
@@ -97,6 +107,18 @@ class JobPoller:
                 error_msg = error_data.get("exception_message", "Unknown execution error")
                 node_id = error_data.get("node_id", "unknown")
                 node_type = error_data.get("node_type", "unknown")
+                
+                # Add helpful context for WanVideoDecode tensor dimension errors
+                if node_type == "WanVideoDecode" and "tensor" in error_msg.lower() and "size" in error_msg.lower():
+                    enhanced_msg = (
+                        f"{error_msg}\n"
+                        f"This error typically occurs when WanVideoDecode tile_x/tile_y parameters "
+                        f"don't match the WanVideoSampler output tensor dimensions. "
+                        f"Check that the workflow's tile_x/tile_y values are compatible with "
+                        f"the WanVideoEmptyEmbeds width/height/num_frames settings."
+                    )
+                    return f"Node {node_id} ({node_type}): {enhanced_msg}"
+                
                 return f"Node {node_id} ({node_type}): {error_msg}"
         
         return status.get("exception_message", "Unknown execution error")
