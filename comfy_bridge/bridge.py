@@ -132,6 +132,15 @@ class ComfyUIBridge:
             logger.info(f"DEBUG AFTER BUILD - Node 31 seed: {workflow.get('31', {}).get('inputs', {}).get('seed', 'NOT FOUND')}")
             logger.info(f"DEBUG AFTER BUILD - Node 40 clip_name2: {workflow.get('40', {}).get('inputs', {}).get('clip_name2', 'NOT FOUND')}")
             
+            # Validate WanVideo workflow parameters before submission
+            try:
+                from .workflow import validate_wanvideo_workflow
+                validate_wanvideo_workflow(workflow)
+            except ImportError:
+                pass  # Function may not exist in older versions
+            except Exception as e:
+                logger.warning(f"WanVideo workflow validation warning: {e}")
+            
             # Validate and fix model filenames before submission
             logger.info("Starting model filename validation...")
             validation_failed = False

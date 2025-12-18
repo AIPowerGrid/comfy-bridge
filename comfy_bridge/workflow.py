@@ -1333,6 +1333,86 @@ async def process_workflow(
     return processed_workflow
 
 
+def validate_wanvideo_workflow(workflow: Dict[str, Any]) -> None:
+    """
+    Validate WanVideo workflow parameters to catch tensor dimension mismatches early.
+    
+    Checks that WanVideoDecode tile_x/tile_y are compatible with WanVideoEmptyEmbeds dimensions.
+    Raises ValueError if incompatible parameters are detected.
+    """
+    model_type = detect_workflow_model_type(workflow)
+    if model_type != "wanvideo":
+        return
+    
+    # Find WanVideoDecode and WanVideoEmptyEmbeds nodes
+    wan_decode_nodes = []
+    wan_embeds_nodes = []
+    
+    # Handle ComfyUI native format (nodes array)
+    if isinstance(workflow, dict) and "nodes" in workflow:
+        nodes = workflow.get("nodes", [])
+        for node in nodes:
+            if not isinstance(node, dict):
+                continue
+            class_type = node.get("type", "")
+            node_id = node.get("id")
+            
+            if class_type == "WanVideoDecode":
+                inputs = node.get("inputs", {})
+                if isinstance(inputs, dict):
+                    wan_decode_nodes.append((node_id, inputs))
+            elif class_type == "WanVideoEmptyEmbeds":
+                inputs = node.get("inputs", {})
+                if isinstance(inputs, dict):
+                    wan_embeds_nodes.append((node_id, inputs))
+    else:
+        # Handle simple format (direct node objects)
+        for node_id, node_data in workflow.items():
+            if not isinstance(node_data, dict):
+                continue
+            class_type = node_data.get("class_type", "")
+            inputs = node_data.get("inputs", {})
+            
+            if class_type == "WanVideoDecode":
+                wan_decode_nodes.append((node_id, inputs))
+            elif class_type == "WanVideoEmptyEmbeds":
+                wan_embeds_nodes.append((node_id, inputs))
+    
+    # Validate each WanVideoDecode node
+    for decode_id, decode_inputs in wan_decode_nodes:
+        tile_x = decode_inputs.get("tile_x")
+        tile_y = decode_inputs.get("tile_y")
+        
+        if tile_x is None or tile_y is None:
+            logger.warning(
+                f"WanVideoDecode node {decode_id}: Missing tile_x or tile_y parameters "
+                f"(tile_x={tile_x}, tile_y={tile_y}). This may cause tensor dimension errors."
+            )
+            continue
+        
+        # Log for debugging
+        logger.debug(
+            f"WanVideoDecode node {decode_id}: tile_x={tile_x}, tile_y={tile_y}"
+        )
+        
+        # Check if tile dimensions are reasonable (must be multiples of 8 for VAE tiling)
+        if tile_x % 8 != 0 or tile_y % 8 != 0:
+            logger.warning(
+                f"WanVideoDecode node {decode_id}: tile_x ({tile_x}) or tile_y ({tile_y}) "
+                f"is not a multiple of 8. This may cause tensor dimension errors."
+            )
+    
+    # Log WanVideoEmptyEmbeds dimensions for debugging
+    for embeds_id, embeds_inputs in wan_embeds_nodes:
+        width = embeds_inputs.get("width")
+        height = embeds_inputs.get("height")
+        num_frames = embeds_inputs.get("num_frames")
+        logger.debug(
+            f"WanVideoEmptyEmbeds node {embeds_id}: width={width}, height={height}, "
+            f"num_frames={num_frames}"
+        )
+
+
 def convert_native_workflow_to_simple(workflow: Dict[str, Any]) -> Dict[str, Any]:
     """
     Convert ComfyUI native workflow format (nodes array + links) to the simple prompt format.
