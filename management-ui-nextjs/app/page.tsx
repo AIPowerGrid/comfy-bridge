@@ -634,11 +634,7 @@ export default function Home() {
         description: model.description || '',
         modelType,
         isNSFW: model.nsfw || false,
-<<<<<<< Updated upstream
-        sizeBytes: sizeBytes,
-=======
         sizeBytes: sizeBytesValue,
->>>>>>> Stashed changes
         inpainting: model.inpainting || false,
         img2img: false,
         controlnet: false,
