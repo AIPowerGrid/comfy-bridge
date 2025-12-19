@@ -24,10 +24,13 @@ services:
           - MODELS_PATH=/app/ComfyUI/models
           - ENV_FILE_PATH=/app/comfy-bridge/.env
           - GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH=/app/grid-image-model-reference
-          - MODELVAULT_CONTRACT=${MODELVAULT_CONTRACT:-0xe660455D4A83bbbbcfDCF4219ad82447a831c8A1}
-          - MODELVAULT_RPC=${MODELVAULT_RPC:-https://sepolia.base.org}
+          - MODELVAULT_CONTRACT=${MODELVAULT_CONTRACT:-0x79F39f2a0eA476f53994812e6a8f3C8CFe08c609}
+          - MODELVAULT_RPC=${MODELVAULT_RPC:-https://mainnet.base.org}
           - CIVITAI_API_KEY=${CIVITAI_API_KEY:-}
           - HUGGING_FACE_API_KEY=${HUGGING_FACE_API_KEY:-}
+          # WalletConnect/Reown Project ID (optional - eliminates 403 error)
+          # Get a free project ID from https://cloud.walletconnect.com
+          - NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=${NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID:-}
         
         ports:
           - "5000:5000"  # Management UI
@@ -72,8 +75,8 @@ services:
         # Pass model configuration as build args to download models during image build
         GRID_MODEL: ${GRID_MODEL:-}
         WORKFLOW_FILE: ${WORKFLOW_FILE:-}
-        MODELVAULT_CONTRACT: ${MODELVAULT_CONTRACT:-0xe660455D4A83bbbbcfDCF4219ad82447a831c8A1}
-        MODELVAULT_RPC: ${MODELVAULT_RPC:-https://sepolia.base.org}
+        MODELVAULT_CONTRACT: ${MODELVAULT_CONTRACT:-0x79F39f2a0eA476f53994812e6a8f3C8CFe08c609}
+        MODELVAULT_RPC: ${MODELVAULT_RPC:-https://mainnet.base.org}
         HUGGING_FACE_API_KEY: ${HUGGING_FACE_API_KEY:-}
         CIVITAI_API_KEY: ${CIVITAI_API_KEY:-}
     container_name: comfy-bridge
@@ -102,8 +105,8 @@ services:
       - HUGGING_FACE_API_KEY=${HUGGING_FACE_API_KEY:-}
       - CIVITAI_API_KEY=${CIVITAI_API_KEY:-}
       - DEBUG=${DEBUG:-true}
-      - MODELVAULT_CONTRACT=${MODELVAULT_CONTRACT:-0xe660455D4A83bbbbcfDCF4219ad82447a831c8A1}
-      - MODELVAULT_RPC=${MODELVAULT_RPC:-https://sepolia.base.org}
+      - MODELVAULT_CONTRACT=${MODELVAULT_CONTRACT:-0x79F39f2a0eA476f53994812e6a8f3C8CFe08c609}
+      - MODELVAULT_RPC=${MODELVAULT_RPC:-https://mainnet.base.org}
       - MODELS_PATH=/app/ComfyUI/models
     
     # Ports

@@ -34,11 +34,11 @@ class Settings:
     # Kept for backward compatibility during transition
     GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH = os.getenv("GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH")
     
-    # ModelVault on-chain model registry (Base Sepolia)
+    # ModelVault on-chain model registry (Base Mainnet)
     # The blockchain is the single source of truth for model registration
     MODELVAULT_ENABLED = os.getenv("MODELVAULT_ENABLED", "true").lower() == "true"
-    MODELVAULT_RPC_URL = os.getenv("MODELVAULT_RPC_URL", "https://sepolia.base.org")
-    MODELVAULT_CONTRACT = os.getenv("MODELVAULT_CONTRACT", "0xe660455D4A83bbbbcfDCF4219ad82447a831c8A1")
+    MODELVAULT_RPC_URL = os.getenv("MODELVAULT_RPC_URL", "https://mainnet.base.org")
+    MODELVAULT_CONTRACT = os.getenv("MODELVAULT_CONTRACT", "0x79F39f2a0eA476f53994812e6a8f3C8CFe08c609")
 
     @classmethod
     def validate(cls):

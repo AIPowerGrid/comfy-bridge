@@ -2,7 +2,7 @@
  * Register Models to Blockchain
  * 
  * This script registers models from the stable_diffusion.json catalog
- * to the ModelRegistry smart contract on Base Sepolia.
+ * to the ModelRegistry smart contract on Base Mainnet.
  * 
  * Usage:
  *   node scripts/register-models-to-chain.js [--dry-run] [--model <model-name>]
@@ -10,7 +10,7 @@
  * Environment variables:
  *   PRIVATE_KEY - Private key with registrar role on ModelRegistry
  *   MODELVAULT_CONTRACT - ModelRegistry contract address (optional)
- *   MODELVAULT_RPC_URL - RPC URL (optional, defaults to Base Sepolia)
+ *   MODELVAULT_RPC_URL - RPC URL (optional, defaults to Base Mainnet)
  * 
  * Options:
  *   --dry-run    Show what would be registered without actually registering
@@ -25,9 +25,11 @@ const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
 // Contract configuration
-const MODEL_REGISTRY_ADDRESS = process.env.MODELVAULT_CONTRACT || '0xe660455D4A83bbbbcfDCF4219ad82447a831c8A1';
-const RPC_URL = process.env.MODELVAULT_RPC_URL || 'https://sepolia.base.org';
-const PRIVATE_KEY = process.env.PRIVATE_KEY;
+const MODEL_REGISTRY_ADDRESS = process.env.MODELVAULT_CONTRACT || '0x79F39f2a0eA476f53994812e6a8f3C8CFe08c609';
+const RPC_URL = process.env.MODELVAULT_RPC_URL || 'https://mainnet.base.org';
+// Support multiple env var names for the private key
+// Note: WALLET_ID is a wallet address, not a private key, so check PRIVATE_KEY first
+const PRIVATE_KEY = process.env.PRIVATE_KEY || process.env.WALLET_PRIVATE_KEY;
 
 // Model type enum matching the contract
 const ModelType = {
@@ -36,13 +38,14 @@ const ModelType = {
   VIDEO_MODEL: 2
 };
 
-// Minimal ABI for ModelRegistry
+// ABI for Grid proxy ModelVault module
 const MODEL_REGISTRY_ABI = [
-  "function totalModels() view returns (uint256)",
-  "function getModel(uint256 modelId) view returns (tuple(bytes32 modelHash, uint8 modelType, string fileName, string name, string description, bool isNSFW, uint256 sizeBytes, uint256 timestamp, address creator, bool inpainting, bool img2img, bool controlnet, bool lora, string baseModel, string architecture))",
-  "function isModelExists(bytes32 modelHash) view returns (bool)",
-  "function registerModel(bytes32 modelHash, uint8 modelType, string fileName, string displayName, string description, bool isNSFW, uint256 sizeBytes, bool inpainting, bool img2img, bool controlnet, bool lora, string baseModel, string architecture) returns (uint256)",
-  "event ModelRegistered(uint256 indexed modelId, address indexed creator, bytes32 modelHash, uint8 modelType, string name)"
+  "function getModelCount() view returns (uint256)",
+  "function getModel(uint256 modelId) view returns (tuple(bytes32 modelHash, uint8 modelType, string fileName, string name, string version, string ipfsCid, string downloadUrl, uint256 sizeBytes, string quantization, string format, uint32 vramMB, string baseModel, bool inpainting, bool img2img, bool controlnet, bool lora, bool isActive, bool isNSFW, uint256 timestamp, address creator))",
+  "function getModelByHash(bytes32 modelHash) view returns (tuple(bytes32 modelHash, uint8 modelType, string fileName, string name, string version, string ipfsCid, string downloadUrl, uint256 sizeBytes, string quantization, string format, uint32 vramMB, string baseModel, bool inpainting, bool img2img, bool controlnet, bool lora, bool isActive, bool isNSFW, uint256 timestamp, address creator))",
+  "function isModelExists(uint256 modelId) view returns (bool)",
+  "function registerModel(bytes32 modelHash, uint8 modelType, string fileName, string name, string version, string ipfsCid, string downloadUrl, uint256 sizeBytes, string quantization, string format, uint32 vramMB, string baseModel, bool inpainting, bool img2img, bool controlnet, bool lora, bool isNSFW) returns (uint256)",
+  "event ModelRegistered(uint256 indexed modelId, bytes32 indexed modelHash, string name, address creator)"
 ];
 
 /**
@@ -113,7 +116,14 @@ function parseModelForContract(name, data) {
     controlnet: data.controlnet || false,
     lora: data.type === 'loras' || nameLower.includes('lora'),
     baseModel: data.baseline || data.base_model || '',
-    architecture: data.style || data.type || 'checkpoint'
+    architecture: data.style || data.type || 'checkpoint',
+    // Grid ModelVault additional fields
+    version: data.version || "1.0",
+    ipfsCid: data.ipfs_cid || data.ipfsCid || "",
+    downloadUrl: data.download_url || data.downloadUrl || "",
+    quantization: data.quantization || "",
+    format: data.format || (fileName.endsWith('.safetensors') ? 'safetensors' : fileName.endsWith('.ckpt') ? 'ckpt' : 'safetensors'),
+    vramMB: data.vram_mb || data.vramMB || 0
   };
 }
 
@@ -122,7 +132,24 @@ function parseModelForContract(name, data) {
  */
 async function getRegisteredModels(contract) {
   try {
-    const totalModels = await contract.totalModels();
+    // Try to call getModelCount - if it fails, the contract might not exist or be wrong type
+    let totalModels;
+    try {
+      totalModels = await contract.getModelCount();
+    } catch (err) {
+      if (err.code === 'BAD_DATA' || err.message.includes('could not decode') || err.message.includes('function not found')) {
+        console.error('⚠️  Contract at this address may not be a Grid ModelVault contract');
+        console.error('   Error:', err.message);
+        console.error('   This could mean:');
+        console.error('   1. Contract not deployed at this address');
+        console.error('   2. Wrong contract type/ABI');
+        console.error('   3. Contract not initialized');
+        console.error('   4. ModelVault module not registered in Grid proxy');
+        return [];
+      }
+      throw err;
+    }
+    
     console.log(`📊 Total models on-chain: ${totalModels}`);
     
     const models = [];
@@ -135,7 +162,7 @@ async function getRegisteredModels(contract) {
           modelType: Number(model[1]),
           fileName: model[2],
           name: model[3],
-          description: model[4]
+          version: model[4]
         });
       } catch (err) {
         console.log(`   ⚠️  Could not fetch model ${i}: ${err.message}`);
@@ -165,20 +192,29 @@ async function registerModel(contractWithSigner, modelData, dryRun = false) {
   }
   
   try {
+    // Grid ModelVault registerModel signature:
+    // registerModel(bytes32 modelHash, uint8 modelType, string fileName, string name, 
+    //               string version, string ipfsCid, string downloadUrl, uint256 sizeBytes,
+    //               string quantization, string format, uint32 vramMB, string baseModel,
+    //               bool inpainting, bool img2img, bool controlnet, bool lora, bool isNSFW)
     const tx = await contractWithSigner.registerModel(
       modelData.modelHash,
       modelData.modelType,
       modelData.fileName,
       modelData.displayName,
-      modelData.description,
-      modelData.isNSFW,
+      modelData.version || "1.0",           // version
+      modelData.ipfsCid || "",             // ipfsCid
+      modelData.downloadUrl || "",          // downloadUrl
       modelData.sizeBytes,
+      modelData.quantization || "",         // quantization
+      modelData.format || "safetensors",    // format
+      modelData.vramMB || 0,                // vramMB
+      modelData.baseModel,
       modelData.inpainting,
       modelData.img2img,
       modelData.controlnet,
       modelData.lora,
-      modelData.baseModel,
-      modelData.architecture
+      modelData.isNSFW
     );
     
     console.log(`   ⏳ Transaction sent: ${tx.hash}`);
@@ -257,22 +293,33 @@ async function main() {
     return;
   }
   
-  // Check for private key
-  if (!PRIVATE_KEY && !dryRun) {
+  // Check for private key (only required for actual registration, not dry-run or check)
+  if (!PRIVATE_KEY && !dryRun && !checkOnly) {
     console.error('\n❌ PRIVATE_KEY environment variable required for registration');
-    console.log('   Set PRIVATE_KEY in .env file or use --dry-run to preview');
+    console.log('   Set PRIVATE_KEY (or WALLET_PRIVATE_KEY) in .env file or use --dry-run to preview');
+    console.log('   Note: WALLET_ID is a wallet address, not a private key');
     process.exit(1);
   }
-  
-  // Create signer if we have a private key
+
+  // Create signer if we have a private key (only needed for actual registration)
   let contractWithSigner = null;
-  if (PRIVATE_KEY) {
-    const wallet = new ethers.Wallet(PRIVATE_KEY, provider);
-    contractWithSigner = contract.connect(wallet);
-    console.log(`\n🔑 Signer: ${wallet.address}`);
-    
-    const balance = await provider.getBalance(wallet.address);
-    console.log(`💰 Balance: ${ethers.formatEther(balance)} ETH`);
+  if (PRIVATE_KEY && !dryRun && !checkOnly) {
+    try {
+      const wallet = new ethers.Wallet(PRIVATE_KEY, provider);
+      contractWithSigner = contract.connect(wallet);
+      console.log(`\n🔑 Signer: ${wallet.address}`);
+      
+      const balance = await provider.getBalance(wallet.address);
+      console.log(`💰 Balance: ${ethers.formatEther(balance)} ETH`);
+    } catch (err) {
+      if (err.code === 'INVALID_ARGUMENT' && err.argument === 'privateKey') {
+        console.error('\n❌ Invalid private key format');
+        console.log('   WALLET_ID is a wallet address, not a private key');
+        console.log('   Please set PRIVATE_KEY or WALLET_PRIVATE_KEY with the actual private key');
+        process.exit(1);
+      }
+      throw err;
+    }
   }
   
   // Filter models to register

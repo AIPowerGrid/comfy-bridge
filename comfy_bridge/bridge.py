@@ -251,7 +251,7 @@ class ComfyUIBridge:
         logger.info(f"AI Power Grid: {Settings.GRID_API_URL}")
         logger.info(f"Worker: {Settings.GRID_WORKER_NAME}")
         if self.modelvault.enabled:
-            logger.info(f"ModelVault: Enabled (Base Sepolia)")
+            logger.info(f"ModelVault: Enabled (Base Mainnet)")
             active_models = self.modelvault.get_all_active_models()
             logger.info(f"  {len(active_models)} models registered on-chain")
         else:
