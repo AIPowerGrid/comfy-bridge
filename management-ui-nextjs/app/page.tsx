@@ -18,7 +18,6 @@ import { ToastContainer } from '@/components/Toast';
 import { useToast } from '@/lib/useToast';
 import { ModelVaultStatus } from '@/components/ModelVaultStatus';
 import { useModelVaultRegister, generateModelHash, ModelType } from '@/lib/web3';
-import type { RegisterModelParams } from '@/lib/web3';
 
 export default function Home() {
   const [gpuInfo, setGpuInfo] = useState<any>(null);
@@ -628,7 +627,7 @@ export default function Home() {
       // and will normalize internally. This ensures compatibility across different TypeScript environments.
       const sizeBytesValue: number | bigint = Math.floor((model.size_gb || 0) * 1024 * 1024 * 1024);
 
-      const result = await (registerModel as (modelData: RegisterModelParams) => Promise<{ success: boolean; error?: string }>)({
+      const result = await registerModel({
         modelId,
         fileName,
         displayName: model.display_name || model.name || modelId,
