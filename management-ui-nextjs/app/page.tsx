@@ -17,7 +17,8 @@ import RebuildingPage from '@/components/RebuildingPage';
 import { ToastContainer } from '@/components/Toast';
 import { useToast } from '@/lib/useToast';
 import { ModelVaultStatus } from '@/components/ModelVaultStatus';
-import { useModelVaultRegister, generateModelHash, ModelType, RegisterModelParams } from '@/lib/web3';
+import { useModelVaultRegister, generateModelHash, ModelType } from '@/lib/web3';
+import type { RegisterModelParams } from '@/lib/web3';
 
 export default function Home() {
   const [gpuInfo, setGpuInfo] = useState<any>(null);
