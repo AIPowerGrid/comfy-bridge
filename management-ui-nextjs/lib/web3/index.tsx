@@ -89,11 +89,7 @@ export interface ModelInfo {
   description?: string;
   baseModel?: string;
   modelType: ModelType;
-<<<<<<< Updated upstream
-  sizeBytes: bigint;
-=======
   sizeBytes: number | bigint;
->>>>>>> Stashed changes
   isNSFW?: boolean;
   inpainting?: boolean;
   img2img?: boolean;
@@ -198,25 +194,7 @@ export function useModelVaultRegister(): UseModelVaultRegisterReturn {
   const { isConnected } = useWallet();
   const [isRegistering, setIsRegistering] = useState(false);
   
-<<<<<<< Updated upstream
-  const registerModel = useCallback(async (modelData: {
-    modelId?: string;
-    fileName: string;
-    modelType: ModelType;
-    sizeBytes: bigint;
-    displayName?: string;
-    description?: string;
-    isNSFW?: boolean;
-    inpainting?: boolean;
-    img2img?: boolean;
-    controlnet?: boolean;
-    lora?: boolean;
-    baseModel?: string;
-    architecture?: string;
-  }): Promise<{ success: boolean; error?: string }> => {
-=======
   const registerModel = useCallback(async (modelData: RegisterModelParams): Promise<{ success: boolean; error?: string }> => {
->>>>>>> Stashed changes
     if (!isConnected) {
       return { success: false, error: 'Wallet not connected' };
     }
