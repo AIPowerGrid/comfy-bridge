@@ -538,7 +538,7 @@ export function ModelVaultStatus({
                         {/* Size */}
                         <div className="col-span-1">
                           <div className="text-gray-300">
-                            {info.sizeBytes > 0 ? `${(Number(info.sizeBytes) / 1024 / 1024 / 1024).toFixed(1)} GB` : '-'}
+                            {Number(info.sizeBytes) > 0 ? `${(Number(info.sizeBytes) / 1024 / 1024 / 1024).toFixed(1)} GB` : '-'}
                           </div>
                         </div>
 

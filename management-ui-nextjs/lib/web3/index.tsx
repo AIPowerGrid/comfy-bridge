@@ -74,14 +74,26 @@ export function useWallet() {
   };
 }
 
-// Model info interface
+// Utility function to normalize sizeBytes to bigint (handles both number and bigint)
+export function normalizeSizeBytes(sizeBytes: number | bigint): bigint {
+  if (typeof sizeBytes === 'bigint') {
+    return sizeBytes;
+  }
+  return BigInt(Math.floor(sizeBytes));
+}
+
+// Model info interface - accepts both number and bigint for compatibility
 export interface ModelInfo {
   displayName?: string;
   fileName: string;
   description?: string;
   baseModel?: string;
   modelType: ModelType;
+<<<<<<< Updated upstream
   sizeBytes: bigint;
+=======
+  sizeBytes: number | bigint;
+>>>>>>> Stashed changes
   isNSFW?: boolean;
   inpainting?: boolean;
   img2img?: boolean;
@@ -157,11 +169,36 @@ export function useModelVault() {
   };
 }
 
+// Type definition for registerModel function parameter
+export type RegisterModelParams = {
+  modelId?: string;
+  fileName: string;
+  modelType: ModelType;
+  sizeBytes: number | bigint; // Accept both number and bigint for compatibility
+  displayName?: string;
+  description?: string;
+  isNSFW?: boolean;
+  inpainting?: boolean;
+  img2img?: boolean;
+  controlnet?: boolean;
+  lora?: boolean;
+  baseModel?: string;
+  architecture?: string;
+};
+
+// Return type for useModelVaultRegister hook
+export type UseModelVaultRegisterReturn = {
+  registerModel: (modelData: RegisterModelParams) => Promise<{ success: boolean; error?: string }>;
+  isRegistering: boolean;
+  isConnected: boolean;
+};
+
 // useModelVaultRegister hook
-export function useModelVaultRegister() {
+export function useModelVaultRegister(): UseModelVaultRegisterReturn {
   const { isConnected } = useWallet();
   const [isRegistering, setIsRegistering] = useState(false);
   
+<<<<<<< Updated upstream
   const registerModel = useCallback(async (modelData: {
     modelId?: string;
     fileName: string;
@@ -177,13 +214,20 @@ export function useModelVaultRegister() {
     baseModel?: string;
     architecture?: string;
   }): Promise<{ success: boolean; error?: string }> => {
+=======
+  const registerModel = useCallback(async (modelData: RegisterModelParams): Promise<{ success: boolean; error?: string }> => {
+>>>>>>> Stashed changes
     if (!isConnected) {
       return { success: false, error: 'Wallet not connected' };
     }
     
     setIsRegistering(true);
     try {
+      // Normalize sizeBytes to bigint for internal use
+      const normalizedSizeBytes = normalizeSizeBytes(modelData.sizeBytes);
+      
       // TODO: Implement actual blockchain registration
+      // Use normalizedSizeBytes (bigint) for blockchain operations
       // For now, return an error to indicate it's not implemented
       return { success: false, error: 'Model registration not yet implemented' };
     } catch (error) {
