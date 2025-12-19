@@ -1,7 +1,7 @@
 """
 ModelVault Client - On-chain model registry for the comfy-bridge.
 The blockchain is the SINGLE source of truth for registered models.
-Queries the ModelVault contract on Base Sepolia for model discovery, validation, and downloads.
+Queries the ModelVault contract on Base Mainnet for model discovery, validation, and downloads.
 """
 
 import logging
@@ -13,9 +13,9 @@ logger = logging.getLogger(__name__)
 
 import os
 
-MODELVAULT_CONTRACT_ADDRESS = os.getenv("MODELVAULT_CONTRACT", "0xe660455D4A83bbbbcfDCF4219ad82447a831c8A1")
-MODELVAULT_RPC_URL = os.getenv("MODELVAULT_RPC_URL", "https://sepolia.base.org")
-MODELVAULT_CHAIN_ID = 84532
+MODELVAULT_CONTRACT_ADDRESS = os.getenv("MODELVAULT_CONTRACT", "0x79F39f2a0eA476f53994812e6a8f3C8CFe08c609")
+MODELVAULT_RPC_URL = os.getenv("MODELVAULT_RPC_URL", "https://mainnet.base.org")
+MODELVAULT_CHAIN_ID = 8453
 
 # Alias map: user-friendly names -> blockchain-registered names
 # This allows users to request models using familiar naming conventions
@@ -117,6 +117,8 @@ class OnChainModelInfo:
     base_model: str
     architecture: str
     is_active: bool
+    # Model constraints (per-model generation limits)
+    constraints: Optional[ModelConstraints] = None
     # Download files (from V2 contract or fallback)
     files: List[ModelFile] = field(default_factory=list)
     dependencies: List[str] = field(default_factory=list)
@@ -150,15 +152,48 @@ class ValidationResult:
     reason: Optional[str] = None
 
 
-# ABI matching ModelRegistry.sol (V1) deployed at 0xe660455D4A83bbbbcfDCF4219ad82447a831c8A1
-# V1 contract struct: modelHash, modelType, fileName, name, description, isNSFW, 
-#                     sizeBytes, timestamp, creator, inpainting, img2img, controlnet,
-#                     lora, baseModel, architecture (NO isActive field)
+# ABI matching Grid proxy ModelVault module deployed at 0x79F39f2a0eA476f53994812e6a8f3C8CFe08c609
+# Grid ModelVault struct: modelHash, modelType, fileName, name, version, ipfsCid, downloadUrl,
+#                        sizeBytes, quantization, format, vramMB, baseModel, inpainting, img2img,
+#                        controlnet, lora, isActive, isNSFW, timestamp, creator
 MODEL_REGISTRY_ABI = [
     {
-        "inputs": [{"name": "modelHash", "type": "bytes32"}],
+        "inputs": [{"name": "modelId", "type": "uint256"}],
         "name": "isModelExists",
         "outputs": [{"type": "bool"}],
+        "stateMutability": "view",
+        "type": "function",
+    },
+    {
+        "inputs": [{"name": "modelId", "type": "uint256"}],
+        "name": "getModel",
+        "outputs": [
+            {
+                "components": [
+                    {"name": "modelHash", "type": "bytes32"},
+                    {"name": "modelType", "type": "uint8"},
+                    {"name": "fileName", "type": "string"},
+                    {"name": "name", "type": "string"},
+                    {"name": "version", "type": "string"},
+                    {"name": "ipfsCid", "type": "string"},
+                    {"name": "downloadUrl", "type": "string"},
+                    {"name": "sizeBytes", "type": "uint256"},
+                    {"name": "quantization", "type": "string"},
+                    {"name": "format", "type": "string"},
+                    {"name": "vramMB", "type": "uint32"},
+                    {"name": "baseModel", "type": "string"},
+                    {"name": "inpainting", "type": "bool"},
+                    {"name": "img2img", "type": "bool"},
+                    {"name": "controlnet", "type": "bool"},
+                    {"name": "lora", "type": "bool"},
+                    {"name": "isActive", "type": "bool"},
+                    {"name": "isNSFW", "type": "bool"},
+                    {"name": "timestamp", "type": "uint256"},
+                    {"name": "creator", "type": "address"},
+                ],
+                "type": "tuple",
+            },
+        ],
         "stateMutability": "view",
         "type": "function",
     },
@@ -172,17 +207,22 @@ MODEL_REGISTRY_ABI = [
                     {"name": "modelType", "type": "uint8"},
                     {"name": "fileName", "type": "string"},
                     {"name": "name", "type": "string"},
-                    {"name": "description", "type": "string"},
-                    {"name": "isNSFW", "type": "bool"},
+                    {"name": "version", "type": "string"},
+                    {"name": "ipfsCid", "type": "string"},
+                    {"name": "downloadUrl", "type": "string"},
                     {"name": "sizeBytes", "type": "uint256"},
-                    {"name": "timestamp", "type": "uint256"},
-                    {"name": "creator", "type": "address"},
+                    {"name": "quantization", "type": "string"},
+                    {"name": "format", "type": "string"},
+                    {"name": "vramMB", "type": "uint32"},
+                    {"name": "baseModel", "type": "string"},
                     {"name": "inpainting", "type": "bool"},
                     {"name": "img2img", "type": "bool"},
                     {"name": "controlnet", "type": "bool"},
                     {"name": "lora", "type": "bool"},
-                    {"name": "baseModel", "type": "string"},
-                    {"name": "architecture", "type": "string"},
+                    {"name": "isActive", "type": "bool"},
+                    {"name": "isNSFW", "type": "bool"},
+                    {"name": "timestamp", "type": "uint256"},
+                    {"name": "creator", "type": "address"},
                 ],
                 "type": "tuple",
             },
@@ -192,15 +232,29 @@ MODEL_REGISTRY_ABI = [
     },
     {
         "inputs": [],
-        "name": "getAllModelHashes",
-        "outputs": [{"type": "bytes32[]"}],
+        "name": "getModelCount",
+        "outputs": [{"type": "uint256"}],
         "stateMutability": "view",
         "type": "function",
     },
     {
-        "inputs": [],
-        "name": "totalModels",
-        "outputs": [{"type": "uint256"}],
+        "inputs": [{"name": "modelHash", "type": "bytes32"}],
+        "name": "getConstraints",
+        "outputs": [
+            {
+                "components": [
+                    {"name": "stepsMin", "type": "uint16"},
+                    {"name": "stepsMax", "type": "uint16"},
+                    {"name": "cfgMinTenths", "type": "uint16"},
+                    {"name": "cfgMaxTenths", "type": "uint16"},
+                    {"name": "clipSkip", "type": "uint8"},
+                    {"name": "allowedSamplers", "type": "bytes32[]"},
+                    {"name": "allowedSchedulers", "type": "bytes32[]"},
+                    {"name": "exists", "type": "bool"},
+                ],
+                "type": "tuple",
+            },
+        ],
         "stateMutability": "view",
         "type": "function",
     },
@@ -209,7 +263,7 @@ MODEL_REGISTRY_ABI = [
 
 class ModelVaultClient:
     """
-    Client for querying the ModelVault contract on Base Sepolia.
+    Client for querying the ModelVault contract on Base Mainnet.
     
     The blockchain is the single source of truth for model registration.
     All model discovery and validation flows through this client.
@@ -244,7 +298,7 @@ class ModelVaultClient:
                 address=Web3.to_checksum_address(self.contract_address),
                 abi=MODEL_REGISTRY_ABI,
             )
-            logger.info(f"ModelVault client initialized (chain: Base Sepolia, contract: {self.contract_address[:10]}...)")
+            logger.info(f"ModelVault client initialized (chain: Base Mainnet, contract: {self.contract_address[:10]}...)")
             
             # Try to detect if this is a V2 contract
             self._detect_contract_version()
@@ -256,10 +310,10 @@ class ModelVaultClient:
             self.enabled = False
 
     def _detect_contract_version(self):
-        """Detect contract version. Currently only V1 is deployed."""
-        # V1 contract is deployed at 0xe660455D4A83bbbbcfDCF4219ad82447a831c8A1
-        self._is_v2_contract = False
-        logger.info("ModelVault V1 contract (no on-chain download URLs)")
+        """Detect contract version. Grid proxy ModelVault is deployed at 0x79F39f2a0eA476f53994812e6a8f3C8CFe08c609"""
+        # Grid ModelVault has download URLs and additional fields
+        self._is_v2_contract = True
+        logger.info("Grid ModelVault contract (with on-chain download URLs)")
 
     @staticmethod
     def hash_model(file_name: str) -> bytes:
@@ -275,7 +329,12 @@ class ModelVaultClient:
 
         try:
             model_hash = self.hash_model(file_name)
-            return self._contract.functions.isModelExists(model_hash).call()
+            # Grid ModelVault: getModelByHash throws if not found, so catch and return False
+            try:
+                result = self._contract.functions.getModelByHash(model_hash).call()
+                return result[0] != b'\x00' * 32  # Check if modelHash is not zero
+            except Exception:
+                return False
         except Exception as e:
             logger.error(f"Error checking model registration: {e}")
             return True  # Permissive on error
@@ -299,37 +358,45 @@ class ModelVaultClient:
 
         try:
             result = self._contract.functions.getModelByHash(model_hash).call()
-            # V1 Contract struct order:
-            # [0] modelHash, [1] modelType, [2] fileName, [3] name, [4] description,
-            # [5] isNSFW, [6] sizeBytes, [7] timestamp, [8] creator, [9] inpainting,
-            # [10] img2img, [11] controlnet, [12] lora, [13] baseModel, [14] architecture
+            # Grid ModelVault struct order:
+            # [0] modelHash, [1] modelType, [2] fileName, [3] name, [4] version,
+            # [5] ipfsCid, [6] downloadUrl, [7] sizeBytes, [8] quantization, [9] format,
+            # [10] vramMB, [11] baseModel, [12] inpainting, [13] img2img, [14] controlnet,
+            # [15] lora, [16] isActive, [17] isNSFW, [18] timestamp, [19] creator
             
+            model_hash_bytes = result[0]
+            model_type = ModelType(result[1])
             model_info = OnChainModelInfo(
-                model_hash=result[0].hex(),
-                model_type=ModelType(result[1]),
+                model_hash=model_hash_bytes.hex(),
+                model_type=model_type,
                 file_name=result[2],
                 display_name=result[3],
-                description=result[4],
-                is_nsfw=result[5],
-                size_bytes=result[6],
-                # result[7] is timestamp, result[8] is creator - skipped
-                inpainting=result[9],
-                img2img=result[10],
-                controlnet=result[11],
-                lora=result[12],
-                base_model=result[13],
-                architecture=result[14],
-                is_active=True,  # V1 has no isActive, assume all are active
+                description=result[4] if len(result) > 4 else "",  # version field, use as description fallback
+                is_nsfw=result[17] if len(result) > 17 else False,
+                size_bytes=result[7] if len(result) > 7 else 0,
+                inpainting=result[12] if len(result) > 12 else False,
+                img2img=result[13] if len(result) > 13 else False,
+                controlnet=result[14] if len(result) > 14 else False,
+                lora=result[15] if len(result) > 15 else False,
+                base_model=result[11] if len(result) > 11 else "",
+                architecture=result[9] if len(result) > 9 else "",  # format field
+                is_active=result[16] if len(result) > 16 else True,
             )
+            
+            # Fetch constraints for this model (skip for video models)
+            if model_type != ModelType.VIDEO_MODEL:
+                constraints = self.get_constraints(model_hash_bytes)
+                if constraints:
+                    model_info.constraints = constraints
             
             return model_info
         except Exception as e:
             # Log at debug level - this is expected when ABI doesn't match or model data is malformed
             # The raw bytes are not useful to display, just note the failure
             error_str = str(e)
-            if "Could not decode" in error_str:
+            if "Could not decode" in error_str or "model not found" in error_str.lower():
                 # Truncate the raw bytes from the error message for cleaner logs
-                logger.debug(f"Could not decode model from chain (ABI mismatch or malformed data)")
+                logger.debug(f"Could not decode model from chain (ABI mismatch or model not found)")
             else:
                 logger.debug(f"Error fetching model by hash: {type(e).__name__}")
             return None
@@ -497,14 +564,51 @@ class ModelVaultClient:
         
         return files
 
-    def get_constraints(self, model_id: str) -> Optional[ModelConstraints]:
-        """Get model constraints (steps, cfg, samplers, schedulers).
+    def get_constraints(self, model_hash: bytes) -> Optional[ModelConstraints]:
+        """Get model constraints (steps, cfg, samplers, schedulers) from blockchain."""
+        if not self.enabled or not self._contract:
+            return None
         
-        Note: Contract constraints getter not yet implemented.
-        Returns None - validation will be permissive.
-        """
-        # TODO: Add getModelConstraints to contract when needed
-        return None
+        try:
+            result = self._contract.functions.getConstraints(model_hash).call()
+            # Grid ModelVault constraints struct:
+            # [0] stepsMin, [1] stepsMax, [2] cfgMinTenths, [3] cfgMaxTenths,
+            # [4] clipSkip, [5] allowedSamplers, [6] allowedSchedulers, [7] exists
+            
+            if not result[7]:  # exists field
+                return None
+            
+            # Convert bytes32[] to strings (sampler/scheduler names)
+            samplers = []
+            schedulers = []
+            
+            for sampler_hash in result[5]:  # allowedSamplers
+                try:
+                    # Try to decode as UTF-8 (may not always work for bytes32)
+                    sampler_str = sampler_hash.hex()
+                    samplers.append(sampler_str)
+                except Exception:
+                    samplers.append(sampler_hash.hex())
+            
+            for scheduler_hash in result[6]:  # allowedSchedulers
+                try:
+                    scheduler_str = scheduler_hash.hex()
+                    schedulers.append(scheduler_str)
+                except Exception:
+                    schedulers.append(scheduler_hash.hex())
+            
+            return ModelConstraints(
+                steps_min=result[0],
+                steps_max=result[1],
+                cfg_min=result[2] / 10.0,  # Convert tenths to float
+                cfg_max=result[3] / 10.0,
+                clip_skip=result[4],
+                allowed_samplers=samplers,
+                allowed_schedulers=schedulers,
+            )
+        except Exception as e:
+            logger.debug(f"Error fetching constraints for model: {type(e).__name__}")
+            return None
 
     def get_all_model_hashes(self) -> List[bytes]:
         """Get all model hashes from chain as raw bytes."""
@@ -512,7 +616,17 @@ class ModelVaultClient:
             return []
 
         try:
-            return self._contract.functions.getAllModelHashes().call()
+            # Grid ModelVault doesn't have getAllModelHashes, so we iterate through model IDs
+            total = self.get_total_models()
+            hashes = []
+            for model_id in range(1, total + 1):
+                try:
+                    model = self._contract.functions.getModel(model_id).call()
+                    if model and len(model) > 0 and model[0] != b'\x00' * 32:  # Check modelHash is not zero
+                        hashes.append(model[0])
+                except Exception:
+                    continue  # Skip invalid model IDs
+            return hashes
         except Exception as e:
             logger.error(f"Error fetching model hashes: {e}")
             return []
@@ -528,7 +642,7 @@ class ModelVaultClient:
             return 0
         
         try:
-            return self._contract.functions.totalModels().call()
+            return self._contract.functions.getModelCount().call()
         except Exception as e:
             logger.error(f"Error fetching total models: {e}")
             return 0
@@ -555,29 +669,55 @@ class ModelVaultClient:
         # Try blockchain first
         if self.enabled and self._contract:
             try:
-                # Fetch all model hashes, then get each model's details
-                model_hashes = self.get_all_model_hashes()
-                logger.info(f"Fetching {len(model_hashes)} models from blockchain...")
+                # Grid ModelVault: iterate through model IDs directly
+                total = self.get_total_models()
+                logger.info(f"Fetching {total} models from blockchain...")
                 
                 failed_count = 0
-                for model_hash in model_hashes:
+                for model_id in range(1, total + 1):
                     try:
-                        model_info = self.get_model_by_hash(model_hash)
-                        if model_info:
+                        result = self._contract.functions.getModel(model_id).call()
+                        if result and len(result) > 0 and result[0] != b'\x00' * 32:
+                            # Grid ModelVault struct: parse the result
+                            model_hash_bytes = result[0]
+                            model_type = ModelType(result[1])
+                            model_info = OnChainModelInfo(
+                                model_hash=model_hash_bytes.hex(),
+                                model_type=model_type,
+                                file_name=result[2],
+                                display_name=result[3],
+                                description=result[4] if len(result) > 4 else "",  # version
+                                is_nsfw=result[17] if len(result) > 17 else False,
+                                size_bytes=result[7] if len(result) > 7 else 0,
+                                inpainting=result[12] if len(result) > 12 else False,
+                                img2img=result[13] if len(result) > 13 else False,
+                                controlnet=result[14] if len(result) > 14 else False,
+                                lora=result[15] if len(result) > 15 else False,
+                                base_model=result[11] if len(result) > 11 else "",
+                                architecture=result[9] if len(result) > 9 else "",  # format
+                                is_active=result[16] if len(result) > 16 else True,
+                            )
+                            
+                            # Fetch constraints for this model (skip for video models)
+                            if model_type != ModelType.VIDEO_MODEL:
+                                constraints = self.get_constraints(model_hash_bytes)
+                                if constraints:
+                                    model_info.constraints = constraints
+                            
                             temp_models.append(model_info)
                             blockchain_success = True
                         else:
                             failed_count += 1
                     except Exception as e:
                         failed_count += 1
-                        logger.debug(f"Failed to fetch model {model_hash.hex()[:16]}...: {type(e).__name__}")
+                        logger.debug(f"Failed to fetch model {model_id}: {type(e).__name__}")
                         continue
                 
                 # Log summary at appropriate level
                 if blockchain_success and temp_models:
                     logger.info(f"✓ Loaded {len(temp_models)} models from blockchain")
                 if failed_count > 0:
-                    logger.debug(f"Could not decode {failed_count}/{len(model_hashes)} models (ABI mismatch - this is normal)")
+                    logger.debug(f"Could not decode {failed_count}/{total} models (ABI mismatch or invalid model IDs)")
             except Exception as e:
                 logger.warning(f"Blockchain fetch failed, will use local catalog: {type(e).__name__}")
         
@@ -828,6 +968,7 @@ class ModelVaultClient:
         
         If model is not registered on-chain, validation passes (no constraints to check).
         This allows processing jobs for models with valid workflows but not yet on-chain.
+        Video models have no constraints applied.
         """
         if not self.enabled:
             return ValidationResult(is_valid=True)
@@ -838,8 +979,15 @@ class ModelVaultClient:
             logger.debug(f"Model '{file_name}' not registered on-chain, skipping constraint validation")
             return ValidationResult(is_valid=True)
 
-        model_id = file_name.replace(".safetensors", "").replace(".ckpt", "").replace(".pt", "")
-        constraints = self.get_constraints(model_id)
+        # Get model info to check if it's a video model
+        model_info = self.get_model_by_hash(self.hash_model(file_name))
+        if model_info and model_info.model_type == ModelType.VIDEO_MODEL:
+            # Video models have no constraints
+            return ValidationResult(is_valid=True)
+
+        # Get model hash from filename to fetch constraints
+        model_hash = self.hash_model(file_name)
+        constraints = self.get_constraints(model_hash)
 
         if not constraints:
             return ValidationResult(is_valid=True)
@@ -856,27 +1004,41 @@ class ModelVaultClient:
                     reason=f"steps {steps} exceeds max {constraints.steps_max}",
                 )
 
+        # Validate CFG (convert to tenths for comparison)
+        cfg_tenths = int(cfg * 10)
         if constraints.cfg_max > 0:
-            if cfg < constraints.cfg_min:
+            cfg_min_tenths = int(constraints.cfg_min * 10)
+            cfg_max_tenths = int(constraints.cfg_max * 10)
+            if cfg_tenths < cfg_min_tenths:
                 return ValidationResult(
                     is_valid=False,
                     reason=f"cfg {cfg} below min {constraints.cfg_min}",
                 )
-            if cfg > constraints.cfg_max:
+            if cfg_tenths > cfg_max_tenths:
                 return ValidationResult(
                     is_valid=False,
                     reason=f"cfg {cfg} exceeds max {constraints.cfg_max}",
                 )
 
+        # Validate sampler (hash the name and compare with bytes32 hashes)
         if sampler and constraints.allowed_samplers:
-            if sampler not in constraints.allowed_samplers:
+            from web3 import Web3
+            sampler_hash = Web3.keccak(text=sampler)
+            sampler_hash_hex = sampler_hash.hex()
+            # Compare with stored hex strings (they're stored as hex from bytes32)
+            if sampler_hash_hex not in constraints.allowed_samplers:
                 return ValidationResult(
                     is_valid=False,
                     reason=f"sampler '{sampler}' not allowed",
                 )
 
+        # Validate scheduler (hash the name and compare with bytes32 hashes)
         if scheduler and constraints.allowed_schedulers:
-            if scheduler not in constraints.allowed_schedulers:
+            from web3 import Web3
+            scheduler_hash = Web3.keccak(text=scheduler)
+            scheduler_hash_hex = scheduler_hash.hex()
+            # Compare with stored hex strings (they're stored as hex from bytes32)
+            if scheduler_hash_hex not in constraints.allowed_schedulers:
                 return ValidationResult(
                     is_valid=False,
                     reason=f"scheduler '{scheduler}' not allowed",

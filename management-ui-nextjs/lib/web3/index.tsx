@@ -9,11 +9,25 @@ import { ReactNode } from 'react';
 import { useAccount, useChainId, useSwitchChain } from 'wagmi';
 import { useState, useCallback, useEffect } from 'react';
 import { ModelType } from './types';
+
 const queryClient = new QueryClient();
+
+// WalletConnect/Reown Project ID configuration
+// 
+// To eliminate the 403 error, get a free project ID from https://cloud.walletconnect.com
+// Then set it in your .env file: NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=your-project-id
+//
+// Note: The 403 error is non-critical - RainbowKit gracefully falls back to local config
+// The app will work fine without a project ID, but WalletConnect mobile wallet support
+// will be disabled (browser extension wallets like MetaMask/Coinbase Wallet still work)
+const walletConnectProjectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID;
 
 const config = getDefaultConfig({
   appName: 'AI Power Grid Model Manager',
-  projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'default-project-id',
+  // If no project ID is provided, 'default-project-id' triggers a remote config fetch
+  // which returns 403. This is handled gracefully - RainbowKit uses local config instead.
+  // To fix: Set NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID environment variable
+  projectId: walletConnectProjectId || 'default-project-id',
   chains: [base, baseSepolia],
   transports: {
     [base.id]: http(),
@@ -67,8 +81,13 @@ export interface ModelInfo {
   description?: string;
   baseModel?: string;
   modelType: ModelType;
-  sizeBytes: number;
+  sizeBytes: bigint;
   isNSFW?: boolean;
+  inpainting?: boolean;
+  img2img?: boolean;
+  controlnet?: boolean;
+  lora?: boolean;
+  architecture?: string;
 }
 
 export interface ModelWithDetails {
@@ -87,10 +106,38 @@ export function useModelVault() {
     setError(null);
     
     try {
-      // TODO: Replace with actual API call to fetch models from blockchain
-      // For now, return empty array to prevent build errors
-      setModelsWithDetails([]);
+      // Fetch models from the blockchain via API endpoint
+      const response = await fetch('/api/blockchain-models');
+      if (!response.ok) {
+        throw new Error(`Failed to fetch models: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      const models = data.models || [];
+      
+      // Convert API response to ModelWithDetails format
+      const modelsWithDetails: ModelWithDetails[] = models.map((model: any) => ({
+        hash: model.hash || '',
+        info: {
+          displayName: model.displayName,
+          fileName: model.fileName,
+          description: model.description,
+          baseModel: model.baseModel,
+          modelType: model.modelType,
+          sizeBytes: BigInt(model.sizeBytes || 0),
+          isNSFW: model.isNSFW,
+          // Include additional fields that may be used by the UI
+          inpainting: model.inpainting,
+          img2img: model.img2img,
+          controlnet: model.controlnet,
+          lora: model.lora,
+          architecture: model.architecture,
+        },
+      }));
+      
+      setModelsWithDetails(modelsWithDetails);
     } catch (err) {
+      console.error('Error fetching models:', err);
       setError(err instanceof Error ? err : new Error('Failed to fetch models'));
       setModelsWithDetails([]);
     } finally {
@@ -119,7 +166,7 @@ export function useModelVaultRegister() {
     modelId?: string;
     fileName: string;
     modelType: ModelType;
-    sizeBytes: number;
+    sizeBytes: bigint;
     displayName?: string;
     description?: string;
     isNSFW?: boolean;
