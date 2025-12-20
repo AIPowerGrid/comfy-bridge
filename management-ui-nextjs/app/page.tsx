@@ -623,9 +623,10 @@ export default function Home() {
       }
 
       const fileName = model.config?.files?.[0]?.path || model.filename || modelId;
-      // Calculate sizeBytes as number - the registerModel function accepts both number and bigint
-      // and will normalize internally. This ensures compatibility across different TypeScript environments.
-      const sizeBytesValue: number | bigint = Math.floor((model.size_gb || 0) * 1024 * 1024 * 1024);
+      // Calculate sizeBytes and convert to bigint for compatibility
+      // The registerModel function accepts both number and bigint, but TypeScript
+      // requires explicit conversion in some build environments
+      const sizeBytesValue = BigInt(Math.floor((model.size_gb || 0) * 1024 * 1024 * 1024));
 
       const result = await registerModel({
         modelId,
