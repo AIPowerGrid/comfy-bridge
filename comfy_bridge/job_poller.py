@@ -12,8 +12,8 @@ class JobPoller:
         self,
         comfy_client,
         result_processor,
-        max_wait_time: int = 1800,
-        filesystem_fallback_time: int = 300
+        max_wait_time: int = 7200,  # 2 hours (4x increase for video support)
+        filesystem_fallback_time: int = 1200  # 20 minutes (4x increase for video)
     ):
         self.comfy = comfy_client
         self.result_processor = result_processor

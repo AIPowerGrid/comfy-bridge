@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 class ComfyUIClient:
-    def __init__(self, base_url: str = None, timeout: int = 300):
+    def __init__(self, base_url: str = None, timeout: int = 1200):  # 20 minutes (4x increase for video)
         self.base_url = base_url or Settings.COMFYUI_URL
         self.timeout = timeout
         self.client = httpx.AsyncClient(base_url=self.base_url, timeout=timeout)

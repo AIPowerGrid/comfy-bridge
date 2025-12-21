@@ -17,7 +17,7 @@ class APIClient:
         Settings.validate()
         self.client = httpx.AsyncClient(
             base_url=Settings.GRID_API_URL, 
-            timeout=60,
+            timeout=240,  # 4 minutes (4x increase for video support)
             limits=httpx.Limits(max_keepalive_connections=5, max_connections=10)
         )
         self.headers = {
