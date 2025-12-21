@@ -26,6 +26,7 @@ interface DriveInfo {
   models: string[];
 }
 
+
 // Get all available drives on Windows (fixed drives only, type 3)
 async function getWindowsDrives(): Promise<string[]> {
   try {
