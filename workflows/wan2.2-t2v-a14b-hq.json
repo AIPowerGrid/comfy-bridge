@@ -13,7 +13,7 @@
         "46",
         0
       ],
-      "steps": 40,
+      "steps": 8,
       "cfg": 7.5,
       "shift": 12,
       "seed": 987654321,
@@ -127,9 +127,9 @@
   },
   "55": {
     "inputs": {
-      "width": 1536,
-      "height": 864,
-      "num_frames": 97
+      "width": 1280,
+      "height": 720,
+      "num_frames": 81
     },
     "class_type": "WanVideoEmptyEmbeds",
     "_meta": {
