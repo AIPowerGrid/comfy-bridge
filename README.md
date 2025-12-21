@@ -411,6 +411,17 @@ This means:
 - **Runtime**: Models are downloaded when container starts (if not in image or .env changed)
 - Both methods work - choose based on your workflow!
 
+### Wallet Connect Configuration 🔗
+
+The Management UI supports Web3 wallet connections for blockchain model registry features. A default WalletConnect project ID is provided, but you can get your own free project ID:
+
+1. Visit https://cloud.walletconnect.com
+2. Create a free account and new project
+3. Add to your `.env`:
+   ```bash
+   NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=your_project_id
+   ```
+
 ### Custom Ports 🔌
 
 Edit `docker-compose.yml` to change ports if needed:
