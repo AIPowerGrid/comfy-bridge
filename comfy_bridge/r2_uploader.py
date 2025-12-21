@@ -6,7 +6,7 @@ logger = logging.getLogger(__name__)
 
 
 class R2Uploader:
-    def __init__(self, timeout: int = 30):
+    def __init__(self, timeout: int = 120):  # 2 minutes (4x increase for larger video files)
         self.timeout = timeout
 
     async def upload_video(self, upload_url: str, video_bytes: bytes, filename: Optional[str] = None, media_type: str = "video") -> bool:
