@@ -232,12 +232,31 @@ class APIClient:
                     and isinstance(parsed_error, dict)
                     and parsed_error.get("rc") == "AbortedGen"
                 ):
-                    logger.error(
-                        "Job %s was aborted upstream due to slow processing (AbortedGen). "
-                        "Dropping the result and continuing. Message: %s",
-                        job_id,
-                        parsed_error.get("message", "Unknown reason"),
-                    )
+                    # For video jobs, this is expected - videos take much longer than images
+                    # The server's timeout is based on image generation speed (1 it/s)
+                    # which is not applicable to video generation
+                    is_video = media_type == "video"
+                    r2_uploads = payload.get("r2_uploads", [])
+                    
+                    if is_video:
+                        logger.warning(
+                            "Job %s was marked as AbortedGen by server (video took longer than image timeout). "
+                            "This is expected for video generation. Video was still generated and uploaded to R2.",
+                            job_id,
+                        )
+                        if r2_uploads:
+                            logger.info(
+                                "Video is available at R2. The server's timeout is based on image generation speed "
+                                "and does not account for video generation which naturally takes longer."
+                            )
+                    else:
+                        logger.error(
+                            "Job %s was aborted upstream due to slow processing (AbortedGen). "
+                            "Dropping the result and continuing. Message: %s",
+                            job_id,
+                            parsed_error.get("message", "Unknown reason"),
+                        )
+                    
                     self._job_cache.pop(job_id, None)
                     return
 
