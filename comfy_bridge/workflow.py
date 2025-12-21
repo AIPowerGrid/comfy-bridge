@@ -937,6 +937,12 @@ async def process_workflow(
                 # In native format, scheduler might be in inputs dict
                 if isinstance(inputs, dict):
                     node_id_str = str(node.get('id', 'unknown'))
+                    
+                    # Log workflow defaults being used (WORKFLOW FILE IS SOURCE OF TRUTH)
+                    workflow_steps = inputs.get("steps")
+                    workflow_cfg = inputs.get("cfg")
+                    workflow_scheduler = inputs.get("scheduler")
+                    logger.info(f"WanVideoSampler node {node_id_str}: Using WORKFLOW DEFAULTS - steps={workflow_steps}, cfg={workflow_cfg}, scheduler={workflow_scheduler}")
 
                     # Apply scheduler from payload if provided, otherwise validate workflow scheduler
                     if payload_scheduler and "scheduler" in inputs:
@@ -950,7 +956,9 @@ async def process_workflow(
                             logger.info(f"Node {node_id_str}: Validating workflow scheduler: '{current_scheduler}' -> '{valid_scheduler}'")
                             inputs["scheduler"] = valid_scheduler
 
-                    # Apply parameters from payload - only if they're reasonable
+                    # NOTE: payload_steps and payload_cfg are always None (set at line ~745)
+                    # This ensures workflow file is the source of truth for steps/cfg
+                    # The conditions below will NEVER execute because payload_steps/payload_cfg are None
                     if payload_steps is not None and "steps" in inputs:
                         old_steps = inputs.get("steps")
                         # Only apply if payload steps is higher than workflow default
@@ -1258,6 +1266,12 @@ async def process_workflow(
             
             # Handle WanVideoSampler nodes - validate scheduler and apply parameters
             elif class_type == "WanVideoSampler":
+                # Log workflow defaults being used (WORKFLOW FILE IS SOURCE OF TRUTH)
+                workflow_steps = inputs.get("steps")
+                workflow_cfg = inputs.get("cfg")
+                workflow_scheduler = inputs.get("scheduler")
+                logger.info(f"WanVideoSampler node {node_id}: Using WORKFLOW DEFAULTS - steps={workflow_steps}, cfg={workflow_cfg}, scheduler={workflow_scheduler}")
+                
                 # Apply scheduler from payload if provided, otherwise validate workflow scheduler
                 if payload_scheduler and "scheduler" in inputs:
                     valid_scheduler = map_wanvideo_scheduler(payload_scheduler)
@@ -1271,7 +1285,9 @@ async def process_workflow(
                         logger.info(f"Node {node_id}: Validating workflow scheduler: '{current_scheduler}' -> '{valid_scheduler}'")
                         inputs["scheduler"] = valid_scheduler
                 
-                # Apply parameters from payload (only override if provided)
+                # NOTE: payload_steps and payload_cfg are always None (set at line ~745)
+                # This ensures workflow file is the source of truth for steps/cfg
+                # The conditions below will NEVER execute because payload_steps/payload_cfg are None
                 if payload_steps is not None and "steps" in inputs:
                     old_steps = inputs.get("steps")
                     inputs["steps"] = payload_steps
