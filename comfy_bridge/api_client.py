@@ -77,8 +77,9 @@ class APIClient:
             if result.get("id"):
                 job_id = result.get("id")
                 self._job_cache[job_id] = result
-                wallet = result.get("wallet", "")
-                wallet_info = f", wallet: {wallet[:10]}..." if wallet and len(wallet) > 10 else (f", wallet: {wallet}" if wallet else "")
+                # API now uses wallet_address instead of wallet
+                wallet_address = result.get("wallet_address", "") or result.get("wallet", "")
+                wallet_info = f", wallet_address: {wallet_address[:10]}..." if wallet_address and len(wallet_address) > 10 else (f", wallet_address: {wallet_address}" if wallet_address else "")
                 logger.info(f"✅ Received job {job_id} for model {result.get('model', 'unknown')}{wallet_info}")
             else:
                 # Log full response when no job (periodically or when models are skipped)
