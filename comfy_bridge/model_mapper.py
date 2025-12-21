@@ -477,7 +477,8 @@ class ModelMapper:
     # Map workflow IDs to ALL Grid model name variants that might have jobs
     # This ensures we advertise both naming conventions
     WORKFLOW_TO_ALL_GRID_NAMES = {
-        "wan2.2_ti2v_5B": ["wan2_2_ti2v_5b", "wan2.2_ti2v_5B"],
+        # Must match exactly what's in stable_diffusion.json
+        "wan2.2_ti2v_5B": ["wan2.2_ti2v_5B", "wan2_2_ti2v_5b"],
         "wan2.2-t2v-a14b": ["wan2_2_t2v_14b", "wan2.2-t2v-a14b"],
         "wan2.2-t2v-a14b-hq": ["wan2_2_t2v_14b_hq", "wan2.2-t2v-a14b-hq"],
         "flux.1-krea-dev": ["flux.1-krea-dev"],

@@ -1,35 +1,37 @@
 {
   "3": {
     "inputs": {
+      "seed": 898471028164125,
+      "steps": 20,
+      "cfg": 5,
+      "sampler_name": "uni_pc",
+      "scheduler": "simple",
+      "denoise": 1,
       "model": [
-        "22",
+        "48",
         0
       ],
-      "image_embeds": [
+      "positive": [
+        "6",
+        0
+      ],
+      "negative": [
+        "7",
+        0
+      ],
+      "latent_image": [
         "55",
         0
-      ],
-      "text_embeds": [
-        "46",
-        0
-      ],
-      "steps": 30,
-      "cfg": 5.0,
-      "shift": 5.0,
-      "seed": 741775740776511,
-      "scheduler": "unipc",
-      "force_offload": true,
-      "riflex_freq_index": 0,
-      "rope_function": "comfy"
+      ]
     },
-    "class_type": "WanVideoSampler",
+    "class_type": "KSampler",
     "_meta": {
-      "title": "WanVideoSampler"
+      "title": "KSampler"
     }
   },
   "6": {
     "inputs": {
-      "text": "cinematic abstract scene of cats flying through the air",
+      "text": "Low contrast. In a retro 1970s-style subway station, a street musician plays in dim colors and rough textures. He wears an old jacket, playing guitar with focus. Commuters hurry by, and a small crowd gathers to listen. The camera slowly moves right, capturing the blend of music and city noise, with old subway signs and mottled walls in the background.",
       "clip": [
         "38",
         0
@@ -42,7 +44,7 @@
   },
   "7": {
     "inputs": {
-      "text": "Bright colors, overexposed, static, blurry details, subtitles, style, work, painting, image, still, overall gray, worst quality, low quality, JPEG compression artifacts, ugly, incomplete, extra fingers, poorly drawn hands, poorly drawn face, deformed, disfigured, misshapen limbs, fused fingers, motionless image, messy background, three legs, crowded background, walking backwards.",
+      "text": "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走",
       "clip": [
         "38",
         0
@@ -55,37 +57,28 @@
   },
   "8": {
     "inputs": {
-      "vae": [
-        "39",
-        0
-      ],
       "samples": [
         "3",
         0
       ],
-      "enable_vae_tiling": false,
-      "tile_x": 272,
-      "tile_y": 272,
-      "tile_stride_x": 144,
-      "tile_stride_y": 128,
-      "normalization": "default"
+      "vae": [
+        "39",
+        0
+      ]
     },
-    "class_type": "WanVideoDecode",
+    "class_type": "VAEDecode",
     "_meta": {
-      "title": "WanVideoDecode"
+      "title": "VAE Decode"
     }
   },
-  "22": {
+  "37": {
     "inputs": {
-      "model": "wan2.2_ti2v_5B_fp16.safetensors",
-      "base_precision": "fp16",
-      "load_device": "main_device",
-      "quantization": "disabled",
-      "attention_mode": "sdpa"
+      "unet_name": "wan2.2_ti2v_5B_fp16.safetensors",
+      "weight_dtype": "default"
     },
-    "class_type": "WanVideoModelLoader",
+    "class_type": "UNETLoader",
     "_meta": {
-      "title": "WanVideoModelLoader"
+      "title": "Load Diffusion Model"
     }
   },
   "38": {
@@ -101,44 +94,45 @@
   },
   "39": {
     "inputs": {
-      "model_name": "wan_2.1_vae.safetensors",
-      "precision": "bf16"
+      "vae_name": "wan2.2_vae.safetensors"
     },
-    "class_type": "WanVideoVAELoader",
+    "class_type": "VAELoader",
     "_meta": {
-      "title": "WanVideoVAELoader"
+      "title": "Load VAE"
     }
   },
-  "46": {
+  "48": {
     "inputs": {
-      "positive": [
-        "6",
-        0
-      ],
-      "negative": [
-        "7",
+      "shift": 8,
+      "model": [
+        "37",
         0
       ]
     },
-    "class_type": "WanVideoTextEmbedBridge",
+    "class_type": "ModelSamplingSD3",
     "_meta": {
-      "title": "WanVideoTextEmbedBridge"
+      "title": "ModelSamplingSD3"
     }
   },
   "55": {
     "inputs": {
-      "width": 640,
-      "height": 640,
-      "num_frames": 80
+      "width": 1280,
+      "height": 704,
+      "length": 121,
+      "batch_size": 1,
+      "vae": [
+        "39",
+        0
+      ]
     },
-    "class_type": "WanVideoEmptyEmbeds",
+    "class_type": "Wan22ImageToVideoLatent",
     "_meta": {
-      "title": "WanVideoEmptyEmbeds"
+      "title": "Wan22ImageToVideoLatent"
     }
   },
   "57": {
     "inputs": {
-      "fps": 16,
+      "fps": 24,
       "images": [
         "8",
         0
