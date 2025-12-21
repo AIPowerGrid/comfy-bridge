@@ -55,19 +55,19 @@
   },
   "8": {
     "inputs": {
-      "samples": [
-        "3",
-        0
-      ],
       "vae": [
         "39",
         0
       ],
+      "samples": [
+        "3",
+        0
+      ],
       "enable_vae_tiling": false,
-      "tile_x": 512,
-      "tile_y": 512,
-      "tile_stride_x": 256,
-      "tile_stride_y": 256,
+      "tile_x": 272,
+      "tile_y": 272,
+      "tile_stride_x": 144,
+      "tile_stride_y": 128,
       "normalization": "default"
     },
     "class_type": "WanVideoDecode",
@@ -106,7 +106,7 @@
     },
     "class_type": "WanVideoVAELoader",
     "_meta": {
-      "title": "Load VAE"
+      "title": "WanVideoVAELoader"
     }
   },
   "46": {

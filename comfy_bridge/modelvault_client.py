@@ -314,6 +314,121 @@ class ModelVaultClient:
         # Grid ModelVault has download URLs and additional fields
         self._is_v2_contract = True
         logger.info("Grid ModelVault contract (with on-chain download URLs)")
+    
+    def _load_descriptions_from_catalog(self) -> Dict[str, str]:
+        """Load model descriptions from local catalog for enrichment."""
+        import json
+        import os
+        
+        descriptions = {}
+        
+        # Try multiple possible paths for the model reference repository
+        ref_path = os.environ.get("GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH", "")
+        
+        # Build list of possible catalog paths
+        catalog_paths = []
+        
+        if ref_path:
+            catalog_paths.append(os.path.join(ref_path, "stable_diffusion.json"))
+        
+        # Docker paths
+        catalog_paths.extend([
+            "/app/grid-image-model-reference/stable_diffusion.json",
+            "/app/comfy-bridge/model_configs.json",
+        ])
+        
+        # Auto-detect relative to this file's location (for local development)
+        this_dir = os.path.dirname(os.path.abspath(__file__))
+        comfy_bridge_root = os.path.dirname(this_dir)
+        dev_root = os.path.dirname(comfy_bridge_root)
+        
+        catalog_paths.extend([
+            os.path.join(dev_root, "grid-image-model-reference", "stable_diffusion.json"),
+            os.path.join(comfy_bridge_root, "model_configs.json"),
+        ])
+        
+        for catalog_path in catalog_paths:
+            try:
+                if not os.path.exists(catalog_path):
+                    continue
+                    
+                with open(catalog_path, 'r') as f:
+                    catalog = json.load(f)
+                
+                for name, data in catalog.items():
+                    desc = data.get("description", "")
+                    if desc:
+                        # Index by multiple keys for flexible matching
+                        descriptions[name] = desc
+                        descriptions[name.lower()] = desc
+                        # Also store by file name if available
+                        fname = data.get("filename", "")
+                        if fname:
+                            descriptions[fname] = desc
+                            descriptions[fname.lower()] = desc
+                
+                if descriptions:
+                    logger.debug(f"Loaded {len(descriptions)} descriptions from catalog")
+                    return descriptions
+                    
+            except Exception as e:
+                logger.debug(f"Could not load catalog {catalog_path}: {e}")
+                continue
+        
+        return descriptions
+    
+    def _get_description_for_model(self, display_name: str, file_name: str, descriptions_cache: Dict[str, str]) -> str:
+        """Get description for a model from cache, with multiple fallback lookups."""
+        # Try direct match first
+        if display_name in descriptions_cache:
+            return descriptions_cache[display_name]
+        if display_name.lower() in descriptions_cache:
+            return descriptions_cache[display_name.lower()]
+        if file_name in descriptions_cache:
+            return descriptions_cache[file_name]
+        if file_name.lower() in descriptions_cache:
+            return descriptions_cache[file_name.lower()]
+        
+        # Try normalized matching (handle underscores/hyphens/dots)
+        name_normalized = display_name.lower().replace("-", "_").replace(".", "_")
+        for key, desc in descriptions_cache.items():
+            key_normalized = key.lower().replace("-", "_").replace(".", "_")
+            if key_normalized == name_normalized:
+                return desc
+        
+        # Generate a fallback description based on model name
+        return self._generate_description(display_name)
+    
+    def _generate_description(self, display_name: str) -> str:
+        """Generate a basic description based on model name patterns."""
+        name_lower = display_name.lower()
+        
+        if "wan2.2" in name_lower or "wan2_2" in name_lower:
+            if "ti2v" in name_lower or "i2v" in name_lower:
+                return "WAN 2.2 Image-to-Video generation model"
+            elif "t2v" in name_lower:
+                if "hq" in name_lower:
+                    return "WAN 2.2 Text-to-Video 14B model - High quality mode"
+                return "WAN 2.2 Text-to-Video 14B model"
+            return "WAN 2.2 Video generation model"
+        
+        if "flux" in name_lower:
+            if "kontext" in name_lower:
+                return "FLUX Kontext model for context-aware image generation"
+            if "krea" in name_lower:
+                return "FLUX Krea model - Advanced image generation"
+            return "FLUX.1 model for high-quality image generation"
+        
+        if "sdxl" in name_lower or "xl" in name_lower:
+            return "Stable Diffusion XL model"
+        
+        if "chroma" in name_lower:
+            return "Chroma model for image generation"
+        
+        if "ltxv" in name_lower:
+            return "LTX Video generation model"
+        
+        return f"{display_name} model"
 
     @staticmethod
     def hash_model(file_name: str) -> bytes:
@@ -359,21 +474,29 @@ class ModelVaultClient:
         try:
             result = self._contract.functions.getModelByHash(model_hash).call()
             # Grid ModelVault struct order:
-            # [0] modelHash, [1] modelType, [2] fileName, [3] name, [4] version,
+            # [0] modelHash, [1] modelType, [2] fileName, [3] name (displayName), [4] version,
             # [5] ipfsCid, [6] downloadUrl, [7] sizeBytes, [8] quantization, [9] format,
             # [10] vramMB, [11] baseModel, [12] inpainting, [13] img2img, [14] controlnet,
             # [15] lora, [16] isActive, [17] isNSFW, [18] timestamp, [19] creator
             
             model_hash_bytes = result[0]
             model_type = ModelType(result[1])
+            file_name = result[2] if len(result) > 2 else ""
+            display_name = result[3] if len(result) > 3 else ""
+            size_bytes = result[7] if len(result) > 7 else 0
+            
+            # Get description from local catalog (blockchain doesn't have description field)
+            descriptions_cache = self._load_descriptions_from_catalog()
+            description = self._get_description_for_model(display_name, file_name, descriptions_cache)
+            
             model_info = OnChainModelInfo(
                 model_hash=model_hash_bytes.hex(),
                 model_type=model_type,
-                file_name=result[2],
-                display_name=result[3],
-                description=result[4] if len(result) > 4 else "",  # version field, use as description fallback
+                file_name=file_name,
+                display_name=display_name,
+                description=description,
                 is_nsfw=result[17] if len(result) > 17 else False,
-                size_bytes=result[7] if len(result) > 7 else 0,
+                size_bytes=size_bytes,
                 inpainting=result[12] if len(result) > 12 else False,
                 img2img=result[13] if len(result) > 13 else False,
                 controlnet=result[14] if len(result) > 14 else False,
@@ -655,6 +778,7 @@ class ModelVaultClient:
         Results are cached and can be force-refreshed.
         
         Falls back to local catalog if blockchain fetching fails.
+        Enriches model data with descriptions from local catalog.
         
         Returns:
             Dict mapping display_name -> OnChainModelInfo
@@ -665,6 +789,9 @@ class ModelVaultClient:
         self._model_cache = {}
         temp_models = []
         blockchain_success = False
+        
+        # Load descriptions from catalog for enrichment (blockchain doesn't store descriptions)
+        descriptions_cache = self._load_descriptions_from_catalog()
         
         # Try blockchain first
         if self.enabled and self._contract:
@@ -679,22 +806,33 @@ class ModelVaultClient:
                         result = self._contract.functions.getModel(model_id).call()
                         if result and len(result) > 0 and result[0] != b'\x00' * 32:
                             # Grid ModelVault struct: parse the result
+                            # [0] modelHash, [1] modelType, [2] fileName, [3] name (displayName), [4] version,
+                            # [5] ipfsCid, [6] downloadUrl, [7] sizeBytes, [8] quantization, [9] format,
+                            # [10] vramMB, [11] baseModel, [12] inpainting, [13] img2img, [14] controlnet,
+                            # [15] lora, [16] isActive, [17] isNSFW, [18] timestamp, [19] creator
                             model_hash_bytes = result[0]
                             model_type = ModelType(result[1])
+                            file_name = result[2] if len(result) > 2 else ""
+                            display_name = result[3] if len(result) > 3 else ""
+                            size_bytes = result[7] if len(result) > 7 else 0
+                            
+                            # Get description from local catalog (blockchain doesn't have description field)
+                            description = self._get_description_for_model(display_name, file_name, descriptions_cache)
+                            
                             model_info = OnChainModelInfo(
                                 model_hash=model_hash_bytes.hex(),
                                 model_type=model_type,
-                                file_name=result[2],
-                                display_name=result[3],
-                                description=result[4] if len(result) > 4 else "",  # version
+                                file_name=file_name,
+                                display_name=display_name,
+                                description=description,
                                 is_nsfw=result[17] if len(result) > 17 else False,
-                                size_bytes=result[7] if len(result) > 7 else 0,
+                                size_bytes=size_bytes,
                                 inpainting=result[12] if len(result) > 12 else False,
                                 img2img=result[13] if len(result) > 13 else False,
                                 controlnet=result[14] if len(result) > 14 else False,
                                 lora=result[15] if len(result) > 15 else False,
                                 base_model=result[11] if len(result) > 11 else "",
-                                architecture=result[9] if len(result) > 9 else "",  # format
+                                architecture=result[9] if len(result) > 9 else "",  # format field
                                 is_active=result[16] if len(result) > 16 else True,
                             )
                             

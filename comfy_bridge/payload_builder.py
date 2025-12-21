@@ -50,6 +50,12 @@ class PayloadBuilder:
             "media_type": "video"
         }
         
+        # Include wallet address if provided in the job (for payment attribution)
+        wallet = job.get("wallet")
+        if wallet:
+            payload["wallet"] = wallet
+            logger.debug(f"Including wallet in payload: {wallet[:10]}..." if len(wallet) > 10 else f"Including wallet: {wallet}")
+        
         # Encode video to base64 (always needed for API submission)
         b64 = encode_media(media_bytes, "video")
         b64_size_mb = len(b64) / BYTES_PER_MB
@@ -82,8 +88,14 @@ class PayloadBuilder:
             "media_type": media_type
         }
         
+        # Include wallet address if provided in the job (for payment attribution)
+        wallet = job.get("wallet")
+        if wallet:
+            payload["wallet"] = wallet
+            logger.debug(f"Including wallet in payload: {wallet[:10]}..." if len(wallet) > 10 else f"Including wallet: {wallet}")
+        
         # Debug: log payload details (without the large base64)
-        logger.info(f"DEBUG payload: id={job_id}, seed={payload['seed']}, media_type={media_type}, b64_len={len(b64)}")
+        logger.info(f"DEBUG payload: id={job_id}, seed={payload['seed']}, media_type={media_type}, wallet={wallet or 'N/A'}, b64_len={len(b64)}")
         
         # Add video-specific parameters if needed
         if media_type == "video":
