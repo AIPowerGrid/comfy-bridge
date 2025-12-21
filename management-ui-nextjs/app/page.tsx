@@ -139,22 +139,55 @@ export default function Home() {
     }
   };
   
+  // Normalize a model name for fuzzy matching (same as API)
+  const normalizeModelName = (name: string): string => {
+    return name
+      .toLowerCase()
+      .replace(/\.(safetensors|ckpt|pt)$/i, '')  // Remove extension
+      .replace(/[_\-\s.]+/g, '')  // Remove separators
+      .replace(/fp\d+/g, '')  // Remove precision suffixes like fp16, fp8
+      .replace(/e\dm\dfn/g, '')  // Remove quantization like e4m3fn
+      .replace(/scaled/g, '')  // Remove "scaled"
+      .replace(/bf\d+/g, '');  // Remove bf16, etc.
+  };
+
   const loadModelStatus = async () => {
     try {
       const response = await fetch('/api/models-status');
       if (response.ok) {
         const data = await response.json();
         setHostedModels(new Set(data.hostedModels || []));
-        // Create set of installed model names from filenames
+        
+        // Create set of installed model names with multiple matching strategies
         const installedSet = new Set<string>();
-        for (const file of (data.installedFiles || [])) {
-          // Remove extension and add variations
-          const baseName = file.replace(/\.(safetensors|ckpt|pt)$/i, '');
+        const installedFiles = data.installedFiles || [];
+        
+        for (const file of installedFiles) {
+          // Add original file (lowercase)
           installedSet.add(file);
+          
+          // Remove extension and add base name
+          const baseName = file.replace(/\.(safetensors|ckpt|pt)$/i, '');
           installedSet.add(baseName);
           installedSet.add(baseName.replace(/_/g, '-'));
           installedSet.add(baseName.replace(/-/g, '_'));
+          
+          // Add normalized version for fuzzy matching
+          const normalized = normalizeModelName(file);
+          installedSet.add(normalized);
+          
+          // Add version without precision suffix (e.g., "wan2.2_ti2v_5b" from "wan2.2_ti2v_5b_fp16")
+          const withoutPrecision = baseName
+            .replace(/_fp\d+.*$/i, '')
+            .replace(/_bf\d+.*$/i, '')
+            .replace(/_e\dm\dfn.*$/i, '');
+          installedSet.add(withoutPrecision);
+          installedSet.add(withoutPrecision.toLowerCase());
         }
+        
+        // Store the raw files for more advanced matching later
+        (installedSet as any)._rawFiles = installedFiles;
+        
         setInstalledModels(installedSet);
       }
     } catch (error) {

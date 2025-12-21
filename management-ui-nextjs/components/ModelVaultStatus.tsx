@@ -23,6 +23,43 @@ const CHAIN_NAMES: Record<number, string> = {
   84532: 'Base Sepolia',
 };
 
+// Normalize a model name for fuzzy matching
+function normalizeModelName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/\.(safetensors|ckpt|pt)$/i, '')  // Remove extension
+    .replace(/[_\-\s.]+/g, '')  // Remove separators
+    .replace(/fp\d+/g, '')  // Remove precision suffixes like fp16, fp8
+    .replace(/e\dm\dfn/g, '')  // Remove quantization like e4m3fn
+    .replace(/scaled/g, '')  // Remove "scaled"
+    .replace(/bf\d+/g, '');  // Remove bf16, etc.
+}
+
+// Check if a model name matches any in the installed set using fuzzy matching
+function isModelInstalled(modelName: string, fileName: string | undefined, installedModels: Set<string>): boolean {
+  // Direct match first
+  if (installedModels.has(modelName) || (fileName && installedModels.has(fileName))) {
+    return true;
+  }
+  
+  // Try lowercase
+  if (installedModels.has(modelName.toLowerCase()) || (fileName && installedModels.has(fileName.toLowerCase()))) {
+    return true;
+  }
+  
+  // Try normalized matching
+  const normalizedName = normalizeModelName(modelName);
+  for (const installed of installedModels) {
+    const normalizedInstalled = normalizeModelName(installed);
+    // Check if either contains the other (handles cases like "wan2.2_ti2v_5b" matching "wan2.2_ti2v_5b_fp16")
+    if (normalizedInstalled.includes(normalizedName) || normalizedName.includes(normalizedInstalled)) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
 interface ModelVaultStatusProps {
   onStartEarning?: (modelName: string) => void;
   onStopEarning?: (modelName: string) => void;
@@ -92,7 +129,7 @@ export function ModelVaultStatus({
       }
       
       // Status filter
-      const isInstalled = installedModels.has(modelName) || installedModels.has(info.fileName);
+      const isInstalled = isModelInstalled(modelName, info.fileName, installedModels);
       const isHosted = hostedModels.has(modelName) || hostedModels.has(info.fileName);
       
       if (statusFilter === 'installed' && !isInstalled) return false;
@@ -389,23 +426,21 @@ export function ModelVaultStatus({
                       Start Hosting All
                     </button>
                     {/* Show uninstall button if any selected models are installed */}
-                    {Array.from(selectedModels).some(modelName => 
-                      installedModels.has(modelName) || 
-                      modelsWithDetails.some(({ info }) => 
-                        info && (info.displayName === modelName || info.fileName === modelName) && 
-                        (installedModels.has(info.displayName || '') || installedModels.has(info.fileName))
-                      )
-                    ) && (
+                    {Array.from(selectedModels).some(modelName => {
+                      const matchingModel = modelsWithDetails.find(({ info }) => 
+                        info && (info.displayName === modelName || info.fileName === modelName)
+                      );
+                      return isModelInstalled(modelName, matchingModel?.info?.fileName, installedModels);
+                    }) && (
                       <button
                         onClick={() => {
                           // Only uninstall models that are actually installed
-                          const installedSelected = Array.from(selectedModels).filter(modelName => 
-                            installedModels.has(modelName) ||
-                            modelsWithDetails.some(({ info }) => 
-                              info && (info.displayName === modelName || info.fileName === modelName) && 
-                              (installedModels.has(info.displayName || '') || installedModels.has(info.fileName))
-                            )
-                          );
+                          const installedSelected = Array.from(selectedModels).filter(modelName => {
+                            const matchingModel = modelsWithDetails.find(({ info }) => 
+                              info && (info.displayName === modelName || info.fileName === modelName)
+                            );
+                            return isModelInstalled(modelName, matchingModel?.info?.fileName, installedModels);
+                          });
                           // Use batch uninstall if available, otherwise fall back to individual
                           if (onBatchUninstall && installedSelected.length > 0) {
                             onBatchUninstall(installedSelected);
@@ -479,7 +514,7 @@ export function ModelVaultStatus({
                   if (!info) return null;
                   
                   const modelName = info.displayName || info.fileName || hash;
-                  const isInstalled = installedModels.has(modelName) || installedModels.has(info.fileName);
+                  const isInstalled = isModelInstalled(modelName, info.fileName, installedModels);
                   const isHosted = hostedModels.has(modelName) || hostedModels.has(info.fileName);
                   const isDownloading = downloadingModels.has(modelName) || downloadingModels.has(info.fileName);
 
