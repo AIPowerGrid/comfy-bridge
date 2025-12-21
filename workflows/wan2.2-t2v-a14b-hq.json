@@ -13,11 +13,11 @@
         "46",
         0
       ],
-      "steps": 25,
+      "steps": 40,
       "cfg": 6.0,
-      "shift": 5,
+      "shift": 5.0,
       "seed": 987654321,
-      "scheduler": "dpm++_sde",
+      "scheduler": "unipc",
       "force_offload": true,
       "riflex_freq_index": 0,
       "rope_function": "comfy"
