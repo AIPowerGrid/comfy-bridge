@@ -77,7 +77,9 @@ class APIClient:
             if result.get("id"):
                 job_id = result.get("id")
                 self._job_cache[job_id] = result
-                logger.info(f"✅ Received job {job_id} for model {result.get('model', 'unknown')}")
+                wallet = result.get("wallet", "")
+                wallet_info = f", wallet: {wallet[:10]}..." if wallet and len(wallet) > 10 else (f", wallet: {wallet}" if wallet else "")
+                logger.info(f"✅ Received job {job_id} for model {result.get('model', 'unknown')}{wallet_info}")
             else:
                 # Log full response when no job (periodically or when models are skipped)
                 if self._pop_count == 1 or self._pop_count % 50 == 0 or skipped.get("models", 0) > 0:

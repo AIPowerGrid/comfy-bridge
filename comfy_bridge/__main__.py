@@ -14,9 +14,32 @@ for handler in root_logger.handlers[:]:
     root_logger.removeHandler(handler)
     handler.close()
 
-# Create a single handler
+# Create a duplicate filter to prevent double logging
+class DuplicateFilter(logging.Filter):
+    """Filter to prevent duplicate log messages within a short time window"""
+    def __init__(self):
+        super().__init__()
+        self.last_message_key = None
+        self.last_timestamp = None
+        self.duplicate_window = 0.1  # 100ms window to detect duplicates
+    
+    def filter(self, record):
+        msg_key = (record.levelname, record.getMessage())
+        now = record.created
+        
+        if (msg_key == self.last_message_key and 
+            self.last_timestamp is not None and 
+            abs(now - self.last_timestamp) < self.duplicate_window):
+            return False  # Suppress duplicate
+        
+        self.last_message_key = msg_key
+        self.last_timestamp = now
+        return True
+
+# Create a single handler with duplicate filter
 handler = logging.StreamHandler(sys.stderr)
 handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
+handler.addFilter(DuplicateFilter())
 root_logger.addHandler(handler)
 root_logger.setLevel(logging.INFO)
 
