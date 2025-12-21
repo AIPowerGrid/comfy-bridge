@@ -28,9 +28,9 @@ services:
           - MODELVAULT_RPC=${MODELVAULT_RPC:-https://mainnet.base.org}
           - CIVITAI_API_KEY=${CIVITAI_API_KEY:-}
           - HUGGING_FACE_API_KEY=${HUGGING_FACE_API_KEY:-}
-          # WalletConnect/Reown Project ID (optional - eliminates 403 error)
-          # Get a free project ID from https://cloud.walletconnect.com
-          - NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=${NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID:-}
+          # WalletConnect/Reown Project ID - eliminates 403 warning
+          # You can get your own project ID from https://cloud.walletconnect.com
+          - NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=${NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID:-12b7ae7346ef69c8b50e27d3fba44e61}
         
         ports:
           - "5000:5000"  # Management UI
