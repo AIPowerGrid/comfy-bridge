@@ -88,6 +88,49 @@ class ComfyUIClient:
         resp.raise_for_status()
         return resp.json()
     
+    async def get_queue(self) -> Dict[str, Any]:
+        """Fetch current queue status from ComfyUI.
+        
+        Returns dict with:
+        - queue_running: list of [prompt_id, prompt_number, prompt_data, extra_data]
+        - queue_pending: list of [prompt_id, prompt_number, prompt_data, extra_data]
+        """
+        try:
+            resp = await self.client.get("/queue")
+            resp.raise_for_status()
+            return resp.json()
+        except Exception as e:
+            logger.error(f"Failed to fetch queue status: {e}")
+            return {"queue_running": [], "queue_pending": []}
+    
+    async def get_system_stats(self) -> Dict[str, Any]:
+        """Fetch system stats from ComfyUI (GPU info, memory usage, etc.)"""
+        try:
+            resp = await self.client.get("/system_stats")
+            resp.raise_for_status()
+            return resp.json()
+        except Exception as e:
+            logger.debug(f"Failed to fetch system stats: {e}")
+            return {}
+    
+    async def interrupt_current(self) -> bool:
+        """Interrupt the currently running prompt in ComfyUI."""
+        try:
+            resp = await self.client.post("/interrupt")
+            return resp.status_code == 200
+        except Exception as e:
+            logger.error(f"Failed to interrupt current execution: {e}")
+            return False
+    
+    async def clear_queue(self) -> bool:
+        """Clear the pending queue in ComfyUI."""
+        try:
+            resp = await self.client.post("/queue", json={"clear": True})
+            return resp.status_code == 200
+        except Exception as e:
+            logger.error(f"Failed to clear queue: {e}")
+            return False
+    
     async def get_available_models(self) -> Dict[str, list]:
         """Get available models organized by loader type"""
         try:

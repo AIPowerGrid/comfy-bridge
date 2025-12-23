@@ -510,7 +510,10 @@ class ComfyUIBridge:
                             status_data = data.get("data", {})
                             queue_remaining = status_data.get("status", {}).get("exec_info", {}).get("queue_remaining", 0)
                             if queue_remaining > 0:
-                                logger.info(f"Queue status: {queue_remaining} jobs ahead")
+                                if queue_remaining == 1:
+                                    logger.info(f"Queue status: Our job is queued (1 job in queue)")
+                                else:
+                                    logger.info(f"Queue status: {queue_remaining - 1} jobs ahead of ours ({queue_remaining} total in queue)")
                         
                         # Handle progress updates
                         elif msg_type == "progress":
