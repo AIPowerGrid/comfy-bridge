@@ -533,9 +533,10 @@ class ModelMapper:
             else:
                 logger.warning(f"Skipping non-JSON file: {filename}")
         
-        logger.info(f"Final workflow map from env: {len(self.workflow_map)} models")
+        logger.info(f"🗺️ FINAL WORKFLOW MAP from env: {len(self.workflow_map)} model(s)")
+        logger.info(f"   These are the EXACT model names we will advertise to the Grid API:")
         for model, workflow in self.workflow_map.items():
-            logger.info(f"  {model} -> {workflow}")
+            logger.info(f"   📍 '{model}' -> workflow '{workflow}.json'")
 
     def _has_local_flux_assets(self) -> bool:
         """Fallback detection for Flux assets on disk when ComfyUI doesn't list them."""
@@ -735,7 +736,9 @@ class ModelMapper:
         from the blockchain. This ensures we only advertise what we can serve.
         """
         # Only return models that have workflow mappings (i.e., are installed)
-        return list(self.workflow_map.keys())
+        models = list(self.workflow_map.keys())
+        logger.debug(f"get_available_horde_models() returning: {models}")
+        return models
 
     def is_model_on_chain(self, model_name: str) -> bool:
         """Check if a model is registered on the blockchain."""

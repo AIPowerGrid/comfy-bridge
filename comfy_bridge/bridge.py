@@ -74,6 +74,12 @@ class ComfyUIBridge:
         job_id = job.get("id")
         model_name = job.get('model', 'unknown')
         
+        # DEBUG: Log exact job model received vs what we advertise
+        logger.info(f"📥 JOB RECEIVED: id={job_id}, model='{model_name}'")
+        logger.info(f"   Job model in our list? {model_name in self.supported_models}")
+        if model_name not in self.supported_models:
+            logger.warning(f"⚠️ MISMATCH: Job model '{model_name}' not in our advertised list: {self.supported_models}")
+        
         # Check if we're already processing this job (prevent duplicates)
         if job_id in self.processing_jobs:
             logger.warning(f"Job {job_id} already being processed, skipping duplicate")
@@ -379,11 +385,14 @@ class ComfyUIBridge:
             # Fallback to health checker results if ComfyUI validation fails
             self.supported_models = healthy_models
         
-        logger.info(f"Advertising {len(self.supported_models)} healthy models:")
+        logger.info(f"🚀 ADVERTISING {len(self.supported_models)} healthy models to Grid API:")
         for i, model in enumerate(self.supported_models, 1):
             health = worker_health.model_details.get(model)
             status = "✓" if health and health.is_healthy else "~"
-            logger.info(f"  {i}. {status} {model}")
+            logger.info(f"  {i}. {status} '{model}'")
+        
+        # Log the exact model names being sent to API (helps debug case-sensitivity issues)
+        logger.info(f"📋 EXACT MODEL NAMES: {self.supported_models}")
             
         if not self.supported_models:
             logger.error("CRITICAL: No healthy models to advertise! The bridge will not receive any jobs.")
