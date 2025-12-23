@@ -269,6 +269,10 @@ class ComfyUIBridge:
 
         # Prioritize WORKFLOW_FILE when set, otherwise use auto-detected models
         derived_models = get_horde_models()
+        logger.info(f"🔧 Config:")
+        logger.info(f"   WORKFLOW_FILE env: {Settings.WORKFLOW_FILE}")
+        logger.info(f"   GRID_MODELS (raw): {Settings.GRID_MODELS}")
+        logger.info(f"   get_horde_models() returned: {derived_models}")
         if Settings.GRID_MODELS:
             # WORKFLOW_FILE is explicitly set - use the resolved models from the mapper
             self.supported_models = derived_models
