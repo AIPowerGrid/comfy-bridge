@@ -1522,7 +1522,9 @@ async def build_workflow(job: Dict[str, Any]) -> Dict[str, Any]:
         logger.error(error_msg)
         raise RuntimeError(error_msg)
     
-    logger.info(f"Loading workflow: {workflow_filename} for model: {model_name} (type: {source_processing})")
+    logger.info(f"🔧 Loading workflow: {workflow_filename} for model: {model_name} (type: {source_processing})")
+    logger.info(f"   Model requested by job: '{model_name}'")
+    logger.info(f"   Workflow file resolved: '{workflow_filename}'")
     
     try:
         workflow = load_workflow_file(workflow_filename)
