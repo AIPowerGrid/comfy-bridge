@@ -114,16 +114,18 @@ class APIClient:
                                     for model_info in models_status:
                                         if isinstance(model_info, dict):
                                             name = model_info.get("name", "")
-                                            queued = model_info.get("queued", 0)
-                                            if queued > 0:
-                                                models_with_jobs.append((name, queued))
+                                            queued = model_info.get("queued", 0)  # This is "things" (megapixels), not job count!
+                                            jobs = model_info.get("jobs", 0)  # Actual job count
+                                            if queued > 0 or jobs > 0:
+                                                models_with_jobs.append((name, queued, jobs))
                                     
-                                    logger.info(f"      Found {len(models_with_jobs)} models with queued jobs")
+                                    logger.info(f"      Found {len(models_with_jobs)} models with queued work")
                                     if models_with_jobs:
-                                        logger.info(f"      🔍 MODELS WITH QUEUED JOBS (sorted by queue size):")
-                                        for name, queued in sorted(models_with_jobs, key=lambda x: -x[1])[:20]:
+                                        logger.info(f"      🔍 MODELS WITH QUEUED WORK (sorted by queue size):")
+                                        logger.info(f"         Note: 'queued' = megapixels of work, 'jobs' = actual job count")
+                                        for name, queued, jobs in sorted(models_with_jobs, key=lambda x: -x[1])[:20]:
                                             supported = "✓ SUPPORTED" if name in models_to_use else "✗ NOT SUPPORTED"
-                                            logger.info(f"         {supported}: '{name}' has {queued} job(s)")
+                                            logger.info(f"         {supported}: '{name}' - {jobs} jobs ({queued:.0f} megapixels)")
                                         
                                         # Check for near-matches to help with naming issues
                                         unsupported = [n for n, _ in models_with_jobs if n not in models_to_use]
@@ -144,7 +146,21 @@ class APIClient:
                     if skipped.get("worker_id", 0) > 0:
                         logger.info(f"   → {skipped['worker_id']} jobs skipped: worker ID issue")
                     if skipped.get("performance", 0) > 0:
-                        logger.info(f"   → {skipped['performance']} jobs skipped: performance requirements")
+                        logger.info(f"   → {skipped['performance']} jobs skipped: performance requirements (worker too slow, jobs need fast workers)")
+                    if skipped.get("performance_our_models", 0) > 0:
+                        logger.info(f"   → {skipped['performance_our_models']} jobs FOR OUR MODELS skipped due to speed (worker.speed <= 0.5 MPS/s)")
+                    if skipped.get("max_pixels_our_models", 0) > 0:
+                        logger.info(f"   → {skipped['max_pixels_our_models']} jobs FOR OUR MODELS skipped due to resolution")
+                    if skipped.get("untrusted", 0) > 0:
+                        logger.info(f"   → {skipped['untrusted']} jobs skipped: require trusted workers")
+                    if skipped.get("bridge_version", 0) > 0:
+                        logger.info(f"   → {skipped['bridge_version']} jobs skipped: bridge capability mismatch")
+                    
+                    # Debug info for matching jobs that exist but weren't assigned
+                    if skipped.get("_debug_matching_model_jobs", 0) > 0:
+                        matching = skipped['_debug_matching_model_jobs']
+                        logger.info(f"   ℹ️  DEBUG: {matching} jobs exist for our models but weren't assigned")
+                        logger.info(f"      This means jobs are being filtered by other conditions (NSFW, lora, resolution, etc.)")
 
             return result
         except httpx.HTTPStatusError as e:

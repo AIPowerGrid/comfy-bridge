@@ -692,10 +692,14 @@ async def process_workflow(
     payload = job.get("payload", {})
     seed = generate_seed(payload.get("seed"))
     
-    # Debug logging
-    logger.debug(f"Job payload: {payload}")
-    logger.debug(f"Job prompt: {payload.get('prompt')}")
-    logger.debug(f"Job negative_prompt: {payload.get('negative_prompt')}")
+    # Enhanced debug logging for negative prompt troubleshooting
+    logger.info(f"📝 Job payload keys: {list(payload.keys())}")
+    logger.info(f"📝 Job prompt: {(payload.get('prompt') or '')[:100]}...")
+    neg_prompt = payload.get("negative_prompt", "")
+    if neg_prompt:
+        logger.info(f"📝 Job negative_prompt: {neg_prompt[:100]}...")
+    else:
+        logger.warning(f"📝 No negative_prompt in payload! Full payload: {payload}")
 
     # Make a deep copy to avoid modifying the original
     processed_workflow = copy.deepcopy(workflow)
