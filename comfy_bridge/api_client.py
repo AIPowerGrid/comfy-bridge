@@ -80,7 +80,12 @@ class APIClient:
                 # API now uses wallet_address instead of wallet
                 wallet_address = result.get("wallet_address", "") or result.get("wallet", "")
                 wallet_info = f", wallet_address: {wallet_address[:10]}..." if wallet_address and len(wallet_address) > 10 else (f", wallet_address: {wallet_address}" if wallet_address else "")
-                logger.info(f"✅ Received job {job_id} for model {result.get('model', 'unknown')}{wallet_info}")
+                job_model = result.get('model', 'unknown')
+                logger.info(f"✅ Received job {job_id}")
+                logger.info(f"   📌 JOB MODEL: '{job_model}'")
+                logger.info(f"   📌 We advertised: {models_to_use}")
+                if job_model not in models_to_use:
+                    logger.warning(f"⚠️ Model mismatch! API returned model '{job_model}' but we advertised: {models_to_use}")
             else:
                 # Log full response when no job (periodically or when models are skipped)
                 if self._pop_count == 1 or self._pop_count % 50 == 0 or skipped.get("models", 0) > 0:

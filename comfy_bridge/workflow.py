@@ -1510,9 +1510,16 @@ def convert_native_workflow_to_simple(workflow: Dict[str, Any]) -> Dict[str, Any
 async def build_workflow(job: Dict[str, Any]) -> Dict[str, Any]:
     model_name = job.get("model", "")
     source_processing = job.get("source_processing", "txt2img")
+    
+    logger.info(f"🔨 BUILD_WORKFLOW called for job:")
+    logger.info(f"   Job ID: {job.get('id', 'unknown')}")
+    logger.info(f"   Job model: '{model_name}'")
+    logger.info(f"   Source processing: {source_processing}")
 
     # Use the mapped workflow for all jobs (the mapper handles the logic)
     workflow_filename = get_workflow_file(model_name)
+    
+    logger.info(f"   get_workflow_file('{model_name}') returned: '{workflow_filename}'")
     
     # Validate that we have a proper workflow mapping
     if not workflow_filename:
@@ -1523,8 +1530,6 @@ async def build_workflow(job: Dict[str, Any]) -> Dict[str, Any]:
         raise RuntimeError(error_msg)
     
     logger.info(f"🔧 Loading workflow: {workflow_filename} for model: {model_name} (type: {source_processing})")
-    logger.info(f"   Model requested by job: '{model_name}'")
-    logger.info(f"   Workflow file resolved: '{workflow_filename}'")
     
     try:
         workflow = load_workflow_file(workflow_filename)
