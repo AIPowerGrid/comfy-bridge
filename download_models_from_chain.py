@@ -129,6 +129,8 @@ def get_model_dependencies(model_name: str, models_path: str) -> List[Dict[str, 
         
         # Get workflow file
         workflow_filename = get_workflow_file(model_name)
+        if not workflow_filename:
+            return dependencies
         workflow_path = Path(Settings.WORKFLOW_DIR) / workflow_filename
         
         if not workflow_path.exists():

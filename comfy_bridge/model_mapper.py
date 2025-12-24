@@ -309,7 +309,7 @@ class ModelMapper:
             return "sdxl"
         
         elif model_type == ModelType.SD15:
-            return "Dreamshaper"
+            return None  # SD1.5 models not supported - don't default
         
         # Default: try to match display_name directly to workflow file
         normalized = display_name.replace(" ", "_").replace(".", "_").replace("-", "_")
@@ -684,7 +684,7 @@ class ModelMapper:
         if workflows_to_remove:
             logger.info(f"Removed {len(workflows_to_remove)} workflows due to missing models")
 
-    def get_workflow_file(self, horde_model_name: str) -> str:
+    def get_workflow_file(self, horde_model_name: str) -> Optional[str]:
         """Get the workflow file for a Grid model.
         
         Returns the actual filename found on disk, handling dash/underscore variations.
@@ -730,8 +730,9 @@ class ModelMapper:
                 # Return just the filename, not the full path
                 return os.path.basename(found_path)
         
-        # Last-resort default
-        return "Dreamshaper.json"
+        # No fallback - return None if no workflow found
+        logger.warning(f"No workflow found for model '{horde_model_name}' - model will not be advertised")
+        return None
 
     def get_available_horde_models(self) -> List[str]:
         """Get list of available models (only installed models with workflows).
@@ -775,8 +776,8 @@ def get_workflow_validated_models() -> set:
     return set(model_mapper.workflow_map.keys())
 
 
-def get_workflow_file(horde_model_name: str) -> str:
-    """Get workflow file for a model."""
+def get_workflow_file(horde_model_name: str) -> Optional[str]:
+    """Get workflow file for a model. Returns None if no workflow found."""
     return model_mapper.get_workflow_file(horde_model_name)
 
 

@@ -319,6 +319,9 @@ class ComfyUIBridge:
             for model_name in healthy_models:
                 try:
                     workflow_file = get_workflow_file(model_name)
+                    if not workflow_file:
+                        logger.warning(f"    ✗ {model_name}: No workflow file found")
+                        continue
                     workflow_path = os.path.join(Settings.WORKFLOW_DIR, workflow_file)
                     
                     if os.path.exists(workflow_path):
