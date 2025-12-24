@@ -47,7 +47,8 @@ class PayloadBuilder:
             "filename": original_filename,
             "form": "video",
             "type": "video",
-            "media_type": "video"
+            "media_type": "video",
+            "file_size": len(media_bytes)  # File size in bytes
         }
         
         # Include wallet address if provided in the job (for payment attribution)
@@ -56,6 +57,21 @@ class PayloadBuilder:
         if wallet_address:
             payload["wallet_address"] = wallet_address
             logger.debug(f"Including wallet_address in payload: {wallet_address[:10]}..." if len(wallet_address) > 10 else f"Including wallet_address: {wallet_address}")
+        
+        # Include tags if provided in the job
+        tags = job.get("tags")
+        if tags:
+            payload["tags"] = tags
+        
+        # Include R2 download URL if provided by the API
+        r2_download = job.get("r2_download") or job.get("r2_download_url")
+        if r2_download:
+            payload["r2_download_url"] = r2_download
+        elif r2_upload_url:
+            # Construct download URL from upload URL by removing query params (signed part)
+            # The base URL before the "?" is typically the public access URL
+            download_url = r2_upload_url.split("?")[0] if "?" in r2_upload_url else r2_upload_url
+            payload["r2_download_url"] = download_url
         
         # Encode video to base64 (always needed for API submission)
         b64 = encode_media(media_bytes, "video")
@@ -86,7 +102,8 @@ class PayloadBuilder:
             "generation": b64,
             "state": "ok",
             "seed": int(job.get("payload", {}).get("seed", 0)),
-            "media_type": media_type
+            "media_type": media_type,
+            "file_size": len(media_bytes)  # File size in bytes
         }
         
         # Include wallet address if provided in the job (for payment attribution)
@@ -96,8 +113,18 @@ class PayloadBuilder:
             payload["wallet_address"] = wallet_address
             logger.debug(f"Including wallet_address in payload: {wallet_address[:10]}..." if len(wallet_address) > 10 else f"Including wallet_address: {wallet_address}")
         
+        # Include tags if provided in the job
+        tags = job.get("tags")
+        if tags:
+            payload["tags"] = tags
+        
+        # Include R2 download URL if provided
+        r2_download = job.get("r2_download") or job.get("r2_download_url")
+        if r2_download:
+            payload["r2_download_url"] = r2_download
+        
         # Debug: log payload details (without the large base64)
-        logger.info(f"DEBUG payload: id={job_id}, seed={payload['seed']}, media_type={media_type}, wallet_address={wallet_address or 'N/A'}, b64_len={len(b64)}")
+        logger.info(f"DEBUG payload: id={job_id}, seed={payload['seed']}, media_type={media_type}, file_size={len(media_bytes)}, wallet_address={wallet_address or 'N/A'}, b64_len={len(b64)}")
         
         # Add video-specific parameters if needed
         if media_type == "video":
