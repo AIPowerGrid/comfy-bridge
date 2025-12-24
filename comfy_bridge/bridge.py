@@ -97,10 +97,10 @@ class ComfyUIBridge:
                 # Track unhealthy model to potentially remove from advertising
                 self.unhealthy_models.add(model_name)
                 try:
-                    await self.api.cancel_job(job_id)
-                    logger.info(f"Cancelled job {job_id} due to model health check failure")
-                except Exception as cancel_error:
-                    logger.error(f"Failed to cancel job {job_id}: {cancel_error}")
+                    await self.api.submit_fault(job_id, f"Model health check failed: {health_reason}")
+                    logger.info(f"Reported job {job_id} as faulted due to model health check failure")
+                except Exception as fault_error:
+                    logger.error(f"Failed to report fault for job {job_id}: {fault_error}")
                 self.processing_jobs.discard(job_id)
                 return False
             
@@ -121,11 +121,11 @@ class ComfyUIBridge:
                 
                 if not validation.is_valid:
                     logger.warning(f"ModelVault validation failed: {validation.reason}")
-                    # Cancel job with validation failure
+                    # Report job as faulted with validation failure reason
                     try:
-                        await self.api.cancel_job(job_id)
-                    except Exception as cancel_error:
-                        logger.error(f"Failed to cancel job {job_id}: {cancel_error}")
+                        await self.api.submit_fault(job_id, f"ModelVault validation failed: {validation.reason}")
+                    except Exception as fault_error:
+                        logger.error(f"Failed to report fault for job {job_id}: {fault_error}")
                     self.processing_jobs.discard(job_id)
                     return False
 
@@ -179,11 +179,11 @@ class ComfyUIBridge:
                 error_msg = str(e)
                 logger.error(f"Model validation failed: {error_msg}")
                 logger.error(f"Job {job_id} rejected: Required models are not installed or incompatible")
-                # Cancel the job in the API
+                # Report job as faulted with the validation error
                 try:
-                    await self.api.cancel_job(job_id)
-                except Exception as cancel_error:
-                    logger.error(f"Failed to cancel job {job_id}: {cancel_error}")
+                    await self.api.submit_fault(job_id, f"Model validation failed: {error_msg}")
+                except Exception as fault_error:
+                    logger.error(f"Failed to report fault for job {job_id}: {fault_error}")
                 # Raise RuntimeError to prevent workflow submission - this will be caught by outer handler
                 raise RuntimeError(f"Job rejected: {error_msg}") from e
             except Exception as e:
@@ -242,11 +242,20 @@ class ComfyUIBridge:
             # Clean up job from processing set on any error
             self.processing_jobs.discard(job_id)
             
-            # Cancel the job in the API to prevent other workers from picking it up
+            # Report the job as faulted to the Grid API with error details
+            error_message = str(e)
+            logger.error(f"Job {job_id} failed: {error_message}")
+            
             try:
-                await self.api.cancel_job(job_id)
-            except Exception as cancel_error:
-                logger.error(f"Failed to cancel job {job_id}: {cancel_error}")
+                # Report failure back to the Grid API so it doesn't stay "processing"
+                await self.api.submit_fault(job_id, error_message)
+            except Exception as fault_error:
+                logger.error(f"Failed to report fault for job {job_id}: {fault_error}")
+                # Fall back to cancellation if fault reporting fails
+                try:
+                    await self.api.cancel_job(job_id)
+                except Exception as cancel_error:
+                    logger.error(f"Failed to cancel job {job_id}: {cancel_error}")
             
             # Re-raise the exception so it can be handled by the caller
             raise
