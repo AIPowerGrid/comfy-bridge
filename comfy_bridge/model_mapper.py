@@ -443,28 +443,27 @@ class ModelMapper:
         return None
 
     # Reverse mapping: workflow filename -> Grid model name
-    # These must match the model names that have QUEUED JOBS in the Grid API
-    # Check https://api.aipowergrid.io/api/v2/status/models for active job queues
+    # These MUST match names that exist in stable_diffusion.json
+    # Check: https://raw.githubusercontent.com/AIPowerGrid/grid-image-model-reference/main/stable_diffusion.json
     WORKFLOW_TO_GRID_MODEL = {
-        # Video Generation Models - use exact stable_diffusion.json names
-        # Grid has both variants, but stable_diffusion.json names are canonical
-        "wan2.2-t2v-a14b": "wan2_2_t2v_14b",
-        "wan2.2-t2v-a14b-hq": "wan2_2_t2v_14b_hq",
+        # Video Generation Models - EXACT names from stable_diffusion.json
+        "wan2.2-t2v-a14b": "wan2.2-t2v-a14b",       # Use hyphen version (canonical)
+        "wan2.2-t2v-a14b-hq": "wan2.2-t2v-a14b-hq", # Use hyphen version (canonical)
         "wan2.2-t2v-a14b-best": "wan2.2-t2v-a14b-best",
-        "wan2.2_ti2v_5B": "wan2_2_ti2v_5b",       # Lowercase grid name
-        "wan2.2-ti2v-5B": "wan2_2_ti2v_5b",       # Map hyphen variant
+        "wan2.2_ti2v_5B": "wan2.2_ti2v_5B",         # Both variants exist
+        "wan2.2-ti2v-5B": "wan2.2_ti2v_5B",         # Map hyphen to underscore variant
         "ltxv": "ltxv",
         
-        # Flux Dev variants - workflow files are flux1.dev.json and FLUX.1-dev.json
+        # Flux Dev - ONLY use FLUX.1-dev (with dot), NOT flux1.dev
         "flux1.dev": "FLUX.1-dev",
         "FLUX.1-dev": "FLUX.1-dev",
         "flux1-dev": "FLUX.1-dev",
         
-        # Flux Krea variants - workflow file is flux.1-krea-dev.json
+        # Flux Krea - use exact stable_diffusion.json name
         "flux.1-krea-dev": "flux.1-krea-dev",
         "krea": "flux.1-krea-dev",
         
-        # Flux Kontext variants - workflow file is FLUX.1-dev-Kontext-fp8-scaled.json
+        # Flux Kontext - use exact stable_diffusion.json name
         "FLUX.1-dev-Kontext-fp8-scaled": "FLUX.1-dev-Kontext-fp8-scaled",
         
         # Other image models
@@ -474,17 +473,22 @@ class ModelMapper:
         "SDXL": "SDXL 1.0",
     }
 
-    # Map workflow IDs to ALL Grid model name variants that might have jobs
-    # This ensures we advertise both naming conventions
+    # Map workflow IDs to Grid model names that MUST exist in stable_diffusion.json
+    # These are the ONLY names the API will accept - check:
+    # https://raw.githubusercontent.com/AIPowerGrid/grid-image-model-reference/main/stable_diffusion.json
     WORKFLOW_TO_ALL_GRID_NAMES = {
-        # Must match exactly what's in stable_diffusion.json
-        "wan2.2_ti2v_5B": ["wan2.2_ti2v_5B", "wan2_2_ti2v_5b"],
-        "wan2.2-t2v-a14b": ["wan2_2_t2v_14b", "wan2.2-t2v-a14b"],
-        "wan2.2-t2v-a14b-hq": ["wan2_2_t2v_14b_hq", "wan2.2-t2v-a14b-hq"],
+        # WAN Video models - use EXACT names from stable_diffusion.json
+        "wan2.2_ti2v_5B": ["wan2.2_ti2v_5B", "wan2_2_ti2v_5b"],  # Both are in stable_diffusion.json
+        "wan2.2-t2v-a14b": ["wan2.2-t2v-a14b"],     # Only hyphen version exists in stable_diffusion.json
+        "wan2.2-t2v-a14b-hq": ["wan2.2-t2v-a14b-hq"],  # Only hyphen version exists
+        
+        # FLUX models - use EXACT names from stable_diffusion.json
         "flux.1-krea-dev": ["flux.1-krea-dev"],
         "FLUX.1-dev-Kontext-fp8-scaled": ["FLUX.1-dev-Kontext-fp8-scaled"],
-        "flux1.dev": ["FLUX.1-dev", "flux1.dev"],
-        "FLUX.1-dev": ["FLUX.1-dev", "flux1.dev"],
+        "flux1.dev": ["FLUX.1-dev"],               # Only FLUX.1-dev exists, NOT flux1.dev
+        "FLUX.1-dev": ["FLUX.1-dev"],              # Canonical name
+        
+        # Other models
         "Chroma_final": ["Chroma"],
         "sdxl1": ["SDXL 1.0"],
         "ltxv": ["ltxv"],
