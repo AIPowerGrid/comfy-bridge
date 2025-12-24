@@ -194,6 +194,50 @@ class APIClient:
             else:
                 logger.error(f"Failed to cancel job {job_id}: {e.response.status_code} - {e.response.text}")
 
+    async def submit_fault(self, job_id: str, error_message: str, seed: Optional[str] = None) -> None:
+        """Report a job as faulted/failed to the Grid API.
+        
+        This tells the server that the job failed so it can be reassigned or marked as failed,
+        rather than staying in 'processing' state indefinitely.
+        """
+        payload = {
+            "id": job_id,
+            "state": "faulted",
+            "generation": "",  # Empty generation for faulted jobs
+            "seed": seed or "0",
+            "gen_metadata": [
+                {
+                    "type": "error",
+                    "value": error_message[:500]  # Truncate to avoid API issues
+                }
+            ]
+        }
+        
+        logger.info(f"Reporting job {job_id} as faulted: {error_message[:100]}...")
+        
+        try:
+            response = await self.client.post(
+                "/v2/generate/submit", headers=self.headers, json=payload
+            )
+            response.raise_for_status()
+            logger.info(f"Successfully reported job {job_id} as faulted")
+            
+            # Clean up job cache
+            if job_id in self._job_cache:
+                del self._job_cache[job_id]
+                
+        except httpx.HTTPStatusError as e:
+            # 400 with AbortedGen means job was already timed out/cancelled - that's fine
+            error_text = e.response.text
+            if e.response.status_code == 400 and "AbortedGen" in error_text:
+                logger.info(f"Job {job_id} was already aborted by server (likely timeout)")
+            elif e.response.status_code == 404:
+                logger.debug(f"Job {job_id} not found for fault report (may have been cancelled)")
+            else:
+                logger.error(f"Failed to report fault for job {job_id}: {e.response.status_code} - {error_text}")
+        except Exception as e:
+            logger.error(f"Error reporting fault for job {job_id}: {e}")
+
     async def submit_result(self, payload: Dict[str, Any]) -> None:
         job_id = payload.get("id")
         media_type = payload.get("media_type", "image")
