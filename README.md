@@ -236,10 +236,14 @@ The script automatically:
 
 ### Step 4: Select Models 🎨
 
+> 🔗 **Blockchain Model Registry**: All models are registered and validated through the ModelVault smart contract on Base Mainnet. This ensures authenticity, proper attribution, and trustless model discovery.
+
 **Option A: Use the Desktop App (Recommended - Created Automatically!)**
 1. Look for **"AI Power Grid Manager"** shortcut on your desktop
 2. Double-click to launch (no browser needed!)
 3. Browse available models (filter by your GPU's VRAM)
+   - All models are verified on the blockchain ✅
+   - Only registered models can be downloaded and hosted
 4. Click **Download** for models you want to host
 5. Wait for downloads to complete
 6. Click **"Start Hosting"** → You're earning! 🎉
@@ -247,11 +251,15 @@ The script automatically:
 **Option B: Use the Web Interface**
 1. Open **http://localhost:5000** in your browser
 2. Browse available models (filter by your GPU's VRAM)
+   - All models are verified on the blockchain ✅
+   - Only registered models can be downloaded and hosted
 3. Click **Download** for models you want to host
 4. Wait for downloads to complete
 5. Click **"Start Hosting"** → You're earning! 🎉
 
 > 💡 **Note:** The desktop app is automatically built and a shortcut is created when you run the start script. If the shortcut wasn't created, you can still use the web interface!
+
+> 🔐 **Security:** All model information comes from the blockchain - no centralized server controls which models are available. This ensures transparency and prevents censorship.
 
 ---
 
@@ -411,9 +419,32 @@ This means:
 - **Runtime**: Models are downloaded when container starts (if not in image or .env changed)
 - Both methods work - choose based on your workflow!
 
+### Blockchain Model Registry 🔗
+
+**All models are registered and validated through the ModelVault smart contract on Base Mainnet.**
+
+The blockchain is the **single source of truth** for:
+- ✅ Model discovery and availability
+- ✅ Model authenticity and verification  
+- ✅ Download URLs and file hashes
+- ✅ Model constraints (steps, CFG, samplers)
+
+**Configuration (already set by default):**
+```bash
+MODELVAULT_ENABLED=true                        # Enable blockchain registry
+MODELVAULT_RPC_URL=https://mainnet.base.org    # Base Mainnet RPC
+MODELVAULT_CONTRACT=0x79F39f2a0eA476f53994812e6a8f3C8CFe08c609  # Contract address
+```
+
+**Benefits:**
+- 🔐 **Trustless**: No central authority controls which models are available
+- ✅ **Verified**: All models are registered on-chain with cryptographic hashes
+- 🌐 **Transparent**: Anyone can verify model registration and details
+- 🚫 **Censorship-resistant**: No single entity can remove models from the registry
+
 ### Wallet Connect Configuration 🔗
 
-The Management UI supports Web3 wallet connections for blockchain model registry features. A default WalletConnect project ID is provided, but you can get your own free project ID:
+The Management UI supports Web3 wallet connections for blockchain features. A default WalletConnect project ID is provided, but you can get your own free project ID:
 
 1. Visit https://cloud.walletconnect.com
 2. Create a free account and new project
