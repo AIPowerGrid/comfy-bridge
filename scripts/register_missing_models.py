@@ -193,8 +193,6 @@ def register_model(w3, contract, signer_account, model_data, dry_run=False):
             'from': signer_account.address,
             'nonce': w3.eth.get_transaction_count(signer_account.address),
             'gas': 500000,
-            'maxFeePerGas': w3.eth.gas_price * 2,
-            'maxPriorityFeePerGas': w3.to_wei('0.01', 'gwei'),
         })
         
         # Sign and send
