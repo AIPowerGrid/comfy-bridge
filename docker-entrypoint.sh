@@ -40,10 +40,18 @@ def parse_model_env(raw: str) -> list[str]:
     return [token.strip() for token in tokens if token.strip()]
 
 # Get models from environment
-grid_env = os.environ.get("GRID_MODEL", "")
+grid_env = os.environ.get("GRID_MODELS", "")  # Fixed: was GRID_MODEL, should be GRID_MODELS
 workflow_env = os.environ.get("WORKFLOW_FILE", "")
 
-requested_models = parse_model_env(grid_env) or parse_model_env(workflow_env)
+# Parse workflow files to get actual model names 
+workflow_models = []
+for entry in parse_model_env(workflow_env):
+    # Remove .json extension if present
+    if entry.endswith('.json'):
+        entry = entry[:-5]
+    workflow_models.append(entry)
+
+requested_models = parse_model_env(grid_env) or workflow_models
 
 if not requested_models:
     print("No models configured in GRID_MODEL or WORKFLOW_FILE")

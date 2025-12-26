@@ -316,66 +316,10 @@ class ModelVaultClient:
         logger.info("Grid ModelVault contract (with on-chain download URLs)")
     
     def _load_descriptions_from_catalog(self) -> Dict[str, str]:
-        """Load model descriptions from local catalog for enrichment."""
-        import json
-        import os
-        
-        descriptions = {}
-        
-        # Try multiple possible paths for the model reference repository
-        ref_path = os.environ.get("GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH", "")
-        
-        # Build list of possible catalog paths
-        catalog_paths = []
-        
-        if ref_path:
-            catalog_paths.append(os.path.join(ref_path, "stable_diffusion.json"))
-        
-        # Docker paths
-        catalog_paths.extend([
-            "/app/grid-image-model-reference/stable_diffusion.json",
-            "/app/comfy-bridge/model_configs.json",
-        ])
-        
-        # Auto-detect relative to this file's location (for local development)
-        this_dir = os.path.dirname(os.path.abspath(__file__))
-        comfy_bridge_root = os.path.dirname(this_dir)
-        dev_root = os.path.dirname(comfy_bridge_root)
-        
-        catalog_paths.extend([
-            os.path.join(dev_root, "grid-image-model-reference", "stable_diffusion.json"),
-            os.path.join(comfy_bridge_root, "model_configs.json"),
-        ])
-        
-        for catalog_path in catalog_paths:
-            try:
-                if not os.path.exists(catalog_path):
-                    continue
-                    
-                with open(catalog_path, 'r') as f:
-                    catalog = json.load(f)
-                
-                for name, data in catalog.items():
-                    desc = data.get("description", "")
-                    if desc:
-                        # Index by multiple keys for flexible matching
-                        descriptions[name] = desc
-                        descriptions[name.lower()] = desc
-                        # Also store by file name if available
-                        fname = data.get("filename", "")
-                        if fname:
-                            descriptions[fname] = desc
-                            descriptions[fname.lower()] = desc
-                
-                if descriptions:
-                    logger.debug(f"Loaded {len(descriptions)} descriptions from catalog")
-                    return descriptions
-                    
-            except Exception as e:
-                logger.debug(f"Could not load catalog {catalog_path}: {e}")
-                continue
-        
-        return descriptions
+        """Load model descriptions from blockchain only (no JSON fallback)."""
+        # Descriptions are now generated from model names or fetched from blockchain
+        # No longer loading from stable_diffusion.json
+        return {}
     
     def _get_description_for_model(self, display_name: str, file_name: str, descriptions_cache: Dict[str, str]) -> str:
         """Get description for a model from cache, with multiple fallback lookups."""
@@ -485,9 +429,9 @@ class ModelVaultClient:
             display_name = result[3] if len(result) > 3 else ""
             size_bytes = result[7] if len(result) > 7 else 0
             
-            # Get description from local catalog (blockchain doesn't have description field)
-            descriptions_cache = self._load_descriptions_from_catalog()
-            description = self._get_description_for_model(display_name, file_name, descriptions_cache)
+            # Generate description from model name patterns
+            # No longer using stable_diffusion.json as source
+            description = self._generate_description(display_name)
             
             model_info = OnChainModelInfo(
                 model_hash=model_hash_bytes.hex(),
@@ -567,125 +511,10 @@ class ModelVaultClient:
         return ""
 
     def _load_fallback_download_urls(self, model_name: str) -> List[ModelFile]:
-        """Load download URLs from local reference files for V1 contract fallback."""
-        import json
-        import os
-        
-        files = []
-        
-        # Try multiple possible paths for the model reference repository
-        ref_path = os.environ.get("GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH", "")
-        
-        # Build list of possible catalog paths
-        catalog_paths = []
-        
-        if ref_path:
-            catalog_paths.append(os.path.join(ref_path, "stable_diffusion.json"))
-        
-        # Docker paths
-        catalog_paths.extend([
-            "/app/grid-image-model-reference/stable_diffusion.json",
-            "/app/comfy-bridge/model_configs.json",
-        ])
-        
-        # Auto-detect relative to this file's location (for local development)
-        this_dir = os.path.dirname(os.path.abspath(__file__))
-        comfy_bridge_root = os.path.dirname(this_dir)
-        dev_root = os.path.dirname(comfy_bridge_root)
-        
-        catalog_paths.extend([
-            os.path.join(dev_root, "grid-image-model-reference", "stable_diffusion.json"),
-            os.path.join(comfy_bridge_root, "model_configs.json"),
-        ])
-        
-        # Normalize model name for matching
-        name_variants = [
-            model_name,
-            model_name.lower(),
-            model_name.replace("-", "_"),
-            model_name.replace("_", "-"),
-            model_name.replace(".", "_"),
-            model_name.lower().replace("-", "_"),
-            model_name.lower().replace("_", "-"),
-        ]
-        
-        for catalog_path in catalog_paths:
-            try:
-                if not os.path.exists(catalog_path):
-                    continue
-                    
-                with open(catalog_path, 'r') as f:
-                    catalog = json.load(f)
-                
-                # Search for model in catalog
-                for name, data in catalog.items():
-                    name_lower = name.lower()
-                    if any(v.lower() == name_lower or v.lower() in name_lower or name_lower in v.lower() for v in name_variants):
-                        # Found matching model, extract files and download info
-                        config = data.get("config", {})
-                        model_files = config.get("files", []) or data.get("files", [])
-                        download_info = config.get("download", [])
-                        
-                        # Get config-level download URL as fallback
-                        config_download_url = (
-                            config.get("download_url") or 
-                            config.get("file_url") or 
-                            data.get("download_url") or
-                            data.get("url") or
-                            ""
-                        )
-                        
-                        # Build maps of file_name -> download_url and file_name -> type from download array
-                        download_urls = {}
-                        download_types = {}
-                        for dl in download_info:
-                            if isinstance(dl, dict):
-                                fn = dl.get("file_name", "")
-                                url = dl.get("file_url") or dl.get("download_url") or dl.get("url", "")
-                                file_type = dl.get("type", "")
-                                if fn:
-                                    if url:
-                                        download_urls[fn] = url
-                                    if file_type:
-                                        download_types[fn] = file_type
-                        
-                        for file_info in model_files:
-                            if isinstance(file_info, dict):
-                                file_path = file_info.get("path", "")
-                                # Get URL from file_info first, then fall back to download_urls map, then config-level URL
-                                url = (
-                                    file_info.get("url") or 
-                                    file_info.get("file_url") or 
-                                    file_info.get("download_url") or
-                                    download_urls.get(file_path, "") or
-                                    config_download_url
-                                )
-                                # Get type from file_info first, then from download_types map, then infer from URL
-                                file_type = (
-                                    file_info.get("type") or 
-                                    download_types.get(file_path, "") or
-                                    self._infer_file_type_from_url(url) or
-                                    self._infer_file_type_from_filename(file_path) or
-                                    "checkpoint"
-                                )
-                                
-                                files.append(ModelFile(
-                                    file_name=file_path,
-                                    file_type=file_type,
-                                    download_url=url,
-                                    mirror_url=file_info.get("mirror_url", ""),
-                                    sha256_hash=file_info.get("sha256") or file_info.get("sha256sum", ""),
-                                    size_bytes=int(file_info.get("size_bytes", 0) or 0),
-                                ))
-                        
-                        if files:
-                            logger.info(f"Found {len(files)} download URL(s) for {model_name} from {catalog_path}")
-                            return files
-            except Exception as e:
-                logger.debug(f"Could not load catalog {catalog_path}: {e}")
-                continue
-        
-        return files
+        """No fallback URLs - blockchain is the single source of truth."""
+        # Download URLs must be registered on the blockchain
+        # No longer loading from stable_diffusion.json
+        return []
 
     def get_constraints(self, model_hash: bytes) -> Optional[ModelConstraints]:
         """Get model constraints (steps, cfg, samplers, schedulers) from blockchain."""
@@ -790,8 +619,7 @@ class ModelVaultClient:
         temp_models = []
         blockchain_success = False
         
-        # Load descriptions from catalog for enrichment (blockchain doesn't store descriptions)
-        descriptions_cache = self._load_descriptions_from_catalog()
+        # Descriptions are now generated from model names (no JSON catalog)
         
         # Try blockchain first
         if self.enabled and self._contract:
@@ -816,8 +644,8 @@ class ModelVaultClient:
                             display_name = result[3] if len(result) > 3 else ""
                             size_bytes = result[7] if len(result) > 7 else 0
                             
-                            # Get description from local catalog (blockchain doesn't have description field)
-                            description = self._get_description_for_model(display_name, file_name, descriptions_cache)
+                            # Generate description from model name patterns
+                            description = self._generate_description(display_name)
                             
                             model_info = OnChainModelInfo(
                                 model_hash=model_hash_bytes.hex(),
@@ -890,145 +718,11 @@ class ModelVaultClient:
         return self._model_cache
     
     def _load_models_from_catalog(self) -> List[OnChainModelInfo]:
-        """Load models from local catalog files as fallback."""
-        import json
-        import os
-        
-        models = []
-        
-        # Try multiple possible paths for the model reference repository
-        ref_path = os.environ.get("GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH", "")
-        
-        # Build list of possible catalog paths
-        catalog_paths = []
-        
-        if ref_path:
-            catalog_paths.append(os.path.join(ref_path, "stable_diffusion.json"))
-        
-        # Docker paths
-        catalog_paths.extend([
-            "/app/grid-image-model-reference/stable_diffusion.json",
-            "/app/comfy-bridge/model_configs.json",
-        ])
-        
-        # Auto-detect relative to this file's location (for local development)
-        this_dir = os.path.dirname(os.path.abspath(__file__))
-        comfy_bridge_root = os.path.dirname(this_dir)
-        dev_root = os.path.dirname(comfy_bridge_root)
-        
-        catalog_paths.extend([
-            os.path.join(dev_root, "grid-image-model-reference", "stable_diffusion.json"),
-            os.path.join(comfy_bridge_root, "model_configs.json"),
-        ])
-        
-        for catalog_path in catalog_paths:
-            try:
-                if not os.path.exists(catalog_path):
-                    continue
-                    
-                with open(catalog_path, 'r') as f:
-                    catalog = json.load(f)
-                
-                logger.info(f"Loading models from {catalog_path}...")
-                
-                for name, data in catalog.items():
-                    # Determine model type
-                    model_type = ModelType.IMAGE_MODEL
-                    name_lower = name.lower()
-                    if 'video' in name_lower or 'wan' in name_lower or 'ltx' in name_lower:
-                        model_type = ModelType.VIDEO_MODEL
-                    elif 'llm' in name_lower or 'text' in name_lower:
-                        model_type = ModelType.TEXT_MODEL
-                    
-                    # Get file info from config.files or top-level files
-                    config = data.get("config", {})
-                    files_data = config.get("files", []) or data.get("files", [])
-                    download_info = config.get("download", [])
-                    
-                    # Get config-level download URL as fallback
-                    config_download_url = (
-                        config.get("download_url") or 
-                        config.get("file_url") or 
-                        data.get("download_url") or
-                        data.get("url") or
-                        ""
-                    )
-                    
-                    # Build maps of file_name -> download_url and file_name -> type from download array
-                    download_urls = {}
-                    download_types = {}
-                    for dl in download_info:
-                        if isinstance(dl, dict):
-                            fn = dl.get("file_name", "")
-                            url = dl.get("file_url") or dl.get("download_url") or dl.get("url", "")
-                            file_type = dl.get("type", "")
-                            if fn:
-                                if url:
-                                    download_urls[fn] = url
-                                if file_type:
-                                    download_types[fn] = file_type
-                    
-                    files = []
-                    for file_info in files_data:
-                        if isinstance(file_info, dict):
-                            file_path = file_info.get("path", "")
-                            # Get URL from file_info first, then fall back to download_urls map, then config-level URL
-                            url = (
-                                file_info.get("url") or 
-                                file_info.get("file_url") or 
-                                file_info.get("download_url") or
-                                download_urls.get(file_path, "") or
-                                config_download_url
-                            )
-                            # Get type from file_info first, then from download_types map, then infer from URL/filename
-                            file_type = (
-                                file_info.get("type") or 
-                                download_types.get(file_path, "") or
-                                self._infer_file_type_from_url(url) or
-                                self._infer_file_type_from_filename(file_path) or
-                                "checkpoint"
-                            )
-                            
-                            files.append(ModelFile(
-                                file_name=file_path,
-                                file_type=file_type,
-                                download_url=url,
-                                mirror_url=file_info.get("mirror_url", ""),
-                                sha256_hash=file_info.get("sha256") or file_info.get("sha256sum", ""),
-                                size_bytes=int(file_info.get("size_bytes", 0) or 0),
-                            ))
-                    
-                    # Get size
-                    size_bytes = int((data.get("size_mb") or data.get("size_gb", 0) * 1024 or 0) * 1024 * 1024)
-                    
-                    model_info = OnChainModelInfo(
-                        model_hash="",
-                        model_type=model_type,
-                        file_name=data.get("filename", name),
-                        display_name=data.get("name") or data.get("display_name") or name,
-                        description=data.get("description", f"{name} model"),
-                        is_nsfw=data.get("nsfw", False),
-                        size_bytes=size_bytes,
-                        inpainting=data.get("inpainting", False),
-                        img2img=data.get("img2img", False),
-                        controlnet=data.get("controlnet", False),
-                        lora=data.get("type") == "loras",
-                        base_model=data.get("baseline") or data.get("base_model", ""),
-                        architecture=data.get("style") or data.get("type", "checkpoint"),
-                        is_active=True,
-                        files=files,
-                    )
-                    models.append(model_info)
-                
-                if models:
-                    logger.info(f"Loaded {len(models)} models from catalog")
-                    return models
-                    
-            except Exception as e:
-                logger.debug(f"Could not load catalog {catalog_path}: {e}")
-                continue
-        
-        return models
+        """No catalog fallback - blockchain is the single source of truth."""
+        # Models must be registered on the blockchain
+        # No longer loading from stable_diffusion.json
+        return []
+
 
     def get_registered_model_names(self) -> List[str]:
         """

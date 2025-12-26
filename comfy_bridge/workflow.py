@@ -692,6 +692,9 @@ async def process_workflow(
     payload = job.get("payload", {})
     seed = generate_seed(payload.get("seed"))
     
+    # Default negative prompt for FLUX models
+    FLUX_DEFAULT_NEGATIVE_PROMPT = "blurry, low quality, distorted, deformed, ugly, bad anatomy, watermark, signature, text"
+    
     # Enhanced debug logging for negative prompt troubleshooting
     logger.info(f"📝 Job payload keys: {list(payload.keys())}")
     logger.info(f"📝 Job prompt: {(payload.get('prompt') or '')[:100]}...")
@@ -714,6 +717,188 @@ async def process_workflow(
             model_type = "sdxl"
     logger.debug(f"Processing workflow model type: {model_type}")
     _force_video_processing(job, model_type)
+
+    # Fix for FLUX models using CheckpointLoaderSimple: Remove negative prompt CLIPTextEncode nodes
+    # FLUX models don't have CLIP text encoders in CheckpointLoaderSimple, so CLIPTextEncode nodes
+    # that reference CLIP from CheckpointLoaderSimple will fail. We remove negative prompt nodes
+    # and disconnect them from KSampler (FLUX models don't use negative prompts the same way).
+    if model_type == "flux":
+        # Handle both simple format (node objects) and native format (nodes array)
+        is_native_format = isinstance(processed_workflow, dict) and "nodes" in processed_workflow
+        
+        if is_native_format:
+            # Native format: workflow has "nodes" array
+            nodes = processed_workflow.get("nodes", [])
+            checkpoint_loaders = []
+            for node in nodes:
+                if isinstance(node, dict) and node.get("type") == "CheckpointLoaderSimple":
+                    node_id = node.get("id")
+                    if node_id:
+                        checkpoint_loaders.append(str(node_id))
+            
+            if checkpoint_loaders:
+                logger.info(f"FLUX fix (native format): Found CheckpointLoaderSimple nodes: {checkpoint_loaders}")
+                negative_prompt_nodes_to_remove = []
+                
+                # Find CLIPTextEncode nodes using CLIP from checkpoint loaders
+                for node in nodes:
+                    if isinstance(node, dict) and node.get("type") == "CLIPTextEncode":
+                        node_id = str(node.get("id", ""))
+                        node_inputs = node.get("inputs", [])
+                        # In native format, inputs might be a list or dict
+                        clip_ref = None
+                        if isinstance(node_inputs, list):
+                            # Find clip in inputs list
+                            for inp in node_inputs:
+                                if isinstance(inp, dict) and inp.get("name") == "clip":
+                                    clip_ref = inp.get("value")
+                                    break
+                        elif isinstance(node_inputs, dict):
+                            clip_ref = node_inputs.get("clip")
+                        
+                        if isinstance(clip_ref, list) and len(clip_ref) > 0:
+                            clip_source_id = str(clip_ref[0])
+                            clip_output_index = clip_ref[1] if len(clip_ref) > 1 else 0
+                            
+                            if clip_source_id in checkpoint_loaders and clip_output_index == 1:
+                                # Check if connected to KSampler negative input
+                                is_negative = False
+                                for ks_node in nodes:
+                                    if isinstance(ks_node, dict) and ks_node.get("type") in ["KSampler", "KSamplerAdvanced"]:
+                                        ks_inputs = ks_node.get("inputs", [])
+                                        neg_ref = None
+                                        if isinstance(ks_inputs, list):
+                                            for inp in ks_inputs:
+                                                if isinstance(inp, dict) and inp.get("name") == "negative":
+                                                    neg_ref = inp.get("value")
+                                                    break
+                                        elif isinstance(ks_inputs, dict):
+                                            neg_ref = ks_inputs.get("negative")
+                                        
+                                        if isinstance(neg_ref, list) and len(neg_ref) > 0 and str(neg_ref[0]) == node_id:
+                                            is_negative = True
+                                            logger.info(f"FLUX fix (native): Found negative prompt CLIPTextEncode node {node_id}")
+                                            break
+                                
+                                if is_negative:
+                                    negative_prompt_nodes_to_remove.append(node)
+                
+                # Remove nodes and update KSamplers
+                for node_to_remove in negative_prompt_nodes_to_remove:
+                    node_id = str(node_to_remove.get("id", ""))
+                    logger.info(f"FLUX fix (native): Removing CLIPTextEncode node {node_id}")
+                    nodes.remove(node_to_remove)
+                    
+                    # Disconnect from KSamplers
+                    for ks_node in nodes:
+                        if isinstance(ks_node, dict) and ks_node.get("type") in ["KSampler", "KSamplerAdvanced"]:
+                            ks_inputs = ks_node.get("inputs", [])
+                            if isinstance(ks_inputs, list):
+                                for inp in ks_inputs:
+                                    if isinstance(inp, dict) and inp.get("name") == "negative":
+                                        neg_ref = inp.get("value")
+                                        if isinstance(neg_ref, list) and len(neg_ref) > 0 and str(neg_ref[0]) == node_id:
+                                            logger.info(f"FLUX fix (native): Removing negative input from KSampler {ks_node.get('id')}")
+                                            ks_inputs.remove(inp)
+                                            break
+                            elif isinstance(ks_inputs, dict) and "negative" in ks_inputs:
+                                neg_ref = ks_inputs["negative"]
+                                if isinstance(neg_ref, list) and len(neg_ref) > 0 and str(neg_ref[0]) == node_id:
+                                    logger.info(f"FLUX fix (native): Removing negative input from KSampler {ks_node.get('id')}")
+                                    del ks_inputs["negative"]
+        else:
+            # Simple format: direct node objects with numeric keys
+            checkpoint_loaders = []
+            for node_id, node_data in processed_workflow.items():
+                if isinstance(node_data, dict) and node_data.get("class_type") == "CheckpointLoaderSimple":
+                    checkpoint_loaders.append(node_id)
+            
+            if checkpoint_loaders:
+                logger.info(f"FLUX fix (simple format): Found CheckpointLoaderSimple nodes: {checkpoint_loaders}")
+                negative_prompt_nodes_to_remove = []
+                
+                # Find CLIPTextEncode nodes that use CLIP from checkpoint loaders
+                for node_id, node_data in processed_workflow.items():
+                    if isinstance(node_data, dict) and node_data.get("class_type") == "CLIPTextEncode":
+                        inputs = node_data.get("inputs", {})
+                        clip_ref = inputs.get("clip")
+                        if isinstance(clip_ref, list) and len(clip_ref) > 0:
+                            clip_source_id = str(clip_ref[0])
+                            clip_output_index = clip_ref[1] if len(clip_ref) > 1 else 0
+                            
+                            logger.debug(f"FLUX fix: Checking CLIPTextEncode node {node_id}: clip_source={clip_source_id}, clip_output={clip_output_index}")
+                            
+                            # Check if this CLIP comes from a checkpoint loader (output index 1 is CLIP)
+                            if clip_source_id in checkpoint_loaders and clip_output_index == 1:
+                                logger.info(f"FLUX fix: Node {node_id} uses CLIP from CheckpointLoaderSimple {clip_source_id}")
+                                # Check if this is a negative prompt node - multiple detection methods
+                                is_negative = False
+                                
+                                # Method 1: Check connection to KSampler negative input
+                                for ks_id, ks_data in processed_workflow.items():
+                                    if isinstance(ks_data, dict) and ks_data.get("class_type") in ["KSampler", "KSamplerAdvanced"]:
+                                        ks_inputs = ks_data.get("inputs", {})
+                                        if "negative" in ks_inputs:
+                                            neg_ref = ks_inputs["negative"]
+                                            if isinstance(neg_ref, list) and len(neg_ref) > 0 and str(neg_ref[0]) == str(node_id):
+                                                is_negative = True
+                                                logger.info(f"FLUX fix: Found negative prompt CLIPTextEncode node {node_id} via KSampler connection")
+                                                break
+                                
+                                # Method 2: Check _meta title if connection detection failed
+                                if not is_negative:
+                                    meta = node_data.get("_meta", {})
+                                    title = meta.get("title", "").lower()
+                                    if "negative" in title:
+                                        is_negative = True
+                                        logger.info(f"FLUX fix: Found negative prompt CLIPTextEncode node {node_id} via title: '{title}'")
+                                
+                                # Method 3: If not connected to FluxGuidance (positive prompts go through FluxGuidance), assume it's negative
+                                if not is_negative:
+                                    is_positive_via_flux_guidance = False
+                                    for other_node_id, other_node_data in processed_workflow.items():
+                                        if isinstance(other_node_data, dict) and other_node_data.get("class_type") == "FluxGuidance":
+                                            fg_inputs = other_node_data.get("inputs", {})
+                                            cond_ref = fg_inputs.get("conditioning")
+                                            if isinstance(cond_ref, list) and len(cond_ref) > 0 and str(cond_ref[0]) == str(node_id):
+                                                is_positive_via_flux_guidance = True
+                                                logger.debug(f"FLUX fix: Node {node_id} is positive (connected to FluxGuidance {other_node_id})")
+                                                break
+                                    
+                                    if not is_positive_via_flux_guidance:
+                                        # Not connected to FluxGuidance, and uses CLIP from checkpoint - must be negative
+                                        is_negative = True
+                                        logger.info(f"FLUX fix: Node {node_id} uses CLIP from checkpoint and is not connected to FluxGuidance - assuming negative prompt")
+                                
+                                if is_negative:
+                                    negative_prompt_nodes_to_remove.append(node_id)
+                                    logger.warning(f"FLUX fix: Marking negative prompt CLIPTextEncode node {node_id} for removal")
+                                else:
+                                    logger.debug(f"FLUX fix: Node {node_id} uses CLIP from checkpoint but is positive (connected to FluxGuidance)")
+                
+                # Remove negative prompt nodes and disconnect them from KSamplers
+                if negative_prompt_nodes_to_remove:
+                    logger.info(f"FLUX fix: Removing {len(negative_prompt_nodes_to_remove)} negative prompt nodes: {negative_prompt_nodes_to_remove}")
+                    for node_id in negative_prompt_nodes_to_remove:
+                        # Disconnect from all KSamplers first
+                        for ks_id, ks_data in processed_workflow.items():
+                            if isinstance(ks_data, dict) and ks_data.get("class_type") in ["KSampler", "KSamplerAdvanced"]:
+                                ks_inputs = ks_data.get("inputs", {})
+                                if "negative" in ks_inputs:
+                                    neg_ref = ks_inputs["negative"]
+                                    if isinstance(neg_ref, list) and len(neg_ref) > 0 and str(neg_ref[0]) == str(node_id):
+                                        # Remove the negative input entirely for FLUX models
+                                        logger.info(f"FLUX fix: Removing negative input from KSampler {ks_id}")
+                                        del ks_inputs["negative"]
+                        
+                        # Remove the node
+                        logger.info(f"FLUX fix: Removing CLIPTextEncode node {node_id}")
+                        if node_id in processed_workflow:
+                            del processed_workflow[node_id]
+                        else:
+                            logger.warning(f"FLUX fix: Node {node_id} not found in workflow (may have been removed already)")
+                else:
+                    logger.warning(f"FLUX fix: No negative prompt nodes found to remove (this may indicate the fix didn't detect them correctly)")
 
     # Handle source image for img2img workflows
     source_image_filename = None
@@ -858,10 +1043,16 @@ async def process_workflow(
                 title = node.get("title", "") or ""
                 if isinstance(widgets, list) and len(widgets) >= 1:
                     if "negative" in title.lower():
-                        neg = payload.get("negative_prompt")
-                        if isinstance(neg, str) and neg:
+                        neg = payload.get("negative_prompt", "").strip()
+                        if neg:
                             widgets[0] = neg
                             logger.debug(f"Updated negative prompt: {neg}")
+                        else:
+                            # Inject default negative prompt for FLUX models if none provided
+                            if model_type == "flux":
+                                default_neg = FLUX_DEFAULT_NEGATIVE_PROMPT
+                                widgets[0] = default_neg
+                                logger.info(f"CLIPTextEncode node: Injected FLUX default negative prompt: {default_neg[:50]}...")
                     elif "positive" in title.lower():
                         # This is a positive prompt node
                         pos = payload.get("prompt")
@@ -1157,12 +1348,18 @@ async def process_workflow(
                     
                     # Now handle the prompt based on connection type
                     if is_negative_prompt:
-                        neg = payload.get("negative_prompt")
-                        if isinstance(neg, str) and neg:
+                        neg = payload.get("negative_prompt", "").strip()
+                        if neg:
                             inputs["text"] = neg
                             logger.info(f"Node {node_id}: Updated negative prompt: {neg[:50]}...")
                         else:
-                            logger.info(f"Node {node_id}: Keeping workflow default negative prompt: {inputs.get('text', '')[:50]}...")
+                            # Inject default negative prompt for FLUX models if none provided
+                            if model_type == "flux":
+                                default_neg = FLUX_DEFAULT_NEGATIVE_PROMPT
+                                inputs["text"] = default_neg
+                                logger.info(f"Node {node_id}: Injected FLUX default negative prompt: {default_neg[:50]}...")
+                            else:
+                                logger.info(f"Node {node_id}: Keeping workflow default negative prompt: {inputs.get('text', '')[:50]}...")
                     elif is_positive_prompt:
                         pos = payload.get("prompt")
                         if isinstance(pos, str) and pos:
@@ -1181,12 +1378,18 @@ async def process_workflow(
                         logger.info(f"Node {node_id}: Connection detection failed, using title fallback. Title: '{title}'")
                         
                         if "negative" in title:
-                            neg = payload.get("negative_prompt")
-                            if isinstance(neg, str) and neg:
+                            neg = payload.get("negative_prompt", "").strip()
+                            if neg:
                                 inputs["text"] = neg
                                 logger.info(f"Node {node_id}: Updated negative prompt by title fallback: {neg[:50]}...")
                             else:
-                                logger.info(f"Node {node_id}: Keeping workflow default negative prompt by title: {inputs.get('text', '')[:50]}...")
+                                # Inject default negative prompt for FLUX models if none provided
+                                if model_type == "flux":
+                                    default_neg = FLUX_DEFAULT_NEGATIVE_PROMPT
+                                    inputs["text"] = default_neg
+                                    logger.info(f"Node {node_id}: Injected FLUX default negative prompt by title fallback: {default_neg[:50]}...")
+                                else:
+                                    logger.info(f"Node {node_id}: Keeping workflow default negative prompt by title: {inputs.get('text', '')[:50]}...")
                         elif "positive" in title:
                             # Explicitly check for positive in title
                             pos = payload.get("prompt")

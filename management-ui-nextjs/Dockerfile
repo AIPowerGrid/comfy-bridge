@@ -56,9 +56,7 @@ ENV NODE_ENV production
 # Install curl for healthcheck, python3 and requests for download scripts, git for cloning repos, and docker for container management
 RUN apk add --no-cache curl python3 py3-requests git docker-cli docker-cli-compose
 
-# Clone grid-image-model-reference repository with git cache mount
-RUN --mount=type=cache,target=/root/.cache/git \
-    git clone --depth 1 https://github.com/aipowergrid/grid-image-model-reference.git /app/grid-image-model-reference
+# grid-image-model-reference no longer needed - blockchain is the source of truth
 
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs

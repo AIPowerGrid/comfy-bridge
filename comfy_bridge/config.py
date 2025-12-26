@@ -30,9 +30,8 @@ class Settings:
     WORKFLOW_FILE = os.getenv("WORKFLOW_FILE", None)
     COMFYUI_OUTPUT_DIR = os.getenv("COMFYUI_OUTPUT_DIR", r"C:\dev\ComfyUI\output")
     
-    # DEPRECATED: JSON catalog path - blockchain is now the source of truth
-    # Kept for backward compatibility during transition
-    GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH = os.getenv("GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH")
+    # JSON catalog no longer used - blockchain is now the single source of truth
+    # GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH removed
     
     # ModelVault on-chain model registry (Base Mainnet)
     # The blockchain is the single source of truth for model registration
