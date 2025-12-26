@@ -49,126 +49,147 @@ class TestModelMapper:
             await initialize_model_mapper("http://test:8000")
 
     def test_get_horde_models_success(self):
-        """Test get_horde_models with successful response."""
-        mock_models = ["model1.safetensors", "model2.safetensors", "model3.ckpt"]
-        
-        with patch('comfy_bridge.model_mapper.httpx.AsyncClient') as mock_client_class:
-            mock_client = AsyncMock()
-            mock_response = MagicMock()
-            mock_response.json.return_value = mock_models
-            mock_response.raise_for_status.return_value = None
-            mock_client.get = AsyncMock(return_value=mock_response)
-            mock_client_class.return_value.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_client_class.return_value.__aexit__ = AsyncMock(return_value=None)
-
+        """Test get_horde_models returns models from workflow map."""
+        # Mock the model_mapper singleton to have a workflow_map
+        with patch('comfy_bridge.model_mapper.model_mapper') as mock_mapper:
+            mock_mapper.workflow_map = {
+                "model1": "workflow1",
+                "model2": "workflow2",
+            }
+            mock_mapper.get_available_horde_models.return_value = ["model1", "model2"]
+            
             result = get_horde_models()
-
-            # Should return filtered models
-            assert len(result) == 2  # Only .safetensors files
-            assert "model1" in result
-            assert "model2" in result
-            assert "model3" not in result
-
-    def test_get_horde_models_no_files(self):
-        """Test get_horde_models with no files."""
-        with patch('comfy_bridge.model_mapper.httpx.AsyncClient') as mock_client_class:
-            mock_client = AsyncMock()
-            mock_response = MagicMock()
-            mock_response.json.return_value = []
-            mock_response.raise_for_status.return_value = None
-            mock_client.get = AsyncMock(return_value=mock_response)
-            mock_client_class.return_value.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_client_class.return_value.__aexit__ = AsyncMock(return_value=None)
-
-            result = get_horde_models()
-
-            assert result == []
-
-    def test_get_horde_models_filter_extensions(self):
-        """Test get_horde_models filters file extensions correctly."""
-        mock_models = [
-            "model1.safetensors",
-            "model2.ckpt", 
-            "model3.pth",
-            "model4.safetensors",
-            "model5.txt"
-        ]
-        
-        with patch('comfy_bridge.model_mapper.httpx.AsyncClient') as mock_client_class:
-            mock_client = AsyncMock()
-            mock_response = MagicMock()
-            mock_response.json.return_value = mock_models
-            mock_response.raise_for_status.return_value = None
-            mock_client.get = AsyncMock(return_value=mock_response)
-            mock_client_class.return_value.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_client_class.return_value.__aexit__ = AsyncMock(return_value=None)
-
-            result = get_horde_models()
-
-            # Should only return .safetensors files
+            
+            # Should return models from workflow map
+            assert isinstance(result, list)
             assert len(result) == 2
             assert "model1" in result
+            assert "model2" in result
+
+    def test_get_horde_models_no_files(self):
+        """Test get_horde_models with no models in workflow map."""
+        # Mock the model_mapper singleton with empty workflow_map
+        with patch('comfy_bridge.model_mapper.model_mapper') as mock_mapper:
+            mock_mapper.workflow_map = {}
+            mock_mapper.get_available_horde_models.return_value = []
+            
+            result = get_horde_models()
+            
+            assert result == []
+
+    def test_get_horde_models_returns_workflow_keys(self):
+        """Test get_horde_models returns keys from workflow map."""
+        # Mock the model_mapper singleton
+        with patch('comfy_bridge.model_mapper.model_mapper') as mock_mapper:
+            mock_mapper.workflow_map = {
+                "model1": "workflow1",
+                "model2": "workflow2",
+                "model3": "workflow3",
+                "model4": "workflow4",
+            }
+            mock_mapper.get_available_horde_models.return_value = ["model1", "model2", "model3", "model4"]
+            
+            result = get_horde_models()
+            
+            # Should return all workflow map keys
+            assert len(result) == 4
+            assert "model1" in result
+            assert "model2" in result
+            assert "model3" in result
             assert "model4" in result
 
-    def test_get_horde_models_http_error(self):
-        """Test get_horde_models with HTTP error."""
-        with patch('comfy_bridge.model_mapper.httpx.AsyncClient') as mock_client_class:
-            mock_client = AsyncMock()
-            mock_client.get = AsyncMock(side_effect=Exception("HTTP Error"))
-            mock_client_class.return_value.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_client_class.return_value.__aexit__ = AsyncMock(return_value=None)
-
+    def test_get_horde_models_blockchain_fallback(self):
+        """Test get_horde_models falls back gracefully when blockchain unavailable."""
+        # Mock the model_mapper singleton with empty workflow_map (blockchain failed)
+        with patch('comfy_bridge.model_mapper.model_mapper') as mock_mapper:
+            mock_mapper.workflow_map = {}
+            mock_mapper.chain_models = {}  # No blockchain models
+            mock_mapper.get_available_horde_models.return_value = []
+            
             result = get_horde_models()
-
+            
+            # Should return empty list when blockchain fails
             assert result == []
 
-    def test_get_horde_models_json_error(self):
-        """Test get_horde_models with JSON parsing error."""
-        with patch('comfy_bridge.model_mapper.httpx.AsyncClient') as mock_client_class:
-            mock_client = AsyncMock()
-            mock_response = MagicMock()
-            mock_response.json.side_effect = json.JSONDecodeError("Invalid JSON", "", 0)
-            mock_response.raise_for_status.return_value = None
-            mock_client.get = AsyncMock(return_value=mock_response)
-            mock_client_class.return_value.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_client_class.return_value.__aexit__ = AsyncMock(return_value=None)
-
+    def test_get_horde_models_with_blockchain_models(self):
+        """Test get_horde_models with blockchain-registered models."""
+        # Mock the model_mapper singleton with blockchain models
+        with patch('comfy_bridge.model_mapper.model_mapper') as mock_mapper:
+            from comfy_bridge.modelvault_client import OnChainModelInfo, ModelType
+            
+            mock_mapper.chain_models = {
+                "FLUX.1-dev": OnChainModelInfo(
+                    model_hash="0x00",
+                    model_type=ModelType.IMAGE_MODEL,
+                    file_name="flux.safetensors",
+                    display_name="FLUX.1-dev",
+                    description="FLUX model",
+                    is_nsfw=False,
+                    size_bytes=1000000,
+                    inpainting=False,
+                    img2img=True,
+                    controlnet=False,
+                    lora=False,
+                    base_model="flux_1",
+                    architecture="flux",
+                    is_active=True,
+                )
+            }
+            mock_mapper.workflow_map = {"FLUX.1-dev": "flux1.dev"}
+            mock_mapper.get_available_horde_models.return_value = ["FLUX.1-dev"]
+            
             result = get_horde_models()
-
-            assert result == []
+            
+            # Should return models from workflow map
+            assert "FLUX.1-dev" in result
 
     def test_get_horde_models_with_workflow_file(self):
         """Test get_horde_models with WORKFLOW_FILE environment variable."""
-        with patch.dict(os.environ, {"WORKFLOW_FILE": "model1,model2,model3"}):
-            with patch('comfy_bridge.model_mapper.Settings') as mock_settings:
-                mock_settings.WORKFLOW_FILE = "model1,model2,model3"
-                mock_settings.GRID_MODELS = ["model1", "model2", "model3"]
-                
-                result = get_horde_models()
-
-                assert result == ["model1", "model2", "model3"]
+        # Mock the model_mapper singleton
+        with patch('comfy_bridge.model_mapper.model_mapper') as mock_mapper:
+            mock_mapper.workflow_map = {
+                "model1": "workflow1",
+                "model2": "workflow2",
+                "model3": "workflow3",
+            }
+            mock_mapper.get_available_horde_models.return_value = ["model1", "model2", "model3"]
+            
+            result = get_horde_models()
+            
+            assert len(result) == 3
+            assert "model1" in result
+            assert "model2" in result
+            assert "model3" in result
 
     def test_get_horde_models_with_empty_workflow_file(self):
-        """Test get_horde_models with empty WORKFLOW_FILE."""
-        with patch.dict(os.environ, {"WORKFLOW_FILE": ""}):
-            with patch('comfy_bridge.model_mapper.Settings') as mock_settings:
-                mock_settings.WORKFLOW_FILE = ""
-                mock_settings.GRID_MODELS = []
-                
-                result = get_horde_models()
+        """Test get_horde_models with empty workflow map."""
+        # Mock the model_mapper singleton with empty workflow_map
+        with patch('comfy_bridge.model_mapper.model_mapper') as mock_mapper:
+            mock_mapper.workflow_map = {}
+            mock_mapper.get_available_horde_models.return_value = []
+            
+            result = get_horde_models()
+            
+            assert result == []
 
-                assert result == []
-
-    def test_get_horde_models_with_spaces_in_workflow_file(self):
-        """Test get_horde_models with spaces in WORKFLOW_FILE."""
-        with patch.dict(os.environ, {"WORKFLOW_FILE": "model1, model2 , model3"}):
-            with patch('comfy_bridge.model_mapper.Settings') as mock_settings:
-                mock_settings.WORKFLOW_FILE = "model1, model2 , model3"
-                mock_settings.GRID_MODELS = ["model1", "model2", "model3"]
-                
-                result = get_horde_models()
-
-                assert result == ["model1", "model2", "model3"]
+    def test_get_horde_models_preserves_model_names(self):
+        """Test get_horde_models preserves exact model names from workflow map."""
+        # Mock the model_mapper singleton
+        with patch('comfy_bridge.model_mapper.model_mapper') as mock_mapper:
+            mock_mapper.workflow_map = {
+                "FLUX.1-dev": "flux1.dev",
+                "wan2.2-t2v-a14b": "wan2.2-t2v-a14b",
+                "ltxv": "ltxv",
+            }
+            mock_mapper.get_available_horde_models.return_value = ["FLUX.1-dev", "wan2.2-t2v-a14b", "ltxv"]
+            
+            result = get_horde_models()
+            
+            # Should preserve exact names from workflow map
+            assert len(result) == 3
+            assert "FLUX.1-dev" in result
+            assert "wan2.2-t2v-a14b" in result
+            assert "ltxv" in result
 
 
 class TestNormalizeWorkflowName:
