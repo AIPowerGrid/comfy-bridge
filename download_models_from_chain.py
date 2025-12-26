@@ -270,6 +270,25 @@ def normalize_model_folder(file_type: str) -> str:
     return n or 'checkpoints'
 
 
+def find_model_file_in_any_folder(models_path: str, filename: str) -> Optional[Path]:
+    """
+    Search for a model file in any subdirectory of the models path.
+    Returns the full path if found, None otherwise.
+    """
+    models_dir = Path(models_path)
+    if not models_dir.exists():
+        return None
+    
+    # Search in all subdirectories
+    for subdir in models_dir.iterdir():
+        if subdir.is_dir():
+            filepath = subdir / filename
+            if filepath.exists() and _is_file_complete(filepath):
+                return filepath
+    
+    return None
+
+
 def _expected_safetensors_size(filepath: Path) -> Tuple[bool, Optional[int]]:
     """
     Parse the safetensors header to ensure the payload is fully present.
@@ -458,19 +477,30 @@ def download_model_from_chain(
     missing_deps = []
     if dependencies:
         for dep in dependencies:
+            # Check expected location first
             dep_path = Path(models_path) / ("text_encoders" if dep["type"] == "text_encoder" else dep["type"]) / dep["file"]
+            
+            # If not found in expected location, scan all folders
             if not dep_path.exists():
-                missing_deps.append(dep)
+                if not find_model_file_in_any_folder(models_path, dep["file"]):
+                    missing_deps.append(dep)
     
-    # Check if model files exist
+    # Check if model files exist (scan all subdirectories)
     all_model_files_exist = True
     if model_info.files:
         for file_info in model_info.files:
+            # First check the expected folder, then scan all folders
             folder = normalize_model_folder(file_info.file_type)
-            filepath = Path(models_path) / folder / file_info.file_name
-            if not (filepath.exists() and _is_file_complete(filepath)):
+            expected_path = Path(models_path) / folder / file_info.file_name
+            
+            # Check if file exists in expected location or any other folder
+            if expected_path.exists() and _is_file_complete(expected_path):
+                continue  # File found in expected location
+            elif find_model_file_in_any_folder(models_path, file_info.file_name):
+                continue  # File found in another location
+            else:
                 all_model_files_exist = False
-                break
+                break  # File not found anywhere
     
     # If everything exists, just log success and return
     if not missing_deps and all_model_files_exist and model_info.files:
@@ -498,14 +528,20 @@ def download_model_from_chain(
     success_count = 0
     total_files = len(model_info.files)
     
-    # First pass: check if all files already exist
+    # First pass: check if all files already exist (scan all subdirectories)
     all_exist = True
     for file_info in model_info.files:
+        # Check expected folder first, then scan all folders
         folder = normalize_model_folder(file_info.file_type)
-        filepath = Path(models_path) / folder / file_info.file_name
-        if not (filepath.exists() and _is_file_complete(filepath)):
+        expected_path = Path(models_path) / folder / file_info.file_name
+        
+        if expected_path.exists() and _is_file_complete(expected_path):
+            continue  # Found in expected location
+        elif find_model_file_in_any_folder(models_path, file_info.file_name):
+            continue  # Found in another location  
+        else:
             all_exist = False
-            break
+            break  # Not found anywhere
     
     # If all files exist, just log success and return
     if all_exist:
@@ -523,9 +559,18 @@ def download_model_from_chain(
         file_base_progress = ((idx - 1) / total_files) * 100
         file_progress_range = 100 / total_files
         
-        # Check if already exists (silently skip)
+        # Check if already exists in expected location
         if filepath.exists() and _is_file_complete(filepath):
             success_count += 1
+            emit_progress(100 * idx / total_files, message=f"  [{idx}/{total_files}] {file_info.file_name} - found in {folder}")
+            continue
+        
+        # Check if exists in any other folder
+        existing_path = find_model_file_in_any_folder(models_path, file_info.file_name)
+        if existing_path:
+            success_count += 1
+            relative_folder = existing_path.parent.name
+            emit_progress(100 * idx / total_files, message=f"  [{idx}/{total_files}] {file_info.file_name} - found in {relative_folder}")
             continue
         
         files_downloaded = True  # Mark that we're downloading something
