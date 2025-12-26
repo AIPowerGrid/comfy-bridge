@@ -159,9 +159,20 @@ def register_model(w3, contract, signer_account, model_data, dry_run=False):
         return True
     
     try:
+        # Ensure model_hash is properly formatted as bytes32 (32 bytes)
+        if model_hash.startswith('0x'):
+            model_hash_bytes = bytes.fromhex(model_hash[2:])
+        else:
+            model_hash_bytes = bytes.fromhex(model_hash)
+        
+        # Ensure exactly 32 bytes
+        if len(model_hash_bytes) != 32:
+            print(f"   Error: Model hash must be exactly 32 bytes, got {len(model_hash_bytes)}")
+            return False
+        
         # Build transaction
         tx = contract.functions.registerModel(
-            bytes.fromhex(model_hash[2:]),  # Remove 0x prefix
+            model_hash_bytes,  # bytes32 as bytes
             model_data['model_type'],
             model_data['file_name'],
             model_data['display_name'],
