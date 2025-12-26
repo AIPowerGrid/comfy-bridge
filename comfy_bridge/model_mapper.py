@@ -453,10 +453,14 @@ class ModelMapper:
                             blockchain_models.append(model_info.file_name)
                 
                 if blockchain_models:
-                    # Use blockchain names
-                    for grid_model_name in blockchain_models:
-                        self.workflow_map[grid_model_name] = workflow_id
-                        logger.info(f"Mapped blockchain model '{grid_model_name}' -> workflow '{workflow_id}'")
+                    # Use blockchain display names only (not filenames)
+                    # Only add display names to avoid advertising .safetensors filenames
+                    for model_name, model_info in self.chain_models.items():
+                        derived_workflow = self._derive_workflow_from_chain_model(model_info)
+                        if derived_workflow == workflow_id:
+                            # Only add the display_name, not file_name
+                            self.workflow_map[model_info.display_name] = workflow_id
+                            logger.info(f"Mapped blockchain model '{model_info.display_name}' -> workflow '{workflow_id}'")
                 else:
                     # No blockchain model found for this workflow
                     # Use the workflow filename as the model name (without .json)
