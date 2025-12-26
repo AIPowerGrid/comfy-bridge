@@ -132,6 +132,10 @@ RUN if [ -n "$GRID_MODEL" ] || [ -n "$WORKFLOW_FILE" ]; then \
         echo "  Downloading models during image build..." && \
         echo "================================================" && \
         cd /app/comfy-bridge && \
+        export HUGGING_FACE_API_KEY="$HUGGING_FACE_API_KEY" && \
+        export CIVITAI_API_KEY="$CIVITAI_API_KEY" && \
+        export MODELVAULT_CONTRACT="$MODELVAULT_CONTRACT" && \
+        export MODELVAULT_RPC="$MODELVAULT_RPC" && \
         python3 -c "import os, sys; \
 from download_models_from_chain import download_models_from_chain; \
 parse_model_env = lambda raw: [t.strip() for t in (raw.split(',') if ',' in raw else raw.split()) if t.strip()] if raw else []; \

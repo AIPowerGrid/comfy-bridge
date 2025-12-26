@@ -31,8 +31,10 @@ def emit_progress(progress: float, speed: str = "", eta: str = "", message: str 
     global _last_progress_time
     
     # Always emit errors, warnings, and important messages
-    is_important = msg_type in ("error", "warning") or "ERROR" in message.upper() or "WARN" in message.upper()
-    is_completion = progress >= 100 or "SUCCESS" in message.upper() or "COMPLETE" in message.upper()
+    # Ensure message is a string before calling .upper()
+    message_str = str(message) if message is not None else ""
+    is_important = msg_type in ("error", "warning") or "ERROR" in message_str.upper() or "WARN" in message_str.upper()
+    is_completion = progress >= 100 or "SUCCESS" in message_str.upper() or "COMPLETE" in message_str.upper()
     
     # Throttle regular progress updates
     if not is_important and not is_completion:
@@ -250,6 +252,10 @@ def download_dependency(dep_info: Dict[str, str], models_path: str) -> bool:
 
 def normalize_model_folder(file_type: str) -> str:
     """Normalize file type to ComfyUI folder name."""
+    # Ensure file_type is a string
+    if not isinstance(file_type, str):
+        file_type = str(file_type) if file_type is not None else 'checkpoints'
+    
     n = file_type.strip().lower()
     if n in ('ckpt', 'checkpoint', 'checkpoints'):
         return 'checkpoints'
@@ -404,7 +410,9 @@ def download_file(
                 for chunk in iter(lambda: f.read(32 * 1024 * 1024), b''):
                     sha256.update(chunk)
             actual_hash = sha256.hexdigest().upper()
-            if actual_hash != expected_hash.upper():
+            # Ensure expected_hash is a string before calling .upper()
+            expected_hash_str = str(expected_hash) if expected_hash is not None else ""
+            if actual_hash != expected_hash_str.upper():
                 print(f"[ERROR] Hash mismatch! Expected: {expected_hash}, Got: {actual_hash}", flush=True)
                 filepath.unlink(missing_ok=True)
                 return False, "Hash verification failed"
