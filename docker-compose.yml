@@ -23,7 +23,7 @@ services:
           - COMFY_BRIDGE_PATH=/app/comfy-bridge
           - MODELS_PATH=/app/ComfyUI/models
           - ENV_FILE_PATH=/app/comfy-bridge/.env
-          - GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH=/app/grid-image-model-reference
+          # GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH removed - blockchain is source of truth
           - MODELVAULT_CONTRACT=${MODELVAULT_CONTRACT:-0x79F39f2a0eA476f53994812e6a8f3C8CFe08c609}
           - MODELVAULT_RPC=${MODELVAULT_RPC:-https://mainnet.base.org}
           - CIVITAI_API_KEY=${CIVITAI_API_KEY:-}
@@ -129,8 +129,7 @@ services:
       - ./workflows:/app/comfy-bridge/workflows:ro
       # Config file (optional)
       - ./.env:/app/comfy-bridge/.env:ro
-      # Grid image model reference repository
-      - ../grid-image-model-reference:/app/grid-image-model-reference:ro
+      # Grid image model reference repository removed - blockchain is source of truth
       # Mount local Python code for development (allows hot-reload of code changes)
       - ./comfy_bridge:/app/comfy-bridge/comfy_bridge:ro
       - ./download_models_from_chain.py:/app/comfy-bridge/download_models_from_chain.py:ro

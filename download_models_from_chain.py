@@ -976,12 +976,29 @@ def main():
     if not model_names:
         # Try from environment
         workflow_env = os.environ.get('WORKFLOW_FILE', '')
+        grid_models_env = os.environ.get('GRID_MODELS', '')  # Fixed: was GRID_MODEL
+        
+        # Parse workflow files to get actual model names
+        workflow_models = []
         if workflow_env:
-            model_names = [m.strip() for m in workflow_env.split(',') if m.strip()]
-        else:
-            grid_env = os.environ.get('GRID_MODEL', '')
-            if grid_env:
-                model_names = [m.strip() for m in grid_env.split(',') if m.strip()]
+            for entry in workflow_env.split(','):
+                entry = entry.strip()
+                # Remove .json extension if present  
+                if entry.endswith('.json'):
+                    entry = entry[:-5]
+                if entry:
+                    workflow_models.append(entry)
+        
+        # Parse grid models
+        grid_models = []
+        if grid_models_env:
+            for entry in grid_models_env.split(','):
+                entry = entry.strip()
+                if entry:
+                    grid_models.append(entry)
+        
+        # Use workflow models or grid models
+        model_names = workflow_models or grid_models
     
     if not model_names:
         print("No models specified. Use --models or set WORKFLOW_FILE/GRID_MODEL env var")

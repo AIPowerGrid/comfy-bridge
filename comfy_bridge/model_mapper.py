@@ -132,57 +132,10 @@ class ModelMapper:
     Workflow mappings are derived from on-chain model data.
     """
     
-    # Fallback workflow mappings for models not yet on-chain or for legacy support
-    # Map BOTH the Grid API model names (lowercase) AND stable_diffusion.json names
-    FALLBACK_WORKFLOW_MAP = {
-        # Video Generation Models - map all variants to workflow files
-        # Grid API uses lowercase underscore names for job requests
-        "wan2_2_t2v_14b": "wan2.2-t2v-a14b",       # Grid API name
-        "wan2.2-t2v-a14b": "wan2.2-t2v-a14b",      # stable_diffusion.json name
-        "wan2_2_t2v_14b_hq": "wan2.2-t2v-a14b-hq", # Grid API name
-        "wan2.2-t2v-a14b-hq": "wan2.2-t2v-a14b-hq",# stable_diffusion.json name
-        "wan2_2_t2v_14b_best": "wan2.2-t2v-a14b-best",
-        "wan2.2-t2v-a14b-best": "wan2.2-t2v-a14b-best",
-        "wan2_2_ti2v_5b": "wan2.2_ti2v_5B",        # Grid API name (lowercase b!)
-        "wan2.2_ti2v_5B": "wan2.2_ti2v_5B",        # stable_diffusion.json name (uppercase B)
-        "wan2.2_ti2v_5b": "wan2.2_ti2v_5B",        # lowercase variant
-        "ltxv": "ltxv",
-        
-        # Flux Dev (all naming variants)
-        "FLUX.1-dev": "flux1.dev",
-        "flux.1-dev": "flux1.dev",
-        "flux1-dev": "flux1.dev",
-        "flux1_dev": "flux1.dev",
-        "flux1.dev": "flux1.dev",
-        
-        # Flux Krea variants - workflow file is flux.1-krea-dev.json
-        "flux.1-krea-dev": "flux.1-krea-dev",
-        "FLUX.1-krea-dev": "flux.1-krea-dev",
-        "flux1-krea-dev": "flux.1-krea-dev",
-        "flux1_krea_dev": "flux.1-krea-dev",
-        "krea": "flux.1-krea-dev",
-        
-        # Flux Kontext variants - workflow file is FLUX.1-dev-Kontext-fp8-scaled.json
-        "flux1-krea-dev_fp8_scaled": "FLUX.1-dev-Kontext-fp8-scaled",
-        "FLUX.1-dev-Kontext-fp8-scaled": "FLUX.1-dev-Kontext-fp8-scaled",
-        "flux.1-dev-kontext-fp8-scaled": "FLUX.1-dev-Kontext-fp8-scaled",
-        "flux1-dev-kontext-fp8-scaled": "FLUX.1-dev-Kontext-fp8-scaled",
-        "flux1_dev_kontext_fp8_scaled": "FLUX.1-dev-Kontext-fp8-scaled",
-        "flux_kontext_dev_basic": "FLUX.1-dev-Kontext-fp8-scaled",
-        "flux1-kontext-dev": "FLUX.1-dev-Kontext-fp8-scaled",
-        "flux1_kontext_dev": "FLUX.1-dev-Kontext-fp8-scaled",
-        
-        # Other image models - workflow file is Chroma_final.json
-        "Chroma": "Chroma_final",
-        "chroma_final": "Chroma_final",
-        "chroma": "Chroma_final",
-        # SDXL - workflow file is sdxl1.json
-        "SDXL 1.0": "sdxl1",
-        "SDXL": "sdxl1",
-        "sdxl": "sdxl1",
-        "sdxl1": "sdxl1",
-        "turbovision": "turbovision",
-    }
+    # DEPRECATED: These mappings are only kept for backward compatibility
+    # The blockchain (ModelVault) is now the source of truth for model names
+    # Only use these if a model is not registered on-chain
+    FALLBACK_WORKFLOW_MAP = {}
     
     # Keep DEFAULT_WORKFLOW_MAP as alias for backwards compatibility
     DEFAULT_WORKFLOW_MAP = FALLBACK_WORKFLOW_MAP
@@ -231,8 +184,8 @@ class ModelMapper:
         """
         Build mapping from Grid models to ComfyUI workflows.
         
-        Primary source: blockchain model registry
-        Fallback: FALLBACK_WORKFLOW_MAP for models not yet on-chain
+        Primary source: blockchain model registry (ModelVault)
+        Secondary: Local workflow files that match blockchain model names
         """
         self.workflow_map = {}
         from .config import Settings
@@ -242,78 +195,102 @@ class ModelMapper:
             """Check if workflow file exists (handles dash/underscore/case variations)."""
             return find_workflow_file(Settings.WORKFLOW_DIR, workflow_file) is not None
         
-        # 1. Build workflow mappings from blockchain models (primary source)
+        # Build workflow mappings from blockchain models (source of truth)
+        mapped_count = 0
         for model_name, model_info in self.chain_models.items():
             # Derive workflow from model's display_name or architecture
             workflow_id = self._derive_workflow_from_chain_model(model_info)
             if workflow_id and check_workflow_exists(workflow_id):
+                # Use the blockchain's authoritative names
                 self.workflow_map[model_info.display_name] = workflow_id
-                # Also add common variants
-                if model_info.file_name:
+                mapped_count += 1
+                
+                # Also map file_name if different
+                if model_info.file_name and model_info.file_name != model_info.display_name:
                     self.workflow_map[model_info.file_name] = workflow_id
+                
+                # Map model ID for compatibility
                 model_id = model_info.get_model_id()
-                if model_id:
+                if model_id and model_id != model_info.display_name:
                     self.workflow_map[model_id] = workflow_id
-                logger.debug(f"Chain model {model_info.display_name} -> workflow {workflow_id}")
+                    
+                logger.debug(f"Blockchain model '{model_info.display_name}' -> workflow '{workflow_id}'")
+            else:
+                logger.debug(f"No workflow for blockchain model '{model_info.display_name}' (workflow: {workflow_id}, exists: {workflow_id and check_workflow_exists(workflow_id)})")
         
-        # 2. Add fallback mappings for models not yet on-chain
-        for model, workflow_file in self.FALLBACK_WORKFLOW_MAP.items():
-            if model not in self.workflow_map and check_workflow_exists(workflow_file):
-                self.workflow_map[model] = workflow_file
-                logger.debug(f"Fallback mapping {model} -> workflow {workflow_file}")
-            elif model not in self.workflow_map:
-                logger.warning(f"Missing workflow file for fallback model: {model}")
-        
-        logger.info(f"Built workflow map: {len(self.workflow_map)} mappings ({len(self.chain_models)} from chain)")
+        logger.info(f"Built workflow map: {len(self.workflow_map)} mappings from {len(self.chain_models)} blockchain models")
+        logger.info(f"Successfully mapped {mapped_count} blockchain models to workflows")
 
     def _derive_workflow_from_chain_model(self, model_info: OnChainModelInfo) -> Optional[str]:
         """
         Derive the workflow filename from on-chain model data.
         
         Uses model type, architecture, and display_name to determine workflow.
+        This is the primary source of truth for model->workflow mapping.
         """
         display_name = model_info.display_name
         model_type = model_info.model_type
         architecture = model_info.architecture.lower() if model_info.architecture else ""
+        file_name = model_info.file_name or ""
         
-        # Check if there's a direct mapping in fallbacks first (for known models)
-        for fallback_name, workflow in self.FALLBACK_WORKFLOW_MAP.items():
-            if fallback_name.lower() == display_name.lower():
-                return workflow
+        # For blockchain models, try to find a matching workflow file
+        # Check various naming patterns
+        name_lower = display_name.lower()
+        file_lower = file_name.lower()
         
-        # Derive based on model type
-        if model_type == ModelType.VIDEO:
-            # Video models - check for WAN variants
-            if "wan" in display_name.lower():
-                if "ti2v" in display_name.lower() or "i2v" in display_name.lower():
+        # Derive based on model type and name patterns
+        if model_type == ModelType.VIDEO_MODEL:
+            # Video models - check for specific patterns
+            if "wan" in name_lower or "wan" in file_lower:
+                if "ti2v" in name_lower or "ti2v" in file_lower or "i2v" in name_lower:
                     return "wan2.2_ti2v_5B"
-                elif "hq" in display_name.lower():
+                elif "hq" in name_lower or "hq" in file_lower:
                     return "wan2.2-t2v-a14b-hq"
-                else:
+                elif "14b" in name_lower or "a14b" in name_lower:
                     return "wan2.2-t2v-a14b"
-            elif "ltxv" in display_name.lower():
+                else:
+                    return "wan2.2-t2v-a14b"  # Default WAN workflow
+            elif "ltxv" in name_lower or "ltxv" in file_lower:
                 return "ltxv"
         
-        elif model_type == ModelType.FLUX:
+        elif model_type == ModelType.IMAGE_MODEL and ("flux" in name_lower or "flux" in file_lower):
             # FLUX models
-            if "kontext" in display_name.lower():
-                return "flux_kontext_dev_basic"
-            elif "krea" in display_name.lower():
-                return "flux1_krea_dev"
-            elif "chroma" in display_name.lower():
+            if "kontext" in name_lower or "kontext" in file_lower:
+                return "FLUX.1-dev-Kontext-fp8-scaled"
+            elif "krea" in name_lower or "krea" in file_lower:
+                return "flux.1-krea-dev"
+            elif "chroma" in name_lower or "chroma" in file_lower:
                 return "Chroma_final"
             else:
+                # Default FLUX workflow
                 return "flux1.dev"
         
-        elif model_type == ModelType.SDXL:
-            return "sdxl"
+        elif model_type == ModelType.IMAGE_MODEL and ("sdxl" in name_lower or "xl" in name_lower):
+            return "sdxl1"
         
-        elif model_type == ModelType.SD15:
-            return None  # SD1.5 models not supported - don't default
+        elif model_type == ModelType.IMAGE_MODEL and ("sd1" in name_lower or "stable_diffusion_1" in name_lower):
+            return None  # SD1.5 models not supported
         
-        # Default: try to match display_name directly to workflow file
-        normalized = display_name.replace(" ", "_").replace(".", "_").replace("-", "_")
-        return normalized
+        # Try to find a workflow file that matches the model name
+        # Check if a workflow exists with similar name
+        potential_workflows = [
+            display_name,
+            display_name.replace(" ", "_"),
+            display_name.replace(" ", "-"),
+            display_name.replace(".", "_"),
+            display_name.replace(".", "-"),
+            file_name,
+            file_name.replace(".safetensors", ""),
+            file_name.replace(".ckpt", ""),
+        ]
+        
+        for potential in potential_workflows:
+            if potential and find_workflow_file(Settings.WORKFLOW_DIR, potential):
+                return potential
+        
+        # No matching workflow found
+        logger.debug(f"No workflow found for blockchain model '{display_name}' (type: {model_type})")
+        return None
 
     def _iter_env_workflow_files(self) -> List[tuple[str, str]]:
         """Resolve workflow filenames from env settings.
@@ -329,17 +306,17 @@ class ModelMapper:
         ]
         resolved_paths: List[tuple[str, str]] = []
         for model_name in workflow_filenames:
-            # First check if model is registered on chain
+            # Check if model is registered on chain (blockchain is single source)
             chain_model = self.chain_models.get(model_name)
             if chain_model:
                 mapped_workflow = self._derive_workflow_from_chain_model(chain_model)
                 if Settings.DEBUG:
                     logger.debug(f"WORKFLOW_FILE entry '{model_name}' mapped from chain to '{mapped_workflow}'")
             else:
-                # Fallback to static mapping
-                mapped_workflow = self.FALLBACK_WORKFLOW_MAP.get(model_name, model_name)
+                # No fallback - model must be registered on chain
+                mapped_workflow = model_name
                 if Settings.DEBUG:
-                    logger.debug(f"WORKFLOW_FILE entry '{model_name}' mapped from fallback to '{mapped_workflow}'")
+                    logger.debug(f"WORKFLOW_FILE entry '{model_name}' not on chain, using as-is: '{mapped_workflow}'")
             
             if not mapped_workflow:
                 mapped_workflow = model_name
@@ -442,64 +419,16 @@ class ModelMapper:
         
         return None
 
-    # Reverse mapping: workflow filename -> Grid model name
-    # These MUST match names that exist in stable_diffusion.json
-    # Check: https://raw.githubusercontent.com/AIPowerGrid/grid-image-model-reference/main/stable_diffusion.json
-    WORKFLOW_TO_GRID_MODEL = {
-        # Video Generation Models - EXACT names from stable_diffusion.json
-        "wan2.2-t2v-a14b": "wan2.2-t2v-a14b",       # Use hyphen version (canonical)
-        "wan2.2-t2v-a14b-hq": "wan2.2-t2v-a14b-hq", # Use hyphen version (canonical)
-        "wan2.2-t2v-a14b-best": "wan2.2-t2v-a14b-best",
-        "wan2.2_ti2v_5B": "wan2.2_ti2v_5B",         # Both variants exist
-        "wan2.2-ti2v-5B": "wan2.2_ti2v_5B",         # Map hyphen to underscore variant
-        "ltxv": "ltxv",
-        
-        # Flux Dev - ONLY use FLUX.1-dev (with dot), NOT flux1.dev
-        "flux1.dev": "FLUX.1-dev",
-        "FLUX.1-dev": "FLUX.1-dev",
-        "flux1-dev": "FLUX.1-dev",
-        
-        # Flux Krea - use exact stable_diffusion.json name
-        "flux.1-krea-dev": "flux.1-krea-dev",
-        "krea": "flux.1-krea-dev",
-        
-        # Flux Kontext - use exact stable_diffusion.json name
-        "FLUX.1-dev-Kontext-fp8-scaled": "FLUX.1-dev-Kontext-fp8-scaled",
-        
-        # Other image models
-        "Chroma_final": "Chroma",
-        "Chroma": "Chroma",
-        "sdxl1": "SDXL 1.0",
-        "SDXL": "SDXL 1.0",
-    }
-
-    # Map workflow IDs to Grid model names that MUST exist in stable_diffusion.json
-    # These are the ONLY names the API will accept - check:
-    # https://raw.githubusercontent.com/AIPowerGrid/grid-image-model-reference/main/stable_diffusion.json
-    WORKFLOW_TO_ALL_GRID_NAMES = {
-        # WAN Video models - use EXACT names from stable_diffusion.json
-        "wan2.2_ti2v_5B": ["wan2.2_ti2v_5B", "wan2_2_ti2v_5b"],  # Both are in stable_diffusion.json
-        "wan2.2-t2v-a14b": ["wan2.2-t2v-a14b"],     # Only hyphen version exists in stable_diffusion.json
-        "wan2.2-t2v-a14b-hq": ["wan2.2-t2v-a14b-hq"],  # Only hyphen version exists
-        
-        # FLUX models - use EXACT names from stable_diffusion.json
-        "flux.1-krea-dev": ["flux.1-krea-dev"],
-        "FLUX.1-dev-Kontext-fp8-scaled": ["FLUX.1-dev-Kontext-fp8-scaled"],
-        "flux1.dev": ["FLUX.1-dev"],               # Only FLUX.1-dev exists, NOT flux1.dev
-        "FLUX.1-dev": ["FLUX.1-dev"],              # Canonical name
-        
-        # Other models
-        "Chroma_final": ["Chroma"],
-        "sdxl1": ["SDXL 1.0"],
-        "ltxv": ["ltxv"],
-    }
+    # DEPRECATED: These mappings should not be used anymore
+    # The blockchain is the source of truth for model names
+    WORKFLOW_TO_GRID_MODEL = {}
+    WORKFLOW_TO_ALL_GRID_NAMES = {}
 
     def _build_workflow_map_from_env(self):
         """Build workflow map based on env-specified workflows.
         
-        Use explicit mapping for known workflow files to avoid model name resolution issues.
-        Validates that required models are installed before advertising workflows.
-        Advertises ALL naming variants for models to catch jobs from any source.
+        Uses blockchain data as primary source for model names.
+        Falls back to local mappings only for models not on chain.
         """
         self.workflow_map = {}
         env_workflows = self._iter_env_workflow_files()
@@ -512,35 +441,37 @@ class ModelMapper:
             if filename.endswith('.json'):
                 workflow_id = filename[:-5]  # Remove .json extension
                 
-                # Check if this workflow has multiple Grid name variants
-                all_names = self.WORKFLOW_TO_ALL_GRID_NAMES.get(workflow_id)
-                if all_names:
-                    # Register ALL name variants for this workflow
-                    for grid_model_name in all_names:
+                # First check blockchain for models that use this workflow
+                blockchain_models = []
+                for model_name, model_info in self.chain_models.items():
+                    derived_workflow = self._derive_workflow_from_chain_model(model_info)
+                    if derived_workflow == workflow_id:
+                        # Use the blockchain's display_name as the authoritative name
+                        blockchain_models.append(model_info.display_name)
+                        # Also add common variants from blockchain
+                        if model_info.file_name and model_info.file_name != model_info.display_name:
+                            blockchain_models.append(model_info.file_name)
+                
+                if blockchain_models:
+                    # Use blockchain names
+                    for grid_model_name in blockchain_models:
                         self.workflow_map[grid_model_name] = workflow_id
-                        logger.info(f"Mapped Grid model '{grid_model_name}' -> workflow '{workflow_id}'")
+                        logger.info(f"Mapped blockchain model '{grid_model_name}' -> workflow '{workflow_id}'")
                 else:
-                    # Single name from WORKFLOW_TO_GRID_MODEL or use workflow_id
-                    grid_model_name = self.WORKFLOW_TO_GRID_MODEL.get(workflow_id, workflow_id)
-                    
-                    # Also check if raw entry maps to a grid model name
-                    if raw_entry.endswith('.json'):
-                        raw_workflow = raw_entry[:-5]
-                    else:
-                        raw_workflow = raw_entry
-                    grid_from_raw = self.WORKFLOW_TO_GRID_MODEL.get(raw_workflow)
-                    if grid_from_raw:
-                        grid_model_name = grid_from_raw
-                    
-                    self.workflow_map[grid_model_name] = workflow_id
-                    logger.info(f"Mapped Grid model '{grid_model_name}' -> workflow '{workflow_id}'")
+                    # No blockchain model found for this workflow
+                    # Use the workflow filename as the model name (without .json)
+                    # This allows workflows to be used even if not yet on blockchain
+                    logger.warning(f"No blockchain model found for workflow '{workflow_id}'")
+                    logger.warning(f"Using workflow name as model name: '{workflow_id}'")
+                    self.workflow_map[workflow_id] = workflow_id
             else:
                 logger.warning(f"Skipping non-JSON file: {filename}")
         
         logger.info(f"🗺️ FINAL WORKFLOW MAP from env: {len(self.workflow_map)} model(s)")
-        logger.info(f"   These are the EXACT model names we will advertise to the Grid API:")
+        logger.info(f"   These are the model names we will advertise to the Grid API:")
         for model, workflow in self.workflow_map.items():
-            logger.info(f"   📍 '{model}' -> workflow '{workflow}.json'")
+            source = "blockchain" if any(model == m.display_name or model == m.file_name for m in self.chain_models.values()) else "fallback"
+            logger.info(f"   📍 [{source}] '{model}' -> workflow '{workflow}.json'")
 
     def _has_local_flux_assets(self) -> bool:
         """Fallback detection for Flux assets on disk when ComfyUI doesn't list them."""
@@ -735,15 +666,49 @@ class ModelMapper:
         return None
 
     def get_available_horde_models(self) -> List[str]:
-        """Get list of available models (only installed models with workflows).
+        """Get list of available models (only blockchain-registered models with workflows).
         
-        Only returns models that have configured workflows - not all models
-        from the blockchain. This ensures we only advertise what we can serve.
+        Returns models that are:
+        1. Registered on the blockchain (source of truth)
+        2. Have corresponding workflow files installed
+        
+        This ensures we only advertise models that are officially registered.
         """
-        # Only return models that have workflow mappings (i.e., are installed)
-        models = list(self.workflow_map.keys())
-        logger.debug(f"get_available_horde_models() returning: {models}")
-        return models
+        # Return unique model names from workflow map
+        # These are already filtered to only blockchain models with workflows
+        models = list(set(self.workflow_map.keys()))
+        
+        # Filter to prefer display_name from blockchain when available
+        blockchain_names = {m.display_name for m in self.chain_models.values()}
+        prioritized = []
+        seen = set()
+        
+        # First add blockchain display names
+        for model in models:
+            if model in blockchain_names and model not in seen:
+                prioritized.append(model)
+                seen.add(model)
+        
+        # Then add any remaining (file names, variants)
+        for model in models:
+            if model not in seen:
+                # Check if this is a variant of an already added model
+                is_variant = False
+                for chain_model in self.chain_models.values():
+                    if model in [chain_model.file_name, chain_model.get_model_id()]:
+                        # This is a variant of a blockchain model
+                        if chain_model.display_name not in seen:
+                            prioritized.append(model)
+                            seen.add(model)
+                        is_variant = True
+                        break
+                
+                if not is_variant:
+                    # Not a blockchain model variant - skip it
+                    logger.debug(f"Skipping non-blockchain model: {model}")
+        
+        logger.debug(f"get_available_horde_models() returning {len(prioritized)} blockchain models")
+        return prioritized
 
     def is_model_on_chain(self, model_name: str) -> bool:
         """Check if a model is registered on the blockchain."""

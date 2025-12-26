@@ -377,7 +377,7 @@ class APIClient:
             )
             response.raise_for_status()
             data = response.json()
-            logger.debug(f"Models status response: status={response.status_code}, type={type(data).__name__}, len={len(data) if hasattr(data, '__len__') else 'N/A'}")
+            logger.debug(f"Models status response: status={response.status_code}, type={type(data).__name__}, len={len(data) if hasattr(data, '__len__') else 'N/A'}, data={data}")
             return data
         except httpx.HTTPStatusError as exc:
             logger.error(
