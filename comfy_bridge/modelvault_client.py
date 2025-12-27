@@ -5,6 +5,7 @@ Queries the ModelVault contract on Base Mainnet for model discovery, validation,
 """
 
 import logging
+import time
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass, field
 from enum import IntEnum
@@ -16,6 +17,14 @@ import os
 MODELVAULT_CONTRACT_ADDRESS = os.getenv("MODELVAULT_CONTRACT", "0x79F39f2a0eA476f53994812e6a8f3C8CFe08c609")
 MODELVAULT_RPC_URL = os.getenv("MODELVAULT_RPC_URL", "https://mainnet.base.org")
 MODELVAULT_CHAIN_ID = 8453
+
+# Alternative Base Mainnet RPC endpoints for fallback
+BASE_RPC_ENDPOINTS = [
+    "https://mainnet.base.org",  # Primary public endpoint
+    "https://base.llamarpc.com",  # Alternative public endpoint
+    "https://base.blockpi.network/v1/rpc/public",  # BlockPi public endpoint
+    "https://base.gateway.tenderly.co",  # Tenderly public endpoint
+]
 
 # Alias map: user-friendly names -> blockchain-registered names
 # This allows users to request models using familiar naming conventions
@@ -278,6 +287,8 @@ class ModelVaultClient:
         self.rpc_url = rpc_url
         self.contract_address = contract_address
         self.enabled = enabled
+        self.rpc_endpoints = BASE_RPC_ENDPOINTS.copy()  # List of endpoints to try
+        self.current_rpc_index = 0  # Track which endpoint we're using
         self._web3 = None
         self._contract = None
         # Cache for model data (refreshed on demand)
@@ -286,28 +297,155 @@ class ModelVaultClient:
         self._is_v2_contract = False  # Detect if contract has V2 features
 
         if enabled:
-            self._init_web3()
+            self._init_web3_with_fallback()
 
-    def _init_web3(self):
-        """Initialize web3 connection lazily."""
+    def _retry_with_backoff(self, func, max_retries=3, initial_wait=1.0):
+        """
+        Retry a function with exponential backoff for rate limiting errors.
+        Can also switch to a different RPC endpoint if persistently rate limited.
+        
+        Args:
+            func: The function to call
+            max_retries: Maximum number of retries
+            initial_wait: Initial wait time in seconds
+        
+        Returns:
+            The result of the function call
+        """
+        wait_time = initial_wait
+        last_error = None
+        consecutive_429s = 0
+        
+        for attempt in range(max_retries + 1):
+            try:
+                result = func()
+                consecutive_429s = 0  # Reset on success
+                return result
+            except Exception as e:
+                error_msg = str(e)
+                last_error = e
+                
+                # Check if it's a rate limiting error (429)
+                if "429" in error_msg or "Too Many Requests" in error_msg:
+                    consecutive_429s += 1
+                    
+                    # If we've had multiple 429s, try switching RPC endpoint
+                    if consecutive_429s >= 2 and len(self.rpc_endpoints) > 1:
+                        self._switch_rpc_endpoint()
+                        consecutive_429s = 0
+                        continue
+                    
+                    if attempt < max_retries:
+                        logger.debug(f"Rate limited, waiting {wait_time:.1f}s before retry {attempt + 1}/{max_retries}")
+                        time.sleep(wait_time)
+                        wait_time = min(wait_time * 2, 30)  # Cap at 30 seconds
+                        continue
+                    else:
+                        logger.error(f"Max retries reached. RPC endpoint still rate limiting after {max_retries} attempts")
+                        raise
+                else:
+                    # For non-rate-limiting errors, raise immediately
+                    raise
+        
+        # Should not reach here, but just in case
+        if last_error:
+            raise last_error
+    
+    def _switch_rpc_endpoint(self):
+        """Switch to the next available RPC endpoint."""
+        if not self.enabled or len(self.rpc_endpoints) <= 1:
+            return
+        
+        old_endpoint = self.rpc_url
+        self.current_rpc_index = (self.current_rpc_index + 1) % len(self.rpc_endpoints)
+        new_endpoint = self.rpc_endpoints[self.current_rpc_index]
+        
+        logger.info(f"Switching RPC endpoint from {old_endpoint} to {new_endpoint}")
+        
         try:
             from web3 import Web3
-
-            self._web3 = Web3(Web3.HTTPProvider(self.rpc_url))
+            from web3.providers import HTTPProvider
+            
+            provider = HTTPProvider(
+                new_endpoint,
+                request_kwargs={'timeout': 30}
+            )
+            
+            self._web3 = Web3(provider)
             self._contract = self._web3.eth.contract(
                 address=Web3.to_checksum_address(self.contract_address),
                 abi=MODEL_REGISTRY_ABI,
             )
-            logger.info(f"ModelVault client initialized (chain: Base Mainnet, contract: {self.contract_address[:10]}...)")
-            
-            # Try to detect if this is a V2 contract
-            self._detect_contract_version()
+            self.rpc_url = new_endpoint
+            logger.info(f"Successfully switched to {new_endpoint}")
+        except Exception as e:
+            logger.warning(f"Failed to switch to {new_endpoint}: {e}")
+            # Continue with the current endpoint even if switch failed
+
+    def _init_web3_with_fallback(self):
+        """Initialize web3 connection with fallback RPC endpoints."""
+        try:
+            from web3 import Web3
+            from web3.providers import HTTPProvider
         except ImportError:
             logger.warning("web3 package not installed. ModelVault validation disabled. Install with: pip install web3")
             self.enabled = False
-        except Exception as e:
-            logger.error(f"Failed to initialize ModelVault client: {e}")
-            self.enabled = False
+            return
+        
+        # Try each RPC endpoint until one works
+        for i, endpoint in enumerate(self.rpc_endpoints):
+            try:
+                logger.info(f"Attempting to connect to RPC endpoint: {endpoint}")
+                
+                # Configure provider with longer timeout
+                provider = HTTPProvider(
+                    endpoint,
+                    request_kwargs={'timeout': 30}  # 30 second timeout
+                )
+                
+                self._web3 = Web3(provider)
+                
+                # Test the connection
+                chain_id = self._web3.eth.chain_id
+                if chain_id != MODELVAULT_CHAIN_ID:
+                    logger.warning(f"Wrong chain ID {chain_id} from {endpoint}, expected {MODELVAULT_CHAIN_ID}")
+                    continue
+                
+                self._contract = self._web3.eth.contract(
+                    address=Web3.to_checksum_address(self.contract_address),
+                    abi=MODEL_REGISTRY_ABI,
+                )
+                
+                # Test contract call
+                _ = self._retry_with_backoff(
+                    lambda: self._contract.functions.getModelCount().call(),
+                    max_retries=2,
+                    initial_wait=0.5
+                )
+                
+                self.current_rpc_index = i
+                self.rpc_url = endpoint
+                logger.info(f"ModelVault client initialized with {endpoint} (contract: {self.contract_address[:10]}...)")
+                
+                # Try to detect if this is a V2 contract
+                self._detect_contract_version()
+                return
+                
+            except Exception as e:
+                error_msg = str(e)
+                if "429" in error_msg or "Too Many Requests" in error_msg:
+                    logger.warning(f"RPC endpoint {endpoint} is rate limiting, trying next...")
+                else:
+                    logger.warning(f"Failed to connect to {endpoint}: {type(e).__name__}: {e}")
+                continue
+        
+        # If all endpoints failed, disable the client
+        logger.error(f"All RPC endpoints failed. ModelVault validation disabled.")
+        self.enabled = False
+    
+    def _init_web3(self):
+        """Legacy method for compatibility - calls the new fallback version."""
+        self._init_web3_with_fallback()
 
     def _detect_contract_version(self):
         """Detect contract version. Grid proxy ModelVault is deployed at 0x79F39f2a0eA476f53994812e6a8f3C8CFe08c609"""
@@ -594,7 +732,12 @@ class ModelVaultClient:
             return 0
         
         try:
-            return self._contract.functions.getModelCount().call()
+            # Use retry logic for rate limiting
+            return self._retry_with_backoff(
+                lambda: self._contract.functions.getModelCount().call(),
+                max_retries=5,  # More retries for this critical call
+                initial_wait=2.0  # Start with 2 second wait
+            )
         except Exception as e:
             logger.error(f"Error fetching total models: {e}")
             return 0
@@ -631,7 +774,12 @@ class ModelVaultClient:
                 failed_count = 0
                 for model_id in range(1, total + 1):
                     try:
-                        result = self._contract.functions.getModel(model_id).call()
+                        # Use retry logic for individual model fetches
+                        result = self._retry_with_backoff(
+                            lambda mid=model_id: self._contract.functions.getModel(mid).call(),
+                            max_retries=3,
+                            initial_wait=0.5  # Shorter wait for individual fetches
+                        )
                         if result and len(result) > 0 and result[0] != b'\x00' * 32:
                             # Grid ModelVault struct: parse the result
                             # [0] modelHash, [1] modelType, [2] fileName, [3] name (displayName), [4] version,
