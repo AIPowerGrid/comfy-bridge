@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import * as fs from 'fs/promises';
 
+// Force dynamic rendering - depends on filesystem state
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     const envPath = process.env.ENV_FILE_PATH || '/app/comfy-bridge/.env';

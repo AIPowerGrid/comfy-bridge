@@ -4,6 +4,32 @@ import * as path from 'path';
 
 export const dynamic = 'force-dynamic';
 
+// Check if running in Docker or locally
+const isWindows = process.platform === 'win32';
+const isLocalDev = isWindows || !process.env.DOCKER_CONTAINER;
+
+// Get the correct paths based on platform
+function getModelsConfigPath() {
+  if (isWindows) {
+    return 'c:\\dev\\comfy-bridge\\model_configs.json';
+  }
+  return '/app/comfy-bridge/model_configs.json';
+}
+
+function getComfyUIModelsPath() {
+  if (isWindows) {
+    return process.env.MODELS_PATH || 'c:\\dev\\comfy-bridge\\persistent_volumes\\models';
+  }
+  return process.env.MODELS_PATH || '/app/ComfyUI/models';
+}
+
+function getEnvPath() {
+  if (isWindows) {
+    return process.env.ENV_FILE_PATH || 'c:\\dev\\comfy-bridge\\.env';
+  }
+  return process.env.ENV_FILE_PATH || '/app/comfy-bridge/.env';
+}
+
 interface ModelFile {
   path: string;
   file_name?: string;
@@ -176,7 +202,7 @@ function detectDownloadSource(model: ModelInfo): { source: 'huggingface' | 'civi
 
 async function getHostedModels(): Promise<Set<string>> {
   try {
-    const envFilePath = process.env.ENV_FILE_PATH || '/app/comfy-bridge/.env';
+    const envFilePath = getEnvPath();
     const envContent = await fs.readFile(envFilePath, 'utf-8');
     
     // Check WORKFLOW_FILE for hosted models and strip .json extension
@@ -264,15 +290,28 @@ export async function GET(request: Request) {
     const filter = searchParams.get('filter') || 'all';
     const sortField = searchParams.get('sortField') || 'name';
     const sortDirection = searchParams.get('sortDirection') || 'asc';
-    
-    const modelsFilePath = '/app/comfy-bridge/model_configs.json';
-    const comfyUIModelsPath = process.env.MODELS_PATH || '/app/ComfyUI/models';
 
-    // Check if catalog file exists, if not trigger a sync
+    const modelsFilePath = getModelsConfigPath();
+    const comfyUIModelsPath = getComfyUIModelsPath();
+
+    // Check if catalog file exists
     try {
       await fs.access(modelsFilePath);
     } catch (error) {
-      console.log('Catalog file not found, triggering sync...');
+      console.log('Catalog file not found at:', modelsFilePath);
+      
+      // On Windows, return error with helpful message
+      if (isWindows) {
+        return NextResponse.json({
+          error: 'model_configs.json not found',
+          message: `Please ensure ${modelsFilePath} exists`,
+          models: [],
+          total_count: 0,
+          installed_count: 0,
+        }, { status: 503 });
+      }
+      
+      // In Docker, try to sync
       try {
         const { exec } = await import('child_process');
         const { promisify } = await import('util');
@@ -414,12 +453,17 @@ export async function GET(request: Request) {
         filteredModels = filteredModels.filter(model => model.installed === true);
       } else if (filter === 'compatible') {
         try {
-          const gpuInfoResponse = await fetch('http://comfy-bridge:8001/gpu-info');
+          // Use localhost API on Windows, Docker hostname in container
+          const gpuInfoUrl = isWindows 
+            ? 'http://localhost:5000/api/gpu-info'
+            : 'http://comfy-bridge:8001/gpu-info';
+          const gpuInfoResponse = await fetch(gpuInfoUrl);
           const gpuInfo = await gpuInfoResponse.json();
           const maxVram = gpuInfo?.gpus?.[0]?.memory_gb || gpuInfo?.total_memory_gb || 0;
           filteredModels = filteredModels.filter(model => model.vram_required_gb <= maxVram);
         } catch (error) {
           console.error('Failed to get GPU info for compatibility filter:', error);
+          // On error, don't filter by VRAM - show all models
         }
       }
     }

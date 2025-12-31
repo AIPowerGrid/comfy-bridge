@@ -11,18 +11,20 @@ class TestSettings:
         """Test default configuration values."""
         # Clear environment variables to test defaults
         with patch.dict(os.environ, {}, clear=True):
-            # Reload the module to get fresh defaults
-            import importlib
-            import comfy_bridge.config
-            importlib.reload(comfy_bridge.config)
-            
-            assert comfy_bridge.config.Settings.GRID_API_KEY == ""
-            assert comfy_bridge.config.Settings.GRID_WORKER_NAME == "ComfyUI-Bridge-Worker"
-            assert comfy_bridge.config.Settings.COMFYUI_URL == "http://127.0.0.1:8000"
-            assert comfy_bridge.config.Settings.GRID_API_URL == "https://api.aipowergrid.io/api"
-            assert comfy_bridge.config.Settings.NSFW is False
-            assert comfy_bridge.config.Settings.THREADS == 1
-            assert comfy_bridge.config.Settings.MAX_PIXELS == 20971520
+            # Mock load_dotenv to prevent loading .env file
+            with patch('dotenv.load_dotenv'):
+                # Reload the module to get fresh defaults
+                import importlib
+                import comfy_bridge.config
+                importlib.reload(comfy_bridge.config)
+                
+                assert comfy_bridge.config.Settings.GRID_API_KEY == ""
+                assert comfy_bridge.config.Settings.GRID_WORKER_NAME == "ComfyUI-Bridge-Worker"
+                assert comfy_bridge.config.Settings.COMFYUI_URL == "http://127.0.0.1:8000"
+                assert comfy_bridge.config.Settings.GRID_API_URL == "https://api.aipowergrid.io/api"
+                assert comfy_bridge.config.Settings.NSFW is False
+                assert comfy_bridge.config.Settings.THREADS == 1
+                assert comfy_bridge.config.Settings.MAX_PIXELS == 20971520
 
     def test_environment_variable_loading(self):
         """Test loading configuration from environment variables."""
@@ -85,12 +87,14 @@ class TestSettings:
     def test_validate_missing_api_key(self):
         """Test validation with missing API key."""
         with patch.dict(os.environ, {}, clear=True):
-            import importlib
-            import comfy_bridge.config
-            importlib.reload(comfy_bridge.config)
-            
-            with pytest.raises(RuntimeError, match="GRID_API_KEY environment variable is required"):
-                comfy_bridge.config.Settings.validate()
+            # Mock load_dotenv to prevent loading .env file
+            with patch('dotenv.load_dotenv'):
+                import importlib
+                import comfy_bridge.config
+                importlib.reload(comfy_bridge.config)
+                
+                with pytest.raises(RuntimeError, match="GRID_API_KEY environment variable is required"):
+                    comfy_bridge.config.Settings.validate()
 
     def test_validate_with_api_key(self):
         """Test validation with API key present."""

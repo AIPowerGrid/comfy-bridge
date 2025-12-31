@@ -1,94 +1,5 @@
 {
-  "3": {
-    "inputs": {
-      "model": [
-        "22",
-        0
-      ],
-      "image_embeds": [
-        "55",
-        0
-      ],
-      "text_embeds": [
-        "46",
-        0
-      ],
-      "steps": 40,
-      "cfg": 7.5,
-      "shift": 12,
-      "seed": 987654321,
-      "scheduler": "unipc",
-      "force_offload": true,
-      "riflex_freq_index": 0,
-      "rope_function": "comfy"
-    },
-    "class_type": "WanVideoSampler",
-    "_meta": {
-      "title": "WanVideoSampler (HQ)"
-    }
-  },
-  "6": {
-    "inputs": {
-      "text": "hyper-detailed cinematic masterpiece, award-winning lighting, volumetric fog, intricate environment, 8k",
-      "clip": [
-        "38",
-        0
-      ]
-    },
-    "class_type": "CLIPTextEncode",
-    "_meta": {
-      "title": "CLIP Text Encode (Positive Prompt)"
-    }
-  },
-  "7": {
-    "inputs": {
-      "text": "low quality, blurry, artifacts, repeating frames, bad anatomy, noisy, flicker",
-      "clip": [
-        "38",
-        0
-      ]
-    },
-    "class_type": "CLIPTextEncode",
-    "_meta": {
-      "title": "CLIP Text Encode (Negative Prompt)"
-    }
-  },
-  "8": {
-    "inputs": {
-      "samples": [
-        "3",
-        0
-      ],
-      "vae": [
-        "39",
-        0
-      ],
-      "enable_vae_tiling": true,
-      "tile_x": 448,
-      "tile_y": 448,
-      "tile_stride_x": 224,
-      "tile_stride_y": 224,
-      "normalization": "default"
-    },
-    "class_type": "WanVideoDecode",
-    "_meta": {
-      "title": "WanVideoDecode"
-    }
-  },
-  "22": {
-    "inputs": {
-      "model": "wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors",
-      "base_precision": "bf16",
-      "load_device": "offload_device",
-      "quantization": "fp8_e4m3fn_scaled",
-      "attention_mode": "sdpa"
-    },
-    "class_type": "WanVideoModelLoader",
-    "_meta": {
-      "title": "WanVideoModelLoader"
-    }
-  },
-  "38": {
+  "90": {
     "inputs": {
       "clip_name": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
       "type": "wan",
@@ -99,48 +10,169 @@
       "title": "Load CLIP"
     }
   },
-  "39": {
+  "91": {
     "inputs": {
-      "model_name": "wan_2.1_vae.safetensors",
-      "precision": "bf16"
-    },
-    "class_type": "WanVideoVAELoader",
-    "_meta": {
-      "title": "Load Wan VAE"
-    }
-  },
-  "46": {
-    "inputs": {
-      "positive": [
-        "6",
-        0
-      ],
-      "negative": [
-        "7",
+      "text": "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走，裸露，NSFW",
+      "clip": [
+        "90",
         0
       ]
     },
-    "class_type": "WanVideoTextEmbedBridge",
+    "class_type": "CLIPTextEncode",
     "_meta": {
-      "title": "WanVideoTextEmbedBridge"
+      "title": "CLIP Text Encode (Negative Prompt)"
     }
   },
-  "55": {
+  "92": {
     "inputs": {
-      "width": 1536,
-      "height": 864,
-      "num_frames": 97
+      "vae_name": "wan_2.1_vae.safetensors"
     },
-    "class_type": "WanVideoEmptyEmbeds",
+    "class_type": "VAELoader",
     "_meta": {
-      "title": "WanVideoEmptyEmbeds"
+      "title": "Load VAE"
     }
   },
-  "57": {
+  "93": {
     "inputs": {
-      "fps": 18,
+      "shift": 8.000000000000002,
+      "model": [
+        "101",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingSD3",
+    "_meta": {
+      "title": "ModelSamplingSD3"
+    }
+  },
+  "94": {
+    "inputs": {
+      "shift": 8,
+      "model": [
+        "102",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingSD3",
+    "_meta": {
+      "title": "ModelSamplingSD3"
+    }
+  },
+  "95": {
+    "inputs": {
+      "add_noise": "disable",
+      "noise_seed": 0,
+      "steps": 20,
+      "cfg": 3.5,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "start_at_step": 10,
+      "end_at_step": 10000,
+      "return_with_leftover_noise": "disable",
+      "model": [
+        "94",
+        0
+      ],
+      "positive": [
+        "99",
+        0
+      ],
+      "negative": [
+        "91",
+        0
+      ],
+      "latent_image": [
+        "96",
+        0
+      ]
+    },
+    "class_type": "KSamplerAdvanced",
+    "_meta": {
+      "title": "KSampler (Advanced)"
+    }
+  },
+  "96": {
+    "inputs": {
+      "add_noise": "enable",
+      "noise_seed": 864031777124281,
+      "steps": 20,
+      "cfg": 3.5,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "start_at_step": 0,
+      "end_at_step": 10,
+      "return_with_leftover_noise": "enable",
+      "model": [
+        "93",
+        0
+      ],
+      "positive": [
+        "99",
+        0
+      ],
+      "negative": [
+        "91",
+        0
+      ],
+      "latent_image": [
+        "104",
+        0
+      ]
+    },
+    "class_type": "KSamplerAdvanced",
+    "_meta": {
+      "title": "KSampler (Advanced)"
+    }
+  },
+  "97": {
+    "inputs": {
+      "samples": [
+        "95",
+        0
+      ],
+      "vae": [
+        "92",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "98": {
+    "inputs": {
+      "filename_prefix": "video/ComfyUI",
+      "format": "auto",
+      "codec": "auto",
+      "video": [
+        "100",
+        0
+      ]
+    },
+    "class_type": "SaveVideo",
+    "_meta": {
+      "title": "Save Video"
+    }
+  },
+  "99": {
+    "inputs": {
+      "text": "Beautiful young European woman with honey blonde hair gracefully turning her head back over shoulder, gentle smile, bright eyes looking at camera. Hair flowing in slow motion as she turns. Soft natural lighting, clean background, cinematic portrait.",
+      "clip": [
+        "90",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Positive Prompt)"
+    }
+  },
+  "100": {
+    "inputs": {
+      "fps": 16,
       "images": [
-        "8",
+        "97",
         0
       ]
     },
@@ -149,20 +181,36 @@
       "title": "Create Video"
     }
   },
-  "58": {
+  "101": {
     "inputs": {
-      "filename_prefix": "video/ComfyUI",
-      "format": "auto",
-      "codec": "auto",
-      "video": [
-        "57",
-        0
-      ]
+      "unet_name": "wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors",
+      "weight_dtype": "default"
     },
-    "class_type": "SaveVideo",
+    "class_type": "UNETLoader",
     "_meta": {
-      "title": "Save Video"
+      "title": "Load Diffusion Model"
+    }
+  },
+  "102": {
+    "inputs": {
+      "unet_name": "wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "Load Diffusion Model"
+    }
+  },
+  "104": {
+    "inputs": {
+      "width": 640,
+      "height": 640,
+      "length": 81,
+      "batch_size": 1
+    },
+    "class_type": "EmptyHunyuanLatentVideo",
+    "_meta": {
+      "title": "Empty HunyuanVideo 1.0 Latent"
     }
   }
 }
-

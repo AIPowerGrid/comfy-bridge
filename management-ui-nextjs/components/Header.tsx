@@ -2,6 +2,7 @@
 
 import { motion } from 'framer-motion';
 import { useState, useEffect } from 'react';
+import { WalletConnect } from './WalletConnect';
 
 export default function Header() {
   const [isEarning, setIsEarning] = useState(false);
@@ -102,6 +103,11 @@ export default function Header() {
       animate={{ opacity: 1, y: 0 }}
       className="text-center mb-8"
     >
+      {/* Wallet Connect - Top Right */}
+      <div className="absolute top-4 right-6 z-50">
+        <WalletConnect />
+      </div>
+
       <div className="flex items-center justify-center gap-4 mb-6">
         {/* AIPG Logo */}
         <div className="relative">
@@ -176,8 +182,23 @@ export default function Header() {
               <span className="text-sm text-gray-300 font-medium">Configure Connection</span>
             </div>
           )}
-          <div className="text-sm text-gray-500">
-            <span className="font-semibold text-aipg-gold">Step 1:</span> Configure your connection below
+          <div className="flex flex-col items-start text-sm text-gray-500 bg-gray-900/50 rounded-lg px-4 py-3 border border-gray-700">
+            <div className="flex items-center gap-2 py-1">
+              <span className="font-semibold text-aipg-gold w-5">1.</span>
+              <span>Configure wallet connection</span>
+            </div>
+            <div className="flex items-center gap-2 py-1">
+              <span className="font-semibold text-aipg-gold w-5">2.</span>
+              <span>Configure grid & API keys</span>
+            </div>
+            <div className="flex items-center gap-2 py-1">
+              <span className="font-semibold text-aipg-gold w-5">3.</span>
+              <span>Select models to host</span>
+            </div>
+            <div className="flex items-center gap-2 py-1">
+              <span className="font-semibold text-aipg-gold w-5">4.</span>
+              <span>Click Start Hosting</span>
+            </div>
           </div>
         </div>
       </div>

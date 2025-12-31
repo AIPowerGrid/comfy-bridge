@@ -5,11 +5,68 @@ import logging
 from typing import Dict, List, Optional
 
 from .config import Settings
+from .modelvault_client import get_modelvault_client, OnChainModelInfo, ModelType
 
 logger = logging.getLogger(__name__)
 
 
+def normalize_workflow_name(name: str) -> str:
+    """Normalize workflow name by converting underscores to hyphens for consistency."""
+    return name.replace("_", "-")
+
+
+def find_workflow_file(workflow_dir: str, workflow_name: str) -> Optional[str]:
+    """
+    Find a workflow file by name, handling dash/underscore variations.
+    
+    Tries multiple variations:
+    1. Exact match
+    2. With underscores replaced by hyphens
+    3. With hyphens replaced by underscores
+    4. Case-insensitive versions of all above
+    
+    Returns the absolute path if found, None otherwise.
+    """
+    if not workflow_name:
+        return None
+    
+    # Add .json extension if not present
+    base_name = workflow_name[:-5] if workflow_name.endswith('.json') else workflow_name
+    
+    # Generate all variations to try
+    variations = [
+        base_name,                           # Original
+        base_name.replace("_", "-"),         # Underscores to hyphens
+        base_name.replace("-", "_"),         # Hyphens to underscores
+    ]
+    
+    # Add .json extension to all variations
+    filenames_to_try = [f"{v}.json" for v in variations]
+    
+    try:
+        available_files = os.listdir(workflow_dir)
+    except FileNotFoundError:
+        return None
+    
+    # Create lowercase lookup map for case-insensitive matching
+    file_map = {f.lower(): f for f in available_files}
+    
+    for filename in filenames_to_try:
+        # Try exact match first
+        full_path = os.path.join(workflow_dir, filename)
+        if os.path.exists(full_path):
+            return full_path
+        
+        # Try case-insensitive match
+        actual_name = file_map.get(filename.lower())
+        if actual_name:
+            return os.path.join(workflow_dir, actual_name)
+    
+    return None
+
+
 async def fetch_comfyui_models(comfy_url: str) -> List[str]:
+    """Fetch available models from ComfyUI (for local availability check)."""
     endpoints = ["/object_info", "/model_list"]
 
     async with httpx.AsyncClient(base_url=comfy_url, timeout=10) as client:
@@ -30,13 +87,19 @@ async def fetch_comfyui_models(comfy_url: str) -> List[str]:
                     )
                     models.extend(checkpoint_models)
 
-                    # Get Flux models
-                    flux_models = (
-                        data.get("FluxLoader", {})
-                        .get("input", {})
-                        .get("required", {})
-                        .get("model_name", [[]])[0]
-                    )
+                    flux_loaders = ["FluxLoader", "UNETLoader", "DualCLIPLoader"]
+                    flux_models = []
+                    for loader_name in flux_loaders:
+                        loader_data = data.get(loader_name, {})
+                        if loader_data and loader_data.get("input", {}).get("required", {}).get("model_name"):
+                            loader_models = (
+                                loader_data
+                                .get("input", {})
+                                .get("required", {})
+                                .get("model_name", [[]])[0]
+                            )
+                            flux_models.extend(loader_models)
+                            break  # Use first available loader
                     models.extend(flux_models)
                 elif endpoint == "/model_list":
                     models = data.get("checkpoints", []) + data.get("models", [])
@@ -51,166 +114,183 @@ async def fetch_comfyui_models(comfy_url: str) -> List[str]:
     return []
 
 
+def get_chain_models() -> Dict[str, OnChainModelInfo]:
+    """
+    Get all registered models from the blockchain.
+    
+    The blockchain is the single source of truth for model registration.
+    """
+    client = get_modelvault_client(enabled=Settings.MODELVAULT_ENABLED)
+    return client.fetch_all_models()
+
+
 class ModelMapper:
-    # Map Grid model names to ComfyUI workflow files
-    DEFAULT_WORKFLOW_MAP = {
-        # Video Generation Models
-        "wan2_2_t2v_14b": "wan2.2-t2v-a14b",
-        "wan2.2-t2v-a14b": "wan2.2-t2v-a14b",
-        "wan2_2_t2v_14b_hq": "wan2.2-t2v-a14b-hq",
-        "wan2.2-t2v-a14b-hq": "wan2.2-t2v-a14b-hq",
-        "wan2_2_ti2v_5b": "wan2.2_ti2v_5B",
-        "wan2.2_ti2v_5b": "wan2.2_ti2v_5B",
-        "ltxv": "ltxv",
-        
-        # Flux Dev (all naming variants)
-        "FLUX.1-dev": "flux1.dev",
-        "flux.1-dev": "flux1.dev",
-        "flux1-dev": "flux1.dev",
-        "flux1_dev": "flux1.dev",
-        "flux1.dev": "flux1.dev",
-        
-        # Flux Krea variants
-        "flux.1-krea-dev": "flux1_krea_dev",
-        "FLUX.1-krea-dev": "flux1_krea_dev",
-        "flux1-krea-dev": "flux1_krea_dev",
-        "flux1_krea_dev": "flux1_krea_dev",
-        "krea": "krea",
-        
-        # Flux Kontext variants
-        "flux1-krea-dev_fp8_scaled": "flux1-krea-dev_fp8_scaled",
-        "FLUX.1-dev-Kontext-fp8-scaled": "flux1-krea-dev_fp8_scaled",
-        "flux.1-dev-kontext-fp8-scaled": "flux1-krea-dev_fp8_scaled",
-        "flux1-dev-kontext-fp8-scaled": "flux1-krea-dev_fp8_scaled",
-        "flux1_dev_kontext_fp8_scaled": "flux1-krea-dev_fp8_scaled",
-        "flux1_dev_kontext_fp8_scaled": "flux1-krea-dev_fp8_scaled",
-        "flux1_dev_kontext_fp8_scaled": "flux1-krea-dev_fp8_scaled",
-        "flux_kontext_dev_basic": "flux_kontext_dev_basic",
-        "flux1-kontext-dev": "flux_kontext_dev_basic",
-        "flux1_kontext_dev": "flux_kontext_dev_basic",
-        
-        # Other image models
-        "Chroma": "Chroma_final",
-        "chroma_final": "Chroma_final",
-        "chroma": "Chroma_final",
-        "SDXL 1.0": "sdxl",
-        "SDXL": "sdxl",
-        "sdxl": "sdxl",
-        "sdxl1": "sdxl1",
-        "turbovision": "turbovision",
-    }
+    """
+    Maps Grid model names to ComfyUI workflow files.
+    
+    Model registry is sourced from the blockchain (ModelVault contract).
+    Workflow mappings are derived from on-chain model data.
+    """
+    
+    # DEPRECATED: These mappings are only kept for backward compatibility
+    # The blockchain (ModelVault) is now the source of truth for model names
+    # Only use these if a model is not registered on-chain
+    FALLBACK_WORKFLOW_MAP = {}
+    
+    # Keep DEFAULT_WORKFLOW_MAP as alias for backwards compatibility
+    DEFAULT_WORKFLOW_MAP = FALLBACK_WORKFLOW_MAP
 
     def __init__(self):
         self.available_models: List[str] = []
         # Maps Grid model name -> workflow filename
         self.workflow_map: Dict[str, str] = {}
-        # Maps model file name (e.g., some_model.safetensors) -> Grid model name (key in reference)
-        self.reference_file_to_grid_name: Dict[str, str] = {}
+        # On-chain model registry (blockchain is source of truth)
+        self.chain_models: Dict[str, OnChainModelInfo] = {}
 
     async def initialize(self, comfy_url: str):
-        # Get models available in Comfy (optional; currently informational)
+        """
+        Initialize the model mapper.
+        
+        Loads model registry from blockchain first, then validates
+        against locally available models and workflows.
+        """
+        # Get models available in Comfy (for local availability check)
         self.available_models = await fetch_comfyui_models(comfy_url)
 
-        # Load AI Power Grid local reference for model-file → Grid model name resolution
-        self.reference_file_to_grid_name = self._load_local_reference()
+        # Load model registry from blockchain (source of truth)
+        self._load_chain_models()
 
-        # If WORKFLOW_FILE is set, only use models derived from those workflows (no defaults)
+        # If WORKFLOW_FILE is set, only use models derived from those workflows
         if Settings.WORKFLOW_FILE:
             self._build_workflow_map_from_env()
             # Validate workflows against available models
             await self._validate_workflows_against_models(comfy_url)
         else:
-            # No env override: fall back to static defaults
+            # Build workflow map from chain data + fallbacks
             self._build_workflow_map()
 
-        logger.info(f"Initialized with {len(self.workflow_map)} model mappings")
+        logger.info(f"Initialized with {len(self.workflow_map)} model mappings (chain: {len(self.chain_models)} models)")
+
+    def _load_chain_models(self):
+        """Load model registry from the blockchain."""
+        try:
+            self.chain_models = get_chain_models()
+            logger.info(f"Loaded {len(self.chain_models)} models from blockchain")
+        except Exception as e:
+            logger.warning(f"Failed to load models from blockchain: {e}")
+            self.chain_models = {}
 
     def _build_workflow_map(self):
-        """Build mapping from Grid models to ComfyUI workflows"""
+        """
+        Build mapping from Grid models to ComfyUI workflows.
+        
+        Primary source: blockchain model registry (ModelVault)
+        Secondary: Local workflow files that match blockchain model names
+        """
         self.workflow_map = {}
         from .config import Settings
         import os
         
-        def resolve_case_insensitive(dir_path: str, filename: str) -> str:
-            """Return absolute path to filename in dir_path, matched case-insensitively.
-            Returns empty string if not found."""
-            target = filename.lower()
-            try:
-                for fname in os.listdir(dir_path):
-                    if fname.lower() == target:
-                        return os.path.join(dir_path, fname)
-            except FileNotFoundError:
-                pass
-            return ""
+        def check_workflow_exists(workflow_file: str) -> bool:
+            """Check if workflow file exists (handles dash/underscore/case variations)."""
+            return find_workflow_file(Settings.WORKFLOW_DIR, workflow_file) is not None
         
-        # Copy default mappings but strip .json from workflow filenames
-        for model, workflow_file in self.DEFAULT_WORKFLOW_MAP.items():
-            # Add .json extension if not present when checking file existence
-            filename = workflow_file if workflow_file.endswith('.json') else f"{workflow_file}.json"
-            workflow_path = os.path.join(Settings.WORKFLOW_DIR, filename)
-            if not os.path.exists(workflow_path):
-                ci = resolve_case_insensitive(Settings.WORKFLOW_DIR, filename)
-                workflow_path = ci or workflow_path
-            if os.path.exists(workflow_path):
-                # Store without .json extension
-                self.workflow_map[model] = workflow_file
+        # Build workflow mappings from blockchain models (source of truth)
+        mapped_count = 0
+        for model_name, model_info in self.chain_models.items():
+            # Derive workflow from model's display_name or architecture
+            workflow_id = self._derive_workflow_from_chain_model(model_info)
+            if workflow_id and check_workflow_exists(workflow_id):
+                # Use the blockchain's authoritative names
+                self.workflow_map[model_info.display_name] = workflow_id
+                mapped_count += 1
+                
+                # Also map file_name if different
+                if model_info.file_name and model_info.file_name != model_info.display_name:
+                    self.workflow_map[model_info.file_name] = workflow_id
+                
+                # Map model ID for compatibility
+                model_id = model_info.get_model_id()
+                if model_id and model_id != model_info.display_name:
+                    self.workflow_map[model_id] = workflow_id
+                    
+                logger.debug(f"Blockchain model '{model_info.display_name}' -> workflow '{workflow_id}'")
             else:
-                logger.warning(f"Missing workflow file: {workflow_path}")
+                logger.debug(f"No workflow for blockchain model '{model_info.display_name}' (workflow: {workflow_id}, exists: {workflow_id and check_workflow_exists(workflow_id)})")
+        
+        logger.info(f"Built workflow map: {len(self.workflow_map)} mappings from {len(self.chain_models)} blockchain models")
+        logger.info(f"Successfully mapped {mapped_count} blockchain models to workflows")
 
-    def _load_local_reference(self) -> Dict[str, str]:
-        """Load Grid model reference and return mapping path → Grid model name.
-
-        Supports both local directories/files and HTTP(S) URLs.
-        If the env var points to a directory, appends 'stable_diffusion.json'.
-        If it points directly to a JSON file, uses it as-is.
+    def _derive_workflow_from_chain_model(self, model_info: OnChainModelInfo) -> Optional[str]:
         """
-        reference_map: Dict[str, str] = {}
-        try:
-            root = Settings.GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH or ""
-
-            # Decide final location (file path or URL)
-            is_url = root.startswith("http://") or root.startswith("https://")
-            if is_url:
-                if root.rstrip("/").lower().endswith(".json"):
-                    location = root
+        Derive the workflow filename from on-chain model data.
+        
+        Uses model type, architecture, and display_name to determine workflow.
+        This is the primary source of truth for model->workflow mapping.
+        """
+        display_name = model_info.display_name
+        model_type = model_info.model_type
+        architecture = model_info.architecture.lower() if model_info.architecture else ""
+        file_name = model_info.file_name or ""
+        
+        # For blockchain models, try to find a matching workflow file
+        # Check various naming patterns
+        name_lower = display_name.lower()
+        file_lower = file_name.lower()
+        
+        # Derive based on model type and name patterns
+        if model_type == ModelType.VIDEO_MODEL:
+            # Video models - check for specific patterns
+            if "wan" in name_lower or "wan" in file_lower:
+                if "ti2v" in name_lower or "ti2v" in file_lower or "i2v" in name_lower:
+                    return "wan2.2_ti2v_5B"
+                elif "hq" in name_lower or "hq" in file_lower:
+                    return "wan2.2-t2v-a14b-hq"
+                elif "14b" in name_lower or "a14b" in name_lower:
+                    return "wan2.2-t2v-a14b"
                 else:
-                    location = root.rstrip("/") + "/stable_diffusion.json"
+                    return "wan2.2-t2v-a14b"  # Default WAN workflow
+            elif "ltxv" in name_lower or "ltxv" in file_lower:
+                return "ltxv"
+        
+        elif model_type == ModelType.IMAGE_MODEL and ("flux" in name_lower or "flux" in file_lower):
+            # FLUX models
+            if "kontext" in name_lower or "kontext" in file_lower:
+                return "FLUX.1-dev-Kontext-fp8-scaled"
+            elif "krea" in name_lower or "krea" in file_lower:
+                return "flux.1-krea-dev"
+            elif "chroma" in name_lower or "chroma" in file_lower:
+                return "Chroma_final"
             else:
-                if root.lower().endswith(".json"):
-                    location = root
-                else:
-                    location = os.path.join(root or "grid-image-model-reference", "stable_diffusion.json")
-
-            # Load JSON from the decided location
-            if is_url:
-                with httpx.Client() as client:
-                    resp = client.get(location)
-                    resp.raise_for_status()
-                    data = resp.json()
-            else:
-                with open(location, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-
-            # Build mapping: file path → grid model name
-            loaded_models = 0
-            for grid_model_name, info in data.items():
-                if not isinstance(info, dict):
-                    continue
-                files_list = info.get("files")
-                if files_list is None:
-                    files_list = (info.get("config", {}) or {}).get("files", [])
-                for file_info in files_list or []:
-                    path_value = (file_info or {}).get("path")
-                    if path_value:
-                        reference_map[path_value] = grid_model_name
-                        loaded_models += 1
-
-            logger.info(
-                f"Loaded model reference from {'URL' if is_url else 'file'}: {location} (entries: {loaded_models})"
-            )
-        except Exception as e:
-            logger.warning(f"Failed to load model reference: {e}")
-        return reference_map
+                # Default FLUX workflow
+                return "flux1.dev"
+        
+        elif model_type == ModelType.IMAGE_MODEL and ("sdxl" in name_lower or "xl" in name_lower):
+            return "sdxl1"
+        
+        elif model_type == ModelType.IMAGE_MODEL and ("sd1" in name_lower or "stable_diffusion_1" in name_lower):
+            return None  # SD1.5 models not supported
+        
+        # Try to find a workflow file that matches the model name
+        # Check if a workflow exists with similar name
+        potential_workflows = [
+            display_name,
+            display_name.replace(" ", "_"),
+            display_name.replace(" ", "-"),
+            display_name.replace(".", "_"),
+            display_name.replace(".", "-"),
+            file_name,
+            file_name.replace(".safetensors", ""),
+            file_name.replace(".ckpt", ""),
+        ]
+        
+        for potential in potential_workflows:
+            if potential and find_workflow_file(Settings.WORKFLOW_DIR, potential):
+                return potential
+        
+        # No matching workflow found
+        logger.debug(f"No workflow found for blockchain model '{display_name}' (type: {model_type})")
+        return None
 
     def _iter_env_workflow_files(self) -> List[tuple[str, str]]:
         """Resolve workflow filenames from env settings.
@@ -218,6 +298,7 @@ class ModelMapper:
         - WORKFLOW_FILE can be a single filename or comma-separated list
         - Files are resolved relative to Settings.WORKFLOW_DIR
         - Entries can be Grid model names (e.g. FLUX.1-dev) or raw workflow filenames
+        - Chain-registered models take priority for workflow resolution
         """
         configured = Settings.WORKFLOW_FILE or ""
         workflow_filenames = [
@@ -225,26 +306,27 @@ class ModelMapper:
         ]
         resolved_paths: List[tuple[str, str]] = []
         for model_name in workflow_filenames:
-            mapped_workflow = self.DEFAULT_WORKFLOW_MAP.get(model_name, model_name)
-            if Settings.DEBUG:
-                logger.debug(f"WORKFLOW_FILE entry '{model_name}' mapped to '{mapped_workflow}'")
-            # Add .json extension if not present
-            filename = mapped_workflow if mapped_workflow.endswith('.json') else f"{mapped_workflow}.json"
-            abs_path = os.path.join(Settings.WORKFLOW_DIR, filename)
-            if not os.path.exists(abs_path):
-                # Case-insensitive fallback
-                target = filename.lower()
-                try:
-                    for fname in os.listdir(Settings.WORKFLOW_DIR):
-                        if fname.lower() == target:
-                            abs_path = os.path.join(Settings.WORKFLOW_DIR, fname)
-                            break
-                except FileNotFoundError:
-                    pass
-            if os.path.exists(abs_path):
+            # Check if model is registered on chain (blockchain is single source)
+            chain_model = self.chain_models.get(model_name)
+            if chain_model:
+                mapped_workflow = self._derive_workflow_from_chain_model(chain_model)
+                if Settings.DEBUG:
+                    logger.debug(f"WORKFLOW_FILE entry '{model_name}' mapped from chain to '{mapped_workflow}'")
+            else:
+                # No fallback - model must be registered on chain
+                mapped_workflow = model_name
+                if Settings.DEBUG:
+                    logger.debug(f"WORKFLOW_FILE entry '{model_name}' not on chain, using as-is: '{mapped_workflow}'")
+            
+            if not mapped_workflow:
+                mapped_workflow = model_name
+            
+            # Use find_workflow_file which handles dash/underscore normalization
+            abs_path = find_workflow_file(Settings.WORKFLOW_DIR, mapped_workflow)
+            if abs_path:
                 resolved_paths.append((model_name, abs_path))
             else:
-                logger.warning(f"Workflow file not found from env: {abs_path}")
+                logger.warning(f"Workflow file not found for '{model_name}' (tried: {mapped_workflow} with dash/underscore variants)")
         return resolved_paths
 
     def _extract_model_files_from_workflow(self, workflow_path: str) -> List[str]:
@@ -319,42 +401,93 @@ class ModelMapper:
         return model_files
 
     def _resolve_file_to_grid_model(self, file_name: str) -> Optional[str]:
-        """Resolve a local workflow file name to a Grid model name (exact match only)."""
-        return self.reference_file_to_grid_name.get(file_name)
+        """
+        Resolve a file name to a Grid model name.
+        
+        Looks up in chain-registered models first.
+        """
+        # Check chain models by file_name
+        for model_info in self.chain_models.values():
+            if model_info.file_name == file_name:
+                return model_info.display_name
+        
+        # Partial match on file_name
+        file_lower = file_name.lower()
+        for model_info in self.chain_models.values():
+            if model_info.file_name and file_lower in model_info.file_name.lower():
+                return model_info.display_name
+        
+        return None
+
+    # DEPRECATED: These mappings should not be used anymore
+    # The blockchain is the source of truth for model names
+    WORKFLOW_TO_GRID_MODEL = {}
+    WORKFLOW_TO_ALL_GRID_NAMES = {}
 
     def _build_workflow_map_from_env(self):
         """Build workflow map based on env-specified workflows.
         
-        Use explicit mapping for known workflow files to avoid model name resolution issues.
-        Validates that required models are installed before advertising workflows.
+        Uses blockchain data as primary source for model names.
+        Falls back to local mappings only for models not on chain.
         """
         self.workflow_map = {}
         env_workflows = self._iter_env_workflow_files()
         
-        # Direct mapping - workflow filenames now match model names exactly
-        # Store model names without .json extension
-        logger.info("Using simplified direct filename mapping")
-        
         logger.info("Building workflow map from WORKFLOW_FILE env var")
-        for grid_model_name, abs_path in env_workflows:
+        for raw_entry, abs_path in env_workflows:
             filename = os.path.basename(abs_path)
             logger.debug(f"Processing workflow file: {filename}")
             
-            # Direct mapping: filename without .json extension becomes workflow identifier
             if filename.endswith('.json'):
                 workflow_id = filename[:-5]  # Remove .json extension
-                self.workflow_map[grid_model_name] = workflow_id
-                logger.info(f"Mapped {grid_model_name} -> {workflow_id}")
+                
+                # First check blockchain for models that use this workflow
+                blockchain_models = []
+                for model_name, model_info in self.chain_models.items():
+                    derived_workflow = self._derive_workflow_from_chain_model(model_info)
+                    if derived_workflow == workflow_id:
+                        # Use the blockchain's display_name as the authoritative name
+                        blockchain_models.append(model_info.display_name)
+                        # Also add common variants from blockchain
+                        if model_info.file_name and model_info.file_name != model_info.display_name:
+                            blockchain_models.append(model_info.file_name)
+                
+                if blockchain_models:
+                    # Use blockchain display names only (not filenames)
+                    # Only add display names to avoid advertising .safetensors filenames
+                    for model_name, model_info in self.chain_models.items():
+                        derived_workflow = self._derive_workflow_from_chain_model(model_info)
+                        if derived_workflow == workflow_id:
+                            # Only add the display_name, not file_name
+                            self.workflow_map[model_info.display_name] = workflow_id
+                            logger.info(f"Mapped blockchain model '{model_info.display_name}' -> workflow '{workflow_id}'")
+                else:
+                    # No blockchain model found for this workflow
+                    # Use the workflow filename as the model name (without .json)
+                    # This allows workflows to be used even if not yet on blockchain
+                    logger.warning(f"No blockchain model found for workflow '{workflow_id}'")
+                    logger.warning(f"Using workflow name as model name: '{workflow_id}'")
+                    self.workflow_map[workflow_id] = workflow_id
             else:
                 logger.warning(f"Skipping non-JSON file: {filename}")
         
-        logger.info(f"Final workflow map from env: {len(self.workflow_map)} models")
+        logger.info(f"🗺️ FINAL WORKFLOW MAP from env: {len(self.workflow_map)} model(s)")
+        logger.info(f"   These are the model names we will advertise to the Grid API:")
         for model, workflow in self.workflow_map.items():
-            logger.debug(f"  {model} -> {workflow}")
+            source = "blockchain" if any(model == m.display_name or model == m.file_name for m in self.chain_models.values()) else "fallback"
+            logger.info(f"   📍 [{source}] '{model}' -> workflow '{workflow}.json'")
 
     def _has_local_flux_assets(self) -> bool:
         """Fallback detection for Flux assets on disk when ComfyUI doesn't list them."""
-        models_root = os.getenv("MODELS_PATH", "/app/ComfyUI/models")
+        # Check multiple possible model locations
+        models_root = os.getenv("MODELS_PATH")
+        if not models_root or not os.path.isdir(models_root):
+            for path in ["/app/ComfyUI/models", "/persistent_volumes/models"]:
+                if os.path.isdir(path):
+                    models_root = path
+                    break
+            else:
+                models_root = "/app/ComfyUI/models"
 
         def dir_has_keywords(subdir: str, keywords: list[str]) -> bool:
             path = os.path.join(models_root, subdir)
@@ -425,23 +558,33 @@ class ModelMapper:
                 has_compatible_models = False
                 
                 if model_type == "flux":
-                    unet_models = available_models.get("UNETLoader") or []
-                    dual_clip = available_models.get("DualCLIPLoader") or {}
-                    vae_models = available_models.get("VAELoader") or []
-                    
-                    flux_unet = [m for m in unet_models if is_model_compatible(m, "flux")]
-                    clip1 = dual_clip.get("clip_name1", []) if isinstance(dual_clip, dict) else []
-                    clip2 = dual_clip.get("clip_name2", []) if isinstance(dual_clip, dict) else []
-                    flux_clip1 = [m for m in clip1 if is_model_compatible(m, "flux")]
-                    flux_clip2 = [m for m in clip2 if is_model_compatible(m, "flux")]
-                    flux_vae = [m for m in vae_models if is_model_compatible(m, "flux")]
-                    
-                    has_compatible_models = bool(flux_unet and (flux_clip1 or flux_clip2) and flux_vae)
-                    
-                    if not has_compatible_models and self._has_local_flux_assets():
+                    # Check for FluxLoader first (newer FLUX implementations)
+                    flux_loader_models = available_models.get("FluxLoader") or []
+
+                    if flux_loader_models:
+                        # If FluxLoader is available, use it
                         has_compatible_models = True
-                        logger.debug(f"Flux workflow {workflow_id}: local flux assets detected, allowing despite missing loader metadata")
-                
+                        logger.debug(f"Flux workflow {workflow_id}: FluxLoader detected")
+                    else:
+                        # Fall back to individual component loaders
+                        unet_models = available_models.get("UNETLoader") or []
+                        dual_clip = available_models.get("DualCLIPLoader") or {}
+                        vae_models = available_models.get("VAELoader") or []
+
+                        flux_unet = [m for m in unet_models if is_model_compatible(m, "flux")]
+                        clip1 = dual_clip.get("clip_name1", []) if isinstance(dual_clip, dict) else []
+                        clip2 = dual_clip.get("clip_name2", []) if isinstance(dual_clip, dict) else []
+                        flux_clip1 = [m for m in clip1 if is_model_compatible(m, "flux")]
+                        flux_clip2 = [m for m in clip2 if is_model_compatible(m, "flux")]
+                        flux_vae = [m for m in vae_models if is_model_compatible(m, "flux")]
+
+                        has_compatible_models = bool(flux_unet and (flux_clip1 or flux_clip2) and flux_vae)
+
+                    # Allow FLUX models even without detected loaders - runtime will handle it
+                    if not has_compatible_models:
+                        logger.warning(f"Flux workflow {workflow_id}: No compatible loaders detected, allowing anyway (runtime validation will apply)")
+                        has_compatible_models = True
+
                 elif model_type == "wanvideo":
                     # Some ComfyUI builds omit WanVideo loader info; require at least a VAE entry as a proxy.
                     vae_models = available_models.get("VAELoader") or []
@@ -476,55 +619,149 @@ class ModelMapper:
         if workflows_to_remove:
             logger.info(f"Removed {len(workflows_to_remove)} workflows due to missing models")
 
-    def get_workflow_file(self, horde_model_name: str) -> str:
-        """Get the workflow file for a Grid model"""
-        # Look up workflow for model
+    def get_workflow_file(self, horde_model_name: str) -> Optional[str]:
+        """Get the workflow file for a Grid model.
+        
+        Returns the actual filename found on disk, handling dash/underscore variations.
+        """
+        from .config import Settings
+        
+        # Try to find workflow file for each potential match
+        candidates = []
         
         # Direct lookup
         direct_match = self.workflow_map.get(horde_model_name)
         if direct_match:
-            # Add .json extension
-            return f"{direct_match}.json"
+            candidates.append(direct_match)
+        
+        # Check chain models for dynamic resolution
+        chain_model = self.chain_models.get(horde_model_name)
+        if chain_model:
+            workflow = self._derive_workflow_from_chain_model(chain_model)
+            if workflow:
+                candidates.append(workflow)
         
         # Partial match
         partial_match = next(
-            (
-                v
-                for k, v in self.workflow_map.items()
-                if horde_model_name.lower() in k.lower()
-            ),
+            (v for k, v in self.workflow_map.items() if horde_model_name.lower() in k.lower()),
             None,
         )
         if partial_match:
-            # Add .json extension
-            return f"{partial_match}.json"
+            candidates.append(partial_match)
         
         # Fallback to defaults mapping (case-insensitive)
         lower_name = horde_model_name.lower()
         default_match = next(
-            (v for k, v in self.DEFAULT_WORKFLOW_MAP.items() if k.lower() == lower_name),
+            (v for k, v in self.FALLBACK_WORKFLOW_MAP.items() if k.lower() == lower_name),
             None,
         )
         if default_match:
-            return default_match if default_match.endswith(".json") else f"{default_match}.json"
+            candidates.append(default_match)
         
-        # Last-resort default
-        return "Dreamshaper.json"  # Default workflow
+        # Try to find each candidate file (with dash/underscore normalization)
+        for candidate in candidates:
+            found_path = find_workflow_file(Settings.WORKFLOW_DIR, candidate)
+            if found_path:
+                # Return just the filename, not the full path
+                return os.path.basename(found_path)
+        
+        # No fallback - return None if no workflow found
+        logger.warning(f"No workflow found for model '{horde_model_name}' - model will not be advertised")
+        return None
 
     def get_available_horde_models(self) -> List[str]:
-        return list(self.workflow_map.keys())
+        """Get list of available models (only blockchain-registered models with workflows).
+        
+        Returns models that are:
+        1. Registered on the blockchain (source of truth)
+        2. Have corresponding workflow files installed
+        
+        This ensures we only advertise models that are officially registered.
+        """
+        # Return unique model names from workflow map
+        # These are already filtered to only blockchain models with workflows
+        models = list(set(self.workflow_map.keys()))
+        
+        # Filter to prefer display_name from blockchain when available
+        blockchain_names = {m.display_name for m in self.chain_models.values()}
+        prioritized = []
+        seen = set()
+        
+        # First add blockchain display names
+        for model in models:
+            if model in blockchain_names and model not in seen:
+                prioritized.append(model)
+                seen.add(model)
+        
+        # Then add any remaining (file names, variants)
+        for model in models:
+            if model not in seen:
+                # Check if this is a variant of an already added model
+                is_variant = False
+                for chain_model in self.chain_models.values():
+                    if model in [chain_model.file_name, chain_model.get_model_id()]:
+                        # This is a variant of a blockchain model
+                        if chain_model.display_name not in seen:
+                            prioritized.append(model)
+                            seen.add(model)
+                        is_variant = True
+                        break
+                
+                if not is_variant:
+                    # Not a blockchain model variant - skip it
+                    logger.debug(f"Skipping non-blockchain model: {model}")
+        
+        logger.debug(f"get_available_horde_models() returning {len(prioritized)} blockchain models")
+        return prioritized
+
+    def is_model_on_chain(self, model_name: str) -> bool:
+        """Check if a model is registered on the blockchain."""
+        return model_name in self.chain_models
+    
+    def get_chain_model_info(self, model_name: str) -> Optional[OnChainModelInfo]:
+        """Get on-chain model info if registered."""
+        return self.chain_models.get(model_name)
 
 
 model_mapper = ModelMapper()
 
 
 async def initialize_model_mapper(comfy_url: str):
+    """Initialize the model mapper with chain data and local models."""
     await model_mapper.initialize(comfy_url)
 
 
 def get_horde_models() -> List[str]:
+    """Get list of all available models."""
     return model_mapper.get_available_horde_models()
 
 
-def get_workflow_file(horde_model_name: str) -> str:
+def get_workflow_validated_models() -> set:
+    """Get set of models that have valid workflow files.
+    
+    These models passed workflow validation and should be trusted even if 
+    traditional health checks fail (e.g., API-based models like ltxv).
+    """
+    return set(model_mapper.workflow_map.keys())
+
+
+def get_workflow_file(horde_model_name: str) -> Optional[str]:
+    """Get workflow file for a model. Returns None if no workflow found."""
     return model_mapper.get_workflow_file(horde_model_name)
+
+
+def is_model_registered_on_chain(model_name: str) -> bool:
+    """Check if a model is registered on the blockchain."""
+    return model_mapper.is_model_on_chain(model_name)
+
+
+def get_chain_model(model_name: str) -> Optional[OnChainModelInfo]:
+    """Get on-chain model info if registered."""
+    return model_mapper.get_chain_model_info(model_name)
+
+
+def refresh_chain_models():
+    """Refresh the model registry from blockchain."""
+    client = get_modelvault_client(enabled=Settings.MODELVAULT_ENABLED)
+    client.refresh_cache()
+    model_mapper.chain_models = client.fetch_all_models()

@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { useState, useEffect, useCallback } from 'react';
 import DownloadProgressPanel from './DownloadProgressPanel';
 import type { ModelDownloadState } from '@/lib/downloadState';
+import { generateModelHash } from '@/lib/web3';
 
 interface ModelDetailViewProps {
   catalog: any;
@@ -12,6 +13,8 @@ interface ModelDetailViewProps {
   styleFilter: 'all' | 'text-to-image' | 'text-to-video' | 'image-to-video' | 'image-to-image' | 'anime' | 'realistic' | 'generalist' | 'artistic' | 'video';
   gpuInfo: any;
   downloadStatus: any;
+  registeredModelHashes?: Set<string>;
+  registeringModelId?: string | null;
   onFilterChange: (filter: 'all' | 'compatible' | 'installed') => void;
   onStyleFilterChange: (styleFilter: 'all' | 'text-to-image' | 'text-to-video' | 'image-to-video' | 'image-to-image' | 'anime' | 'realistic' | 'generalist' | 'artistic' | 'video') => void;
   onUninstall: (modelId: string) => void;
@@ -20,6 +23,7 @@ interface ModelDetailViewProps {
   onDownload: (modelId: string) => void;
   onDownloadAndHost: (modelId: string) => void;
   onCancelDownload: () => void;
+  onRegisterToVault?: (modelId: string, model: any) => void;
   onCatalogRefresh: () => void;
 }
 
@@ -88,6 +92,8 @@ export default function ModelDetailView({
   styleFilter,
   gpuInfo,
   downloadStatus,
+  registeredModelHashes = new Set(),
+  registeringModelId = null,
   onFilterChange,
   onStyleFilterChange,
   onUninstall,
@@ -96,6 +102,7 @@ export default function ModelDetailView({
   onDownload,
   onDownloadAndHost,
   onCancelDownload,
+  onRegisterToVault,
   onCatalogRefresh,
 }: ModelDetailViewProps) {
   const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; modelName: string }>({ isOpen: false, modelName: '' });
@@ -993,6 +1000,15 @@ export default function ModelDetailView({
                           Earning
                         </span>
                       )}
+                      {(() => {
+                        const fileName = model.config?.files?.[0]?.path || model.filename || model.id;
+                        const modelHash = generateModelHash(fileName);
+                        return registeredModelHashes.has(modelHash) ? (
+                          <span className="px-2 py-1 text-xs bg-purple-500/20 text-purple-400 rounded border border-purple-500/50">
+                            ⛓️ On-Chain
+                          </span>
+                        ) : null;
+                      })()}
                       {isDownloading && (
                         <span className="px-2 py-1 text-xs bg-yellow-500/20 text-yellow-400 rounded border border-yellow-500/50">
                           Downloading...
@@ -1034,6 +1050,37 @@ export default function ModelDetailView({
                           >
                             {isHosting ? 'Stop Earning' : 'Start Earning'}
                           </button>
+                          {/* Register to ModelVault button */}
+                          {onRegisterToVault && (() => {
+                            const fileName = model.config?.files?.[0]?.path || model.filename || model.id;
+                            const modelHash = generateModelHash(fileName);
+                            const isRegistered = registeredModelHashes.has(modelHash);
+                            const isRegistering = registeringModelId === model.id;
+                            
+                            if (!isRegistered) {
+                              return (
+                                <button
+                                  onClick={() => onRegisterToVault(model.id, model)}
+                                  disabled={isDownloading || isRegistering}
+                                  className="px-3 py-1 text-xs font-medium bg-purple-600 hover:bg-purple-700 text-white rounded transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                                  title="Register this model on-chain to ModelVault"
+                                >
+                                  {isRegistering ? (
+                                    <>
+                                      <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                      </svg>
+                                      Registering...
+                                    </>
+                                  ) : (
+                                    <>⛓️ Register</>
+                                  )}
+                                </button>
+                              );
+                            }
+                            return null;
+                          })()}
                           <button
                             onClick={() => handleUninstall(model.id)}
                             disabled={isDownloading}
