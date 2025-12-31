@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 class ComfyUIClient:
-    def __init__(self, base_url: str = None, timeout: int = 300):
+    def __init__(self, base_url: str = None, timeout: int = 1200):  # 20 minutes (4x increase for video)
         self.base_url = base_url or Settings.COMFYUI_URL
         self.timeout = timeout
         self.client = httpx.AsyncClient(base_url=self.base_url, timeout=timeout)
@@ -40,6 +40,10 @@ class ComfyUIClient:
             logger.error("Found '#id' string in workflow JSON - this will cause ComfyUI errors")
             logger.error(f"Workflow snippet: {workflow_str[:500]}")
             raise ValueError("Workflow contains invalid '#id' placeholder - this indicates a workflow processing error")
+        
+        # Debug: dump FULL workflow JSON for comparison
+        workflow_json = json.dumps(workflow, indent=2)
+        logger.info(f"DEBUG FULL WORKFLOW:\n{workflow_json[:3000]}...")
         
         resp = await self.client.post("/prompt", json={"prompt": workflow})
         if resp.status_code != 200:
@@ -83,6 +87,49 @@ class ComfyUIClient:
         resp = await self.client.get("/object_info")
         resp.raise_for_status()
         return resp.json()
+    
+    async def get_queue(self) -> Dict[str, Any]:
+        """Fetch current queue status from ComfyUI.
+        
+        Returns dict with:
+        - queue_running: list of [prompt_id, prompt_number, prompt_data, extra_data]
+        - queue_pending: list of [prompt_id, prompt_number, prompt_data, extra_data]
+        """
+        try:
+            resp = await self.client.get("/queue")
+            resp.raise_for_status()
+            return resp.json()
+        except Exception as e:
+            logger.error(f"Failed to fetch queue status: {e}")
+            return {"queue_running": [], "queue_pending": []}
+    
+    async def get_system_stats(self) -> Dict[str, Any]:
+        """Fetch system stats from ComfyUI (GPU info, memory usage, etc.)"""
+        try:
+            resp = await self.client.get("/system_stats")
+            resp.raise_for_status()
+            return resp.json()
+        except Exception as e:
+            logger.debug(f"Failed to fetch system stats: {e}")
+            return {}
+    
+    async def interrupt_current(self) -> bool:
+        """Interrupt the currently running prompt in ComfyUI."""
+        try:
+            resp = await self.client.post("/interrupt")
+            return resp.status_code == 200
+        except Exception as e:
+            logger.error(f"Failed to interrupt current execution: {e}")
+            return False
+    
+    async def clear_queue(self) -> bool:
+        """Clear the pending queue in ComfyUI."""
+        try:
+            resp = await self.client.post("/queue", json={"clear": True})
+            return resp.status_code == 200
+        except Exception as e:
+            logger.error(f"Failed to clear queue: {e}")
+            return False
     
     async def get_available_models(self) -> Dict[str, list]:
         """Get available models organized by loader type"""
@@ -139,6 +186,21 @@ class ComfyUIClient:
                     logger.debug(f"VAELoader models: {vae_models[:3] if isinstance(vae_models, list) else vae_models}...")
             else:
                 logger.debug("VAELoader not found in object_info")
+            
+            # Get CheckpointLoaderSimple models (for SDXL/Flux checkpoint-based workflows)
+            ckpt_loader = object_info.get("CheckpointLoaderSimple", {})
+            if ckpt_loader:
+                ckpt_inputs = ckpt_loader.get("input", {})
+                required = ckpt_inputs.get("required", {})
+                ckpt_config = required.get("ckpt_name", [[]])
+                ckpt_models = ckpt_config[0] if isinstance(ckpt_config, list) and len(ckpt_config) > 0 else []
+                
+                if ckpt_models:
+                    models["checkpoints"] = ckpt_models if isinstance(ckpt_models, list) else []
+                    models["CheckpointLoaderSimple"] = models["checkpoints"]  # Alias
+                    logger.debug(f"CheckpointLoaderSimple models: {ckpt_models[:3] if isinstance(ckpt_models, list) else ckpt_models}...")
+            else:
+                logger.debug("CheckpointLoaderSimple not found in object_info")
             
             logger.info(f"Fetched available models: {len(models)} loader types found")
             return models

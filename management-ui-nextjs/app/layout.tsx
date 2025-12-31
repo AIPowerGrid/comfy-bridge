@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { Web3Provider } from "@/lib/web3";
 
 export const metadata: Metadata = {
   title: "AI Power Grid - Model Manager",
@@ -17,9 +18,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="antialiased aipg-grid">
-        <div className="relative z-10">
-          {children}
-        </div>
+        <Web3Provider>
+          <div className="relative z-10">
+            {children}
+          </div>
+        </Web3Provider>
       </body>
     </html>
   );

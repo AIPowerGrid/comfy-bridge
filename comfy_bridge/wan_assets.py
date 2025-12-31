@@ -1,3 +1,10 @@
+"""
+WAN Video Model Asset Management
+
+Handles symlink creation and integrity checking for WAN video model assets.
+Model information is sourced from the blockchain (ModelVault contract).
+"""
+
 import logging
 import os
 import json
@@ -27,19 +34,25 @@ WAN_ASSET_MODEL_MAP: Dict[str, str] = {
     "wan2.2_ti2v_5B_fp16.safetensors": "wan2.2_ti2v_5B",
 }
 
+# Check both possible model locations
+DEFAULT_MODELS_PATHS = [
+    "/app/ComfyUI/models",
+    "/persistent_volumes/models",
+]
 DEFAULT_MODELS_PATH = "/app/ComfyUI/models"
-DEFAULT_STABLE_DIFFUSION_CATALOG = "/app/grid-image-model-reference/stable_diffusion.json"
-DEFAULT_MODEL_CONFIG = "/app/comfy-bridge/model_configs.json"
 
 
 def _find_wan_asset(filename: str, models_root: str) -> Optional[str]:
     """Search common folders (and fallback to walking the tree) for a Wan asset."""
+    # Primary directories to check
     candidate_dirs = [
+        "diffusion_models",  # New ComfyUI location
+        "diffusion_models/wan",  # Possible subdirectory
+        "unet",
+        "unet/wan",
+        "checkpoints",
         "clip",
         "text_encoders",
-        "diffusion_models",
-        "checkpoints",
-        "unet",
         "vae",
         "loras",
     ]
@@ -49,9 +62,14 @@ def _find_wan_asset(filename: str, models_root: str) -> Optional[str]:
         if os.path.exists(candidate):
             return candidate
 
-    for root, _, files in os.walk(models_root):
+    # Deep search: walk the entire tree to find the file
+    for root, dirs, files in os.walk(models_root):
         if filename in files:
             return os.path.join(root, filename)
+        # Also check case-insensitive match
+        for f in files:
+            if f.lower() == filename.lower():
+                return os.path.join(root, f)
 
     return None
 
@@ -99,24 +117,26 @@ def _is_file_complete(path: str) -> bool:
 
 
 def _redownload_asset(filename: str, models_root: str) -> bool:
+    """
+    Attempt to re-download a corrupted WAN asset.
+    
+    Model information is fetched from the blockchain registry.
+    """
     model_id = WAN_ASSET_MODEL_MAP.get(filename)
     if not model_id or downloader is None:
         return False
+    
     logger.warning(
         "Attempting to re-download Wan asset %s (model %s) due to integrity failure",
         filename,
         model_id,
     )
-    stable_catalog = os.environ.get(
-        "STABLE_DIFFUSION_CATALOG", DEFAULT_STABLE_DIFFUSION_CATALOG
-    )
-    model_config = os.environ.get("MODEL_CONFIG_PATH", DEFAULT_MODEL_CONFIG)
+    
     try:
+        # Download using model_id - downloader will resolve from chain/fallback sources
         return downloader.download_models(
             [model_id],
             models_root,
-            stable_diffusion_path=stable_catalog,
-            config_path=model_config,
             resolve_deps=True,
         )
     except Exception as exc:
@@ -147,9 +167,25 @@ def _ensure_symlink(source: str, destination: str) -> bool:
     return True
 
 
+def _find_models_root() -> str:
+    """Find the actual models directory, checking multiple possible locations."""
+    # Check env var first
+    env_path = os.environ.get("MODELS_PATH")
+    if env_path and os.path.isdir(env_path):
+        return os.path.abspath(env_path)
+    
+    # Check default paths
+    for path in DEFAULT_MODELS_PATHS:
+        if os.path.isdir(path):
+            return os.path.abspath(path)
+    
+    # Fall back to default
+    return os.path.abspath(DEFAULT_MODELS_PATH)
+
+
 def ensure_wan_symlinks(models_root: Optional[str] = None) -> None:
     """Make sure Wan model components live where vanilla ComfyUI expects them."""
-    root = models_root or os.environ.get("MODELS_PATH") or DEFAULT_MODELS_PATH
+    root = models_root or _find_models_root()
     root = os.path.abspath(root)
 
     if not os.path.isdir(root):

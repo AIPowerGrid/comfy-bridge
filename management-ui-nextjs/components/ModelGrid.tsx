@@ -3,6 +3,7 @@
 import { motion } from 'framer-motion';
 import { useMemo } from 'react';
 import ModelCard from './ModelCard';
+import { generateModelHash } from '@/lib/web3';
 
 interface ModelGridProps {
   catalog: any;
@@ -12,6 +13,8 @@ interface ModelGridProps {
   styleFilter: 'all' | 'text-to-image' | 'text-to-video' | 'image-to-video' | 'image-to-image' | 'anime' | 'realistic' | 'generalist' | 'artistic' | 'video';
   gpuInfo: any;
   downloadStatus: any;
+  registeredModelHashes?: Set<string>;
+  registeringModelId?: string | null;
   onToggleModel: (modelName: string) => void;
   onFilterChange: (filter: 'all' | 'compatible' | 'selected') => void;
   onStyleFilterChange: (styleFilter: 'all' | 'text-to-image' | 'text-to-video' | 'image-to-video' | 'image-to-image' | 'anime' | 'realistic' | 'generalist' | 'artistic' | 'video') => void;
@@ -21,6 +24,7 @@ interface ModelGridProps {
   onDownload: (modelId: string) => void;
   onDownloadAndHost: (modelId: string) => void;
   onCancelDownload: () => void;
+  onRegisterToVault?: (modelId: string, model: any) => void;
   onSave: () => void;
   onClear: () => void;
 }
@@ -33,6 +37,8 @@ export default function ModelGrid({
   styleFilter,
   gpuInfo,
   downloadStatus,
+  registeredModelHashes = new Set(),
+  registeringModelId = null,
   onToggleModel,
   onFilterChange,
   onStyleFilterChange,
@@ -42,6 +48,7 @@ export default function ModelGrid({
   onDownload,
   onDownloadAndHost,
   onCancelDownload,
+  onRegisterToVault,
   onSave,
   onClear,
 }: ModelGridProps) {
@@ -223,6 +230,12 @@ export default function ModelGrid({
           const isDownloading = downloadStatus?.is_downloading && downloadStatus?.current_model === model.id;
           const downloadProgress = downloadStatus?.progress || 0;
           
+          // Check if model is registered on-chain
+          const modelFileName = model.config?.files?.[0]?.path || model.filename || model.id;
+          const modelHash = generateModelHash(modelFileName);
+          const isRegisteredOnChain = registeredModelHashes.has(modelHash);
+          const isRegisteringOnChain = registeringModelId === model.id;
+          
           return (
             <ModelCard
               key={model.id}
@@ -233,6 +246,8 @@ export default function ModelGrid({
               isHosting={isHosting}
               isDownloading={isDownloading}
               downloadProgress={downloadProgress}
+              isRegisteredOnChain={isRegisteredOnChain}
+              isRegisteringOnChain={isRegisteringOnChain}
               onToggle={() => onToggleModel(model.id)}
               onUninstall={model.installed ? () => onUninstall(model.id) : undefined}
               onHost={() => onHost(model.id)}
@@ -240,6 +255,7 @@ export default function ModelGrid({
               onDownload={() => onDownload(model.id)}
               onDownloadAndHost={() => onDownloadAndHost(model.id)}
               onCancelDownload={onCancelDownload}
+              onRegisterToVault={model.installed && onRegisterToVault ? () => onRegisterToVault(model.id, model) : undefined}
               index={index}
             />
           );

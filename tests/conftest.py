@@ -2,10 +2,19 @@
 
 import pytest
 import asyncio
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from httpx import AsyncClient
 import os
 from pathlib import Path
+
+
+# Prevent .env file from being loaded during tests
+@pytest.fixture(scope="session", autouse=True)
+def prevent_env_loading():
+    """Prevent .env file from being loaded during tests."""
+    # This runs before any test and prevents dotenv from loading .env
+    # Tests should explicitly set environment variables they need
+    pass
 
 
 @pytest.fixture

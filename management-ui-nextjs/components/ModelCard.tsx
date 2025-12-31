@@ -10,6 +10,8 @@ interface ModelCardProps {
   isHosting: boolean;
   isDownloading?: boolean;
   downloadProgress?: number;
+  isRegisteredOnChain?: boolean;
+  isRegisteringOnChain?: boolean;
   onToggle: () => void;
   onUninstall?: () => void;
   onHost?: () => void;
@@ -17,6 +19,7 @@ interface ModelCardProps {
   onDownload?: () => void;
   onDownloadAndHost?: () => void;
   onCancelDownload?: () => void;
+  onRegisterToVault?: () => void;
   index: number;
 }
 
@@ -28,6 +31,8 @@ export default function ModelCard({
   isHosting,
   isDownloading = false,
   downloadProgress = 0,
+  isRegisteredOnChain = false,
+  isRegisteringOnChain = false,
   onToggle,
   onUninstall,
   onHost,
@@ -35,6 +40,7 @@ export default function ModelCard({
   onDownload,
   onDownloadAndHost,
   onCancelDownload,
+  onRegisterToVault,
   index,
 }: ModelCardProps) {
   const handleClick = (e: React.MouseEvent) => {
@@ -92,6 +98,11 @@ export default function ModelCard({
             {isHosting && (
               <span className="flex-shrink-0 px-2 py-1 text-xs font-semibold bg-green-500/20 text-green-400 rounded-full border border-green-500/50">
                 💰 Earning
+              </span>
+            )}
+            {isRegisteredOnChain && (
+              <span className="flex-shrink-0 px-2 py-1 text-xs font-semibold bg-purple-500/20 text-purple-400 rounded-full border border-purple-500/50">
+                ⛓️ On-Chain
               </span>
             )}
             {isDownloading && (
@@ -201,7 +212,7 @@ export default function ModelCard({
               Cancel Download
             </button>
           ) : model.installed ? (
-            /* Downloaded models: Start/Stop Hosting + Remove */
+            /* Downloaded models: Start/Stop Hosting + Register + Remove */
             <>
               <button
                 onClick={(e) => {
@@ -214,14 +225,37 @@ export default function ModelCard({
                     : 'bg-green-600 hover:bg-green-700'
                 }`}
               >
-{isHosting ? 'Stop Earning' : 'Start Earning'}
+                {isHosting ? 'Stop Hosting' : 'Start Hosting'}
               </button>
+              {!isRegisteredOnChain && onRegisterToVault && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRegisterToVault?.();
+                  }}
+                  disabled={isRegisteringOnChain}
+                  className="flex-1 px-3 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-800 disabled:opacity-50 text-white text-sm font-bold rounded-lg transition-all transform hover:scale-[1.02] flex items-center justify-center gap-1"
+                  title="Register this model to ModelVault on-chain"
+                >
+                  {isRegisteringOnChain ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                      </svg>
+                      Registering...
+                    </>
+                  ) : (
+                    <>⛓️ Register</>
+                  )}
+                </button>
+              )}
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   onUninstall?.();
                 }}
-                className="flex-1 px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-bold rounded-lg transition-all transform hover:scale-[1.02]"
+                className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-bold rounded-lg transition-all transform hover:scale-[1.02]"
               >
                 Remove
               </button>
@@ -235,7 +269,7 @@ export default function ModelCard({
                 }}
                 className="flex-1 px-3 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-bold rounded-lg transition-all transform hover:scale-[1.02]"
               >
-                Install & Start Earning
+                Start Hosting
               </button>
           ) : (
             /* Not downloaded, not hosting: Give user choice */
@@ -247,7 +281,7 @@ export default function ModelCard({
                     }}
                     className="flex-1 px-3 py-2 bg-gradient-to-r from-aipg-orange to-orange-600 hover:from-orange-600 hover:to-aipg-orange text-white text-sm font-bold rounded-lg transition-all transform hover:scale-[1.02]"
                   >
-                    Install Only
+                    Download Only
                   </button>
                   <button
                     onClick={(e) => {
@@ -256,7 +290,7 @@ export default function ModelCard({
                     }}
                     className="flex-1 px-3 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-bold rounded-lg transition-all transform hover:scale-[1.02]"
                   >
-                    Install & Start Earning
+                    Start Hosting
                   </button>
             </>
           )}

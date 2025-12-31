@@ -6,6 +6,8 @@ services:
           dockerfile: Dockerfile
           # BuildKit cache mounts persist npm packages and Next.js build cache
           # Enable BuildKit for cache mounts (default in Docker Desktop)
+          args:
+            BUILD_ELECTRON: ${BUILD_ELECTRON:-true}  # Set to false to skip Electron build
         container_name: comfy-bridge-ui
         
         deploy:
@@ -21,10 +23,14 @@ services:
           - COMFY_BRIDGE_PATH=/app/comfy-bridge
           - MODELS_PATH=/app/ComfyUI/models
           - ENV_FILE_PATH=/app/comfy-bridge/.env
-          - MODEL_CONFIGS_PATH=/app/comfy-bridge/model_configs.json
-          - GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH=/app/grid-image-model-reference
+          # GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH removed - blockchain is source of truth
+          - MODELVAULT_CONTRACT=${MODELVAULT_CONTRACT:-0x79F39f2a0eA476f53994812e6a8f3C8CFe08c609}
+          - MODELVAULT_RPC=${MODELVAULT_RPC:-https://mainnet.base.org}
           - CIVITAI_API_KEY=${CIVITAI_API_KEY:-}
           - HUGGING_FACE_API_KEY=${HUGGING_FACE_API_KEY:-}
+          # WalletConnect/Reown Project ID - eliminates 403 warning
+          # You can get your own project ID from https://cloud.walletconnect.com
+          - NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=${NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID:-12b7ae7346ef69c8b50e27d3fba44e61}
         
         ports:
           - "5000:5000"  # Management UI
@@ -32,10 +38,6 @@ services:
         volumes:
           # Share .env file for reading/writing model selections
           - ./.env:/app/comfy-bridge/.env
-          # Share model configs (read-write so it can be updated by catalog sync)
-          - ./model_configs.json:/app/comfy-bridge/model_configs.json
-          # Share download scripts
-          - ./download_models_from_catalog.py:/app/comfy-bridge/download_models_from_catalog.py:ro
           # Share utility scripts
           - ./model_manager.py:/app/comfy-bridge/model_manager.py:ro
           - ./get_gpu_info.py:/app/comfy-bridge/get_gpu_info.py:ro
@@ -47,6 +49,8 @@ services:
           - //var/run/docker.sock:/var/run/docker.sock
           # Share docker-compose.yml for restarts
           - ./docker-compose.yml:/app/comfy-bridge/docker-compose.yml:ro
+          # Electron build output (accessible from host)
+          - ./management-ui-nextjs/dist:/app/dist
         
         restart: unless-stopped
         healthcheck:
@@ -67,6 +71,14 @@ services:
       # This dramatically speeds up rebuilds (PyTorch wheels ~900MB cached)
       # To force a clean rebuild: DOCKER_BUILDKIT=1 docker-compose build --no-cache comfy-bridge
       # Enable BuildKit for cache mounts (default in Docker Desktop)
+      args:
+        # Pass model configuration as build args to download models during image build
+        GRID_MODEL: ${GRID_MODEL:-}
+        WORKFLOW_FILE: ${WORKFLOW_FILE:-}
+        MODELVAULT_CONTRACT: ${MODELVAULT_CONTRACT:-0x79F39f2a0eA476f53994812e6a8f3C8CFe08c609}
+        MODELVAULT_RPC: ${MODELVAULT_RPC:-https://mainnet.base.org}
+        HUGGING_FACE_API_KEY: ${HUGGING_FACE_API_KEY:-}
+        CIVITAI_API_KEY: ${CIVITAI_API_KEY:-}
     container_name: comfy-bridge
     
     deploy:
@@ -93,6 +105,9 @@ services:
       - HUGGING_FACE_API_KEY=${HUGGING_FACE_API_KEY:-}
       - CIVITAI_API_KEY=${CIVITAI_API_KEY:-}
       - DEBUG=${DEBUG:-true}
+      - MODELVAULT_CONTRACT=${MODELVAULT_CONTRACT:-0x79F39f2a0eA476f53994812e6a8f3C8CFe08c609}
+      - MODELVAULT_RPC=${MODELVAULT_RPC:-https://mainnet.base.org}
+      - MODELS_PATH=/app/ComfyUI/models
     
     # Ports
     ports:
@@ -114,10 +129,11 @@ services:
       - ./workflows:/app/comfy-bridge/workflows:ro
       # Config file (optional)
       - ./.env:/app/comfy-bridge/.env:ro
-      # Model configs (shared with management-ui)
-      - ./model_configs.json:/app/comfy-bridge/model_configs.json
-      # Grid image model reference repository
-      - ../grid-image-model-reference:/app/grid-image-model-reference:ro
+      # Grid image model reference repository removed - blockchain is source of truth
+      # All model metadata now comes from ModelVault contract on Base Mainnet
+      # Mount local Python code for development (allows hot-reload of code changes)
+      - ./comfy_bridge:/app/comfy-bridge/comfy_bridge:ro
+      - ./download_models_from_chain.py:/app/comfy-bridge/download_models_from_chain.py:ro
     
     # Restart policy
     restart: unless-stopped

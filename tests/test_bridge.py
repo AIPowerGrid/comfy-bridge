@@ -39,10 +39,10 @@ class TestComfyUIBridge:
 
     @pytest.mark.asyncio
     async def test_process_job_polling_timeout(self, bridge):
-        """Test _process_job_polling with timeout."""
-        with patch('comfy_bridge.bridge.time.time', side_effect=[0, 601]):  # 601 seconds
-            with pytest.raises(Exception, match="Job timed out after 600s"):
-                await bridge._process_job_polling("test-prompt", "test-job", "test-model")
+        """Test _process_job_polling - timeout removed, jobs can run indefinitely."""
+        # Timeout has been removed, so this test is no longer applicable
+        # Jobs will continue polling until completion without timeout
+        pass
 
     @pytest.mark.asyncio
     async def test_check_filesystem_fallback_no_files(self, bridge):

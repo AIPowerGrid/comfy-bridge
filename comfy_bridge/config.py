@@ -1,5 +1,12 @@
+"""
+ComfyBridge Configuration
+
+Model registration is tracked on the blockchain (ModelVault contract).
+The chain is the single source of truth for model discovery and validation.
+"""
+
 import os
-from dotenv import load_dotenv
+from dotenv import load_dotenv  # type: ignore  # dotenv installed via requirements.txt in Docker
 
 load_dotenv()
 
@@ -22,9 +29,22 @@ class Settings:
     )
     WORKFLOW_FILE = os.getenv("WORKFLOW_FILE", None)
     COMFYUI_OUTPUT_DIR = os.getenv("COMFYUI_OUTPUT_DIR", r"C:\dev\ComfyUI\output")
-    GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH = os.getenv("GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH")
+    
+    # JSON catalog no longer used - blockchain is now the single source of truth
+    # GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH removed
+    
+    # ModelVault on-chain model registry (Base Mainnet)
+    # The blockchain is the single source of truth for model registration
+    MODELVAULT_ENABLED = os.getenv("MODELVAULT_ENABLED", "true").lower() == "true"
+    MODELVAULT_RPC_URL = os.getenv("MODELVAULT_RPC_URL", "https://mainnet.base.org")
+    MODELVAULT_CONTRACT = os.getenv("MODELVAULT_CONTRACT", "0x79F39f2a0eA476f53994812e6a8f3C8CFe08c609")
 
     @classmethod
     def validate(cls):
         if not cls.GRID_API_KEY:
             raise RuntimeError("GRID_API_KEY environment variable is required.")
+    
+    @classmethod
+    def is_chain_enabled(cls) -> bool:
+        """Check if blockchain model registry is enabled."""
+        return cls.MODELVAULT_ENABLED

@@ -43,8 +43,37 @@ def _load_json_if_exists(path: str) -> dict:
         return {}
 
 
+# Known file patterns for complex models
+MODEL_FILE_PATTERNS: dict[str, list[str]] = {
+    "wan2.2-t2v-a14b": [
+        "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+        "wan2.2_vae.safetensors",
+        "wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors",
+        "wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors",
+        "wan2.2_t2v_lightx2v_4steps_lora_v1.1_high_noise.safetensors",
+        "wan2.2_t2v_lightx2v_4steps_lora_v1.1_low_noise.safetensors",
+    ],
+    "wan2.2-t2v-a14b-hq": [
+        "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+        "wan2.2_vae.safetensors",
+        "wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors",
+        "wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors",
+    ],
+    "wan2.2_ti2v_5B": [
+        "wan2.2_ti2v_5B_fp16.safetensors",
+        "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+        "wan2.2_vae.safetensors",
+    ],
+}
+
 def _expected_files_for_model(model_id: str) -> list[str]:
     """Resolve expected filenames for a model from catalogs (best-effort)."""
+    # Check known patterns first
+    if model_id in MODEL_FILE_PATTERNS:
+        return MODEL_FILE_PATTERNS[model_id]
+    if model_id.lower() in MODEL_FILE_PATTERNS:
+        return MODEL_FILE_PATTERNS[model_id.lower()]
+    
     sd = _load_json_if_exists(STABLE_DIFFUSION_CATALOG)
     cfg = _load_json_if_exists(SIMPLE_CONFIG_PATH)
     files: list[str] = []
@@ -200,12 +229,17 @@ class DownloadsHandler(BaseHTTPRequestHandler):
                 self._sse({"type": "complete", "success": True, "message": "Already installed", "models": models, "timestamp": time.time()})
                 return
 
-            # Duplicate protection
+            # Duplicate protection - check active downloads
             existing = _get_active_download(current_model)
             if existing and existing.poll() is None:
                 self._begin_sse()
                 self._sse({"type": "info", "message": f"Download already in progress for {current_model}", "model": current_model})
                 return
+            
+            # Clean up finished process if any
+            if existing:
+                _set_active_download(current_model, None)
+            
             # Check lock file for orphaned process
             locks = _read_locks()
             lock = locks.get(current_model)
@@ -217,17 +251,15 @@ class DownloadsHandler(BaseHTTPRequestHandler):
                     return
                 else:
                     # Clean stale lock
-                    locks.pop(current_model, None)
-                    _write_locks(locks)
+                    print(f"[DLAPI] Cleaning stale lock for {current_model} (pid={pid})", flush=True)
+                    _remove_lock(current_model)
 
-            # Spawn download process
+            # Spawn download process using blockchain-based download script
             cmd = [
                 "python3",
-                "/app/comfy-bridge/download_models_from_catalog.py",
+                "/app/comfy-bridge/download_models_from_chain.py",
                 "--models-path",
                 models_dir,
-                "--config",
-                "/app/comfy-bridge/model_configs.json",
                 "--models",
             ] + models
 
@@ -262,6 +294,19 @@ class DownloadsHandler(BaseHTTPRequestHandler):
                         continue
                     # Mirror to server log for debugging
                     print(f"[DLAPI] {line}", flush=True)
+                    
+                    # Check if line is SSE JSON format from emit_progress()
+                    if line.startswith("data: "):
+                        try:
+                            data = json.loads(line[6:])  # Strip "data: " prefix
+                            # Forward the JSON data directly
+                            self._sse(data)
+                            last_emit = now
+                            continue
+                        except json.JSONDecodeError:
+                            pass  # Fall through to legacy parsing
+                    
+                    # Legacy parsing for non-JSON output
                     message_type = "info"
                     progress = 0
                     speed = ""

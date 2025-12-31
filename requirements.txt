@@ -10,3 +10,8 @@ black>=23.1.0
 tqdm>=4.65.0
 flask>=2.3.0
 flask-cors>=4.0.0
+web3>=6.0.0
+# Optional performance enhancements (installed via install-optional-deps.sh)
+# onnx>=1.15.0         # ONNX support for model interchange (via onnxruntime)
+# sageattention>=1.0.0 # High-performance attention (uncomment if available)
+# flash-attn>=2.0.0    # Flash attention optimization

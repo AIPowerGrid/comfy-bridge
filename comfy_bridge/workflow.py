@@ -1,7 +1,7 @@
 import json
 import os
 import copy
-import httpx
+import httpx  # type: ignore  # httpx installed via requirements.txt in Docker
 import uuid
 import logging
 from typing import Dict, Any, Optional, Tuple, List
@@ -83,9 +83,16 @@ def is_model_compatible(model_name: str, model_type: str) -> bool:
     model_lower = model_name.lower()
     
     if model_type == "flux":
-        # Flux models: flux1CompactCLIP, umt5, flux1-krea-dev, ae.safetensors
+        # Flux models: flux1CompactCLIP, umt5_xxl (T5XXL only, not regular T5), flux1-krea-dev, ae.safetensors
+        # For T5/UMT5 models, Flux requires T5XXL specifically (not regular T5)
+        # Check for T5XXL variants: t5xxl, umt5_xxl, umt5xxl, or anything with "xxl" in the name
+        if "t5" in model_lower or "umt5" in model_lower:
+            # Only accept T5/UMT5 models if they are T5XXL variants (have "xxl" in name)
+            return "xxl" in model_lower or "t5xxl" in model_lower
+        
+        # Other Flux-compatible models
         return any(keyword in model_lower for keyword in [
-            "flux", "umt5", "clip_l", "t5xxl", "ae.safetensors"
+            "flux", "clip_l", "ae.safetensors"
         ])
     elif model_type == "wanvideo":
         # WanVideo models: wan2.2, wan_2.1
@@ -116,10 +123,12 @@ def _force_video_processing(job: Dict[str, Any], model_type: str) -> None:
 
 async def validate_and_fix_model_filenames(
     workflow: Dict[str, Any], 
-    available_models: Dict[str, Any]
+    available_models: Dict[str, Any],
+    job_model_name: Optional[str] = None
 ) -> Dict[str, Any]:
     """Validate and fix model filenames in workflow to match available models.
     
+    Uses job_model_name to select the best matching checkpoint when available.
     Only replaces models with compatible model types (e.g., Flux with Flux, WanVideo with WanVideo).
     Fails if no compatible models are available.
     
@@ -129,7 +138,7 @@ async def validate_and_fix_model_filenames(
     fixes_applied = []
     model_type = detect_workflow_model_type(workflow)
     
-    logger.info(f"Detected workflow model type: {model_type}")
+    logger.info(f"Detected workflow model type: {model_type}, job model: {job_model_name}")
     
     if model_type == "unknown":
         logger.warning("Could not detect workflow model type - proceeding with validation anyway")
@@ -175,18 +184,57 @@ async def validate_and_fix_model_filenames(
                         clip2_options = [m for m in clip2_options if is_model_compatible(m, "flux")]
                     
                     if not clip1_options:
-                        logger.debug("No clip_name1 options available for DualCLIPLoader - keeping existing value")
+                        # If workflow requires DualCLIPLoader but no compatible models are available, fail
+                        current_clip1 = widgets[0] if len(widgets) > 0 else "unknown"
+                        all_dual_clip = available_models.get("DualCLIPLoader", {})
+                        all_clip1 = all_dual_clip.get("clip_name1", []) if isinstance(all_dual_clip, dict) else []
+                        raise ValueError(
+                            f"Required DualCLIPLoader clip_name1 '{current_clip1}' is not available. "
+                            f"No compatible clip_name1 models found in ComfyUI for {model_type} workflow. "
+                            f"Available clip_name1 models: {all_clip1}. "
+                            f"Please ensure required model files are installed in the ComfyUI models directory."
+                        )
                     elif widgets[0] not in clip1_options:
                         old_clip1 = widgets[0]
                         widgets[0] = clip1_options[0]
                         fixes_applied.append(f"Node {node_id} clip_name1: {old_clip1} -> {widgets[0]}")
                     
                     if len(widgets) >= 2:
+                        current_clip2 = widgets[1] if len(widgets) > 1 else "unknown"
+                        current_clip2_lower = current_clip2.lower() if current_clip2 else ""
+                        
+                        # For Flux models, clip_name2 must be T5XXL (not regular T5)
+                        # Check if workflow requires T5XXL specifically
+                        requires_t5xxl = model_type == "flux" and ("t5xxl" in current_clip2_lower or "xxl" in current_clip2_lower)
+                        
                         if not clip2_options:
-                            logger.debug("No clip_name2 options available for DualCLIPLoader - keeping existing value")
+                            # If workflow requires DualCLIPLoader but no compatible models are available, fail
+                            all_dual_clip = available_models.get("DualCLIPLoader", {})
+                            all_clip2 = all_dual_clip.get("clip_name2", []) if isinstance(all_dual_clip, dict) else []
+                            raise ValueError(
+                                f"Required DualCLIPLoader clip_name2 '{current_clip2}' is not available. "
+                                f"No compatible clip_name2 models found in ComfyUI for {model_type} workflow. "
+                                f"Available clip_name2 models: {all_clip2}. "
+                                f"Please ensure required model files are installed in the ComfyUI models directory."
+                            )
                         elif widgets[1] not in clip2_options:
-                            old_clip2 = widgets[1]
-                            widgets[1] = clip2_options[0]
+                            # If workflow requires T5XXL, only replace with another T5XXL model
+                            if requires_t5xxl:
+                                t5xxl_options = [m for m in clip2_options if "t5xxl" in m.lower() or "xxl" in m.lower()]
+                                if not t5xxl_options:
+                                    all_dual_clip = available_models.get("DualCLIPLoader", {})
+                                    all_clip2 = all_dual_clip.get("clip_name2", []) if isinstance(all_dual_clip, dict) else []
+                                    raise ValueError(
+                                        f"Required DualCLIPLoader clip_name2 '{current_clip2}' (T5XXL) is not available. "
+                                        f"Flux models require T5XXL text encoder, but no T5XXL models found. "
+                                        f"Available clip_name2 models: {all_clip2}. "
+                                        f"Please install a T5XXL model (e.g., t5xxl_fp16.safetensors or umt5_xxl_*.safetensors)."
+                                    )
+                                old_clip2 = widgets[1]
+                                widgets[1] = t5xxl_options[0]
+                            else:
+                                old_clip2 = widgets[1]
+                                widgets[1] = clip2_options[0]
                             fixes_applied.append(f"Node {node_id} clip_name2: {old_clip2} -> {widgets[1]}")
                     
                     node["widgets_values"] = widgets
@@ -199,7 +247,15 @@ async def validate_and_fix_model_filenames(
                         unet_options = [m for m in unet_options if is_model_compatible(m, "flux")]
                     
                     if not unet_options:
-                        logger.debug("No UNETLoader options available - keeping existing value")
+                        # If workflow requires UNETLoader but no compatible models are available, fail
+                        current_unet = widgets[0] if len(widgets) > 0 else "unknown"
+                        all_unet_models = available_models.get("UNETLoader", [])
+                        raise ValueError(
+                            f"Required UNETLoader model '{current_unet}' is not available. "
+                            f"No compatible UNETLoader models found in ComfyUI for {model_type} workflow. "
+                            f"Available UNETLoader models: {all_unet_models}. "
+                            f"Please ensure required model files are installed in the ComfyUI models directory."
+                        )
                     elif widgets[0] not in unet_options:
                         old_unet = widgets[0]
                         widgets[0] = unet_options[0]
@@ -214,7 +270,15 @@ async def validate_and_fix_model_filenames(
                         vae_options = [m for m in vae_options if is_model_compatible(m, "flux")]
                     
                     if not vae_options:
-                        logger.debug("No VAELoader options available - keeping existing value")
+                        # If workflow requires VAELoader but no compatible models are available, fail
+                        current_vae = widgets[0] if len(widgets) > 0 else "unknown"
+                        all_vae_models = available_models.get("VAELoader", [])
+                        raise ValueError(
+                            f"Required VAELoader model '{current_vae}' is not available. "
+                            f"No compatible VAELoader models found in ComfyUI for {model_type} workflow. "
+                            f"Available VAELoader models: {all_vae_models}. "
+                            f"Please ensure required model files are installed in the ComfyUI models directory."
+                        )
                     elif widgets[0] not in vae_options:
                         old_vae = widgets[0]
                         widgets[0] = vae_options[0]
@@ -230,95 +294,235 @@ async def validate_and_fix_model_filenames(
             class_type = node_data.get("class_type", "")
             inputs = node_data.get("inputs", {})
         
-        # Fix DualCLIPLoader (Flux models)
-        if class_type == "DualCLIPLoader":
-            if model_type != "flux":
-                logger.warning(f"Node {node_id}: DualCLIPLoader found but workflow type is {model_type} - may be incompatible")
+            # Fix DualCLIPLoader (Flux models)
+            if class_type == "DualCLIPLoader":
+                if model_type != "flux":
+                    logger.warning(f"Node {node_id}: DualCLIPLoader found but workflow type is {model_type} - may be incompatible")
+                
+                dual_clip_models = available_models.get("DualCLIPLoader") or {}
+                clip1_options = dual_clip_models.get("clip_name1", []) if isinstance(dual_clip_models, dict) else []
+                clip2_options = dual_clip_models.get("clip_name2", []) if isinstance(dual_clip_models, dict) else []
+                
+                # Filter to compatible models only
+                if model_type == "flux":
+                    clip1_options = [m for m in clip1_options if is_model_compatible(m, "flux")]
+                    clip2_options = [m for m in clip2_options if is_model_compatible(m, "flux")]
+                
+                # Check clip_name1 - must check if input exists FIRST, then validate options
+                if "clip_name1" in inputs:
+                    current_clip1 = inputs.get("clip_name1")
+                    if not clip1_options:
+                        # If workflow requires DualCLIPLoader but no compatible models are available, fail
+                        all_dual_clip = available_models.get("DualCLIPLoader", {})
+                        all_clip1 = all_dual_clip.get("clip_name1", []) if isinstance(all_dual_clip, dict) else []
+                        raise ValueError(
+                            f"Required DualCLIPLoader clip_name1 '{current_clip1}' is not available. "
+                            f"No compatible clip_name1 models found in ComfyUI for {model_type} workflow. "
+                            f"Available clip_name1 models: {all_clip1}. "
+                            f"Please ensure required model files are installed in the ComfyUI models directory."
+                        )
+                    elif current_clip1 not in clip1_options:
+                        new_clip1 = clip1_options[0]
+                        logger.warning(
+                            f"Node {node_id}: Replacing DualCLIPLoader clip_name1 '{current_clip1}' "
+                            f"with '{new_clip1}' (not in available models: {clip1_options})"
+                        )
+                        inputs["clip_name1"] = new_clip1
+                        fixes_applied.append(f"Node {node_id} clip_name1: {current_clip1} -> {new_clip1}")
+                
+                # Check clip_name2 - must check if input exists FIRST, then validate options
+                if "clip_name2" in inputs:
+                    current_clip2 = inputs.get("clip_name2")
+                    current_clip2_lower = current_clip2.lower() if current_clip2 else ""
+                    
+                    # For Flux models, clip_name2 must be T5XXL (not regular T5)
+                    # Check if workflow requires T5XXL specifically
+                    requires_t5xxl = model_type == "flux" and ("t5xxl" in current_clip2_lower or "xxl" in current_clip2_lower)
+                    
+                    if not clip2_options:
+                        # If workflow requires DualCLIPLoader but no compatible models are available, fail
+                        all_dual_clip = available_models.get("DualCLIPLoader", {})
+                        all_clip2 = all_dual_clip.get("clip_name2", []) if isinstance(all_dual_clip, dict) else []
+                        raise ValueError(
+                            f"Required DualCLIPLoader clip_name2 '{current_clip2}' is not available. "
+                            f"No compatible clip_name2 models found in ComfyUI for {model_type} workflow. "
+                            f"Available clip_name2 models: {all_clip2}. "
+                            f"Please ensure required model files are installed in the ComfyUI models directory."
+                        )
+                    elif current_clip2 not in clip2_options:
+                        # If workflow requires T5XXL, only replace with another T5XXL model
+                        if requires_t5xxl:
+                            t5xxl_options = [m for m in clip2_options if "t5xxl" in m.lower() or "xxl" in m.lower()]
+                            if not t5xxl_options:
+                                all_dual_clip = available_models.get("DualCLIPLoader", {})
+                                all_clip2 = all_dual_clip.get("clip_name2", []) if isinstance(all_dual_clip, dict) else []
+                                raise ValueError(
+                                    f"Required DualCLIPLoader clip_name2 '{current_clip2}' (T5XXL) is not available. "
+                                    f"Flux models require T5XXL text encoder, but no T5XXL models found. "
+                                    f"Available clip_name2 models: {all_clip2}. "
+                                    f"Please install a T5XXL model (e.g., t5xxl_fp16.safetensors or umt5_xxl_*.safetensors)."
+                                )
+                            new_clip2 = t5xxl_options[0]
+                        else:
+                            new_clip2 = clip2_options[0]
+                        
+                        logger.warning(
+                            f"Node {node_id}: Replacing DualCLIPLoader clip_name2 '{current_clip2}' "
+                            f"with '{new_clip2}' (not in available models: {clip2_options})"
+                        )
+                        inputs["clip_name2"] = new_clip2
+                        fixes_applied.append(f"Node {node_id} clip_name2: {current_clip2} -> {new_clip2}")
             
-            dual_clip_models = available_models.get("DualCLIPLoader") or {}
-            clip1_options = dual_clip_models.get("clip_name1", []) if isinstance(dual_clip_models, dict) else []
-            clip2_options = dual_clip_models.get("clip_name2", []) if isinstance(dual_clip_models, dict) else []
+            # Fix UNETLoader (Flux models)
+            elif class_type == "UNETLoader":
+                if model_type != "flux":
+                    logger.warning(f"Node {node_id}: UNETLoader found but workflow type is {model_type} - may be incompatible")
+                
+                unet_options = available_models.get("UNETLoader") or []
+                
+                # Filter to compatible models only
+                if model_type == "flux":
+                    unet_options = [m for m in unet_options if is_model_compatible(m, "flux")]
+                
+                if "unet_name" in inputs:
+                    current_unet = inputs.get("unet_name")
+                    if not unet_options:
+                        # If workflow requires UNETLoader but no compatible models are available, fail
+                        all_unet_models = available_models.get("UNETLoader", [])
+                        raise ValueError(
+                            f"Required UNETLoader model '{current_unet}' is not available. "
+                            f"No compatible UNETLoader models found in ComfyUI for {model_type} workflow. "
+                            f"Available UNETLoader models: {all_unet_models}. "
+                            f"Please ensure required model files are installed in the ComfyUI models directory."
+                        )
+                    elif current_unet not in unet_options:
+                        # Try to find matching model based on job model name
+                        new_unet = None
+                        
+                        if job_model_name:
+                            job_name_normalized = job_model_name.lower().replace("-", "").replace("_", "").replace(".", "")
+                            for unet in unet_options:
+                                unet_normalized = unet.lower().replace("-", "").replace("_", "").replace(".", "")
+                                if job_name_normalized in unet_normalized or unet_normalized in job_name_normalized:
+                                    new_unet = unet
+                                    logger.info(f"Found matching UNETLoader model '{unet}' for job model '{job_model_name}'")
+                                    break
+                        
+                        # Fall back to first available only if no match found
+                        if not new_unet:
+                            new_unet = unet_options[0]
+                            logger.warning(f"No matching UNET for '{job_model_name}', using first available: {new_unet}")
+                        
+                        logger.warning(
+                            f"Node {node_id}: Replacing UNETLoader unet_name '{current_unet}' "
+                            f"with '{new_unet}' (available: {unet_options[:3]})"
+                        )
+                        inputs["unet_name"] = new_unet
+                        fixes_applied.append(f"Node {node_id} unet_name: {current_unet} -> {new_unet}")
             
-            # Filter to compatible models only
-            if model_type == "flux":
-                clip1_options = [m for m in clip1_options if is_model_compatible(m, "flux")]
-                clip2_options = [m for m in clip2_options if is_model_compatible(m, "flux")]
+            # Fix VAELoader (Flux models)
+            elif class_type == "VAELoader":
+                if model_type != "flux":
+                    logger.warning(f"Node {node_id}: VAELoader found but workflow type is {model_type} - may be incompatible")
+                
+                vae_options = available_models.get("VAELoader") or []
+                
+                # Filter to compatible models only
+                if model_type == "flux":
+                    vae_options = [m for m in vae_options if is_model_compatible(m, "flux")]
+                
+                if "vae_name" in inputs:
+                    current_vae = inputs.get("vae_name")
+                    if not vae_options:
+                        # If workflow requires VAELoader but no compatible models are available, fail
+                        all_vae_models = available_models.get("VAELoader", [])
+                        raise ValueError(
+                            f"Required VAELoader model '{current_vae}' is not available. "
+                            f"No compatible VAELoader models found in ComfyUI for {model_type} workflow. "
+                            f"Available VAELoader models: {all_vae_models}. "
+                            f"Please ensure required model files are installed in the ComfyUI models directory."
+                        )
+                    elif current_vae not in vae_options:
+                        new_vae = vae_options[0]
+                        logger.warning(
+                            f"Node {node_id}: Replacing VAELoader vae_name '{current_vae}' "
+                            f"with '{new_vae}' (not in available models: {vae_options})"
+                        )
+                        inputs["vae_name"] = new_vae
+                        fixes_applied.append(f"Node {node_id} vae_name: {current_vae} -> {new_vae}")
             
-            # Check clip_name1 - must check if input exists FIRST, then validate options
-            if "clip_name1" in inputs:
-                current_clip1 = inputs.get("clip_name1")
-                if not clip1_options:
-                    logger.debug("No clip_name1 options available for DualCLIPLoader – keeping workflow value")
-                elif current_clip1 not in clip1_options:
-                    new_clip1 = clip1_options[0]
-                    logger.warning(
-                        f"Node {node_id}: Replacing DualCLIPLoader clip_name1 '{current_clip1}' "
-                        f"with '{new_clip1}' (not in available models: {clip1_options})"
-                    )
-                    inputs["clip_name1"] = new_clip1
-                    fixes_applied.append(f"Node {node_id} clip_name1: {current_clip1} -> {new_clip1}")
-            
-            # Check clip_name2 - must check if input exists FIRST, then validate options
-            if "clip_name2" in inputs:
-                current_clip2 = inputs.get("clip_name2")
-                if not clip2_options:
-                    logger.debug("No clip_name2 options available for DualCLIPLoader – keeping workflow value")
-                elif current_clip2 not in clip2_options:
-                    new_clip2 = clip2_options[0]
-                    logger.warning(
-                        f"Node {node_id}: Replacing DualCLIPLoader clip_name2 '{current_clip2}' "
-                        f"with '{new_clip2}' (not in available models: {clip2_options})"
-                    )
-                    inputs["clip_name2"] = new_clip2
-                    fixes_applied.append(f"Node {node_id} clip_name2: {current_clip2} -> {new_clip2}")
-        
-        # Fix UNETLoader (Flux models)
-        elif class_type == "UNETLoader":
-            if model_type != "flux":
-                logger.warning(f"Node {node_id}: UNETLoader found but workflow type is {model_type} - may be incompatible")
-            
-            unet_options = available_models.get("UNETLoader") or []
-            
-            # Filter to compatible models only
-            if model_type == "flux":
-                unet_options = [m for m in unet_options if is_model_compatible(m, "flux")]
-            
-            if "unet_name" in inputs:
-                current_unet = inputs.get("unet_name")
-                if not unet_options:
-                    logger.debug("No UNETLoader options available – keeping workflow value")
-                elif current_unet not in unet_options:
-                    new_unet = unet_options[0]
-                    logger.warning(
-                        f"Node {node_id}: Replacing UNETLoader unet_name '{current_unet}' "
-                        f"with '{new_unet}' (not in available models: {unet_options})"
-                    )
-                    inputs["unet_name"] = new_unet
-                    fixes_applied.append(f"Node {node_id} unet_name: {current_unet} -> {new_unet}")
-        
-        # Fix VAELoader (Flux models)
-        elif class_type == "VAELoader":
-            if model_type != "flux":
-                logger.warning(f"Node {node_id}: VAELoader found but workflow type is {model_type} - may be incompatible")
-            
-            vae_options = available_models.get("VAELoader") or []
-            
-            # Filter to compatible models only
-            if model_type == "flux":
-                vae_options = [m for m in vae_options if is_model_compatible(m, "flux")]
-            
-            if "vae_name" in inputs:
-                current_vae = inputs.get("vae_name")
-                if not vae_options:
-                    logger.debug("No VAELoader options available – keeping workflow value")
-                elif current_vae not in vae_options:
-                    new_vae = vae_options[0]
-                    logger.warning(
-                        f"Node {node_id}: Replacing VAELoader vae_name '{current_vae}' "
-                        f"with '{new_vae}' (not in available models: {vae_options})"
-                    )
-                    inputs["vae_name"] = new_vae
-                    fixes_applied.append(f"Node {node_id} vae_name: {current_vae} -> {new_vae}")
+            # Fix CheckpointLoaderSimple (SDXL/Flux checkpoint models)
+            elif class_type == "CheckpointLoaderSimple":
+                # Get checkpoint options from ComfyUI - use checkpoints key or fall back to CheckpointLoaderSimple
+                ckpt_options = available_models.get("checkpoints") or available_models.get("CheckpointLoaderSimple") or []
+                
+                # Filter out FP8 models - they don't contain CLIP and won't work with CheckpointLoaderSimple
+                # FP8 models need UNETLoader + DualCLIPLoader + VAELoader instead
+                full_ckpt_options = [c for c in ckpt_options if "fp8" not in c.lower()]
+                if full_ckpt_options:
+                    logger.debug(f"Filtered to {len(full_ckpt_options)} full checkpoints (excluding FP8)")
+                else:
+                    # If no non-FP8 options, use all options (will likely fail but better than nothing)
+                    full_ckpt_options = ckpt_options
+                    logger.warning("No full checkpoints available (only FP8 models found)")
+                
+                if "ckpt_name" in inputs:
+                    current_ckpt = inputs.get("ckpt_name")
+                    # Check for placeholder values
+                    placeholders = ["checkpoint_name.safetensors", "model.safetensors", "checkpoint.safetensors"]
+                    is_placeholder = current_ckpt in placeholders
+                    
+                    if not full_ckpt_options:
+                        # If workflow requires CheckpointLoaderSimple but no compatible models are available, fail
+                        raise ValueError(
+                            f"Required CheckpointLoaderSimple checkpoint '{current_ckpt}' is not available. "
+                            f"No compatible checkpoint models found in ComfyUI for {model_type} workflow. "
+                            f"Available checkpoint models: {ckpt_options}. "
+                            f"Please ensure required model files are installed in the ComfyUI models directory."
+                        )
+                    elif is_placeholder or current_ckpt not in ckpt_options:
+                        # Try to find best matching checkpoint based on job model name
+                        new_ckpt = None
+                        
+                        if job_model_name:
+                            # Normalize job model name for matching (remove fp8, krea, etc for base model matching)
+                            job_base = job_model_name.lower()
+                            # Extract base model name (e.g., "flux.1-krea-dev" -> look for "flux")
+                            
+                            # First, try exact substring match on full checkpoints
+                            job_name_normalized = job_base.replace("-", "").replace("_", "").replace(".", "")
+                            for ckpt in full_ckpt_options:
+                                ckpt_normalized = ckpt.lower().replace("-", "").replace("_", "").replace(".", "")
+                                if job_name_normalized in ckpt_normalized or ckpt_normalized in job_name_normalized:
+                                    new_ckpt = ckpt
+                                    logger.info(f"Found matching full checkpoint '{ckpt}' for job model '{job_model_name}'")
+                                    break
+                            
+                            # Second, try base model matching (flux.1-krea-dev -> flux1-dev.safetensors)
+                            if not new_ckpt:
+                                # Extract base model keywords
+                                base_keywords = ["flux", "sdxl", "sd", "chroma", "stable"]
+                                for keyword in base_keywords:
+                                    if keyword in job_base:
+                                        for ckpt in full_ckpt_options:
+                                            if keyword in ckpt.lower():
+                                                new_ckpt = ckpt
+                                                logger.info(f"Found base-model matching checkpoint '{ckpt}' for job model '{job_model_name}' (matched '{keyword}')")
+                                                break
+                                    if new_ckpt:
+                                        break
+                        
+                        # Fall back to first available full checkpoint if no match found
+                        if not new_ckpt:
+                            new_ckpt = full_ckpt_options[0]
+                            logger.warning(f"No matching checkpoint for '{job_model_name}', using first available full checkpoint")
+                        
+                        logger.warning(
+                            f"Node {node_id}: Replacing CheckpointLoaderSimple ckpt_name '{current_ckpt}' "
+                            f"with '{new_ckpt}' (available full checkpoints: {full_ckpt_options[:3]})"
+                        )
+                        inputs["ckpt_name"] = new_ckpt
+                        fixes_applied.append(f"Node {node_id} ckpt_name: {current_ckpt} -> {new_ckpt}")
     
     if fixes_applied:
         logger.info(f"Applied {len(fixes_applied)} model filename fixes:")
@@ -488,10 +692,17 @@ async def process_workflow(
     payload = job.get("payload", {})
     seed = generate_seed(payload.get("seed"))
     
-    # Debug logging
-    logger.debug(f"Job payload: {payload}")
-    logger.debug(f"Job prompt: {payload.get('prompt')}")
-    logger.debug(f"Job negative_prompt: {payload.get('negative_prompt')}")
+    # Default negative prompt for FLUX models
+    FLUX_DEFAULT_NEGATIVE_PROMPT = "blurry, low quality, distorted, deformed, ugly, bad anatomy, watermark, signature, text"
+    
+    # Enhanced debug logging for negative prompt troubleshooting
+    logger.info(f"📝 Job payload keys: {list(payload.keys())}")
+    logger.info(f"📝 Job prompt: {(payload.get('prompt') or '')[:100]}...")
+    neg_prompt = payload.get("negative_prompt", "")
+    if neg_prompt:
+        logger.info(f"📝 Job negative_prompt: {neg_prompt[:100]}...")
+    else:
+        logger.warning(f"📝 No negative_prompt in payload! Full payload: {payload}")
 
     # Make a deep copy to avoid modifying the original
     processed_workflow = copy.deepcopy(workflow)
@@ -506,6 +717,188 @@ async def process_workflow(
             model_type = "sdxl"
     logger.debug(f"Processing workflow model type: {model_type}")
     _force_video_processing(job, model_type)
+
+    # Fix for FLUX models using CheckpointLoaderSimple: Remove negative prompt CLIPTextEncode nodes
+    # FLUX models don't have CLIP text encoders in CheckpointLoaderSimple, so CLIPTextEncode nodes
+    # that reference CLIP from CheckpointLoaderSimple will fail. We remove negative prompt nodes
+    # and disconnect them from KSampler (FLUX models don't use negative prompts the same way).
+    if model_type == "flux":
+        # Handle both simple format (node objects) and native format (nodes array)
+        is_native_format = isinstance(processed_workflow, dict) and "nodes" in processed_workflow
+        
+        if is_native_format:
+            # Native format: workflow has "nodes" array
+            nodes = processed_workflow.get("nodes", [])
+            checkpoint_loaders = []
+            for node in nodes:
+                if isinstance(node, dict) and node.get("type") == "CheckpointLoaderSimple":
+                    node_id = node.get("id")
+                    if node_id:
+                        checkpoint_loaders.append(str(node_id))
+            
+            if checkpoint_loaders:
+                logger.info(f"FLUX fix (native format): Found CheckpointLoaderSimple nodes: {checkpoint_loaders}")
+                negative_prompt_nodes_to_remove = []
+                
+                # Find CLIPTextEncode nodes using CLIP from checkpoint loaders
+                for node in nodes:
+                    if isinstance(node, dict) and node.get("type") == "CLIPTextEncode":
+                        node_id = str(node.get("id", ""))
+                        node_inputs = node.get("inputs", [])
+                        # In native format, inputs might be a list or dict
+                        clip_ref = None
+                        if isinstance(node_inputs, list):
+                            # Find clip in inputs list
+                            for inp in node_inputs:
+                                if isinstance(inp, dict) and inp.get("name") == "clip":
+                                    clip_ref = inp.get("value")
+                                    break
+                        elif isinstance(node_inputs, dict):
+                            clip_ref = node_inputs.get("clip")
+                        
+                        if isinstance(clip_ref, list) and len(clip_ref) > 0:
+                            clip_source_id = str(clip_ref[0])
+                            clip_output_index = clip_ref[1] if len(clip_ref) > 1 else 0
+                            
+                            if clip_source_id in checkpoint_loaders and clip_output_index == 1:
+                                # Check if connected to KSampler negative input
+                                is_negative = False
+                                for ks_node in nodes:
+                                    if isinstance(ks_node, dict) and ks_node.get("type") in ["KSampler", "KSamplerAdvanced"]:
+                                        ks_inputs = ks_node.get("inputs", [])
+                                        neg_ref = None
+                                        if isinstance(ks_inputs, list):
+                                            for inp in ks_inputs:
+                                                if isinstance(inp, dict) and inp.get("name") == "negative":
+                                                    neg_ref = inp.get("value")
+                                                    break
+                                        elif isinstance(ks_inputs, dict):
+                                            neg_ref = ks_inputs.get("negative")
+                                        
+                                        if isinstance(neg_ref, list) and len(neg_ref) > 0 and str(neg_ref[0]) == node_id:
+                                            is_negative = True
+                                            logger.info(f"FLUX fix (native): Found negative prompt CLIPTextEncode node {node_id}")
+                                            break
+                                
+                                if is_negative:
+                                    negative_prompt_nodes_to_remove.append(node)
+                
+                # Remove nodes and update KSamplers
+                for node_to_remove in negative_prompt_nodes_to_remove:
+                    node_id = str(node_to_remove.get("id", ""))
+                    logger.info(f"FLUX fix (native): Removing CLIPTextEncode node {node_id}")
+                    nodes.remove(node_to_remove)
+                    
+                    # Disconnect from KSamplers
+                    for ks_node in nodes:
+                        if isinstance(ks_node, dict) and ks_node.get("type") in ["KSampler", "KSamplerAdvanced"]:
+                            ks_inputs = ks_node.get("inputs", [])
+                            if isinstance(ks_inputs, list):
+                                for inp in ks_inputs:
+                                    if isinstance(inp, dict) and inp.get("name") == "negative":
+                                        neg_ref = inp.get("value")
+                                        if isinstance(neg_ref, list) and len(neg_ref) > 0 and str(neg_ref[0]) == node_id:
+                                            logger.info(f"FLUX fix (native): Removing negative input from KSampler {ks_node.get('id')}")
+                                            ks_inputs.remove(inp)
+                                            break
+                            elif isinstance(ks_inputs, dict) and "negative" in ks_inputs:
+                                neg_ref = ks_inputs["negative"]
+                                if isinstance(neg_ref, list) and len(neg_ref) > 0 and str(neg_ref[0]) == node_id:
+                                    logger.info(f"FLUX fix (native): Removing negative input from KSampler {ks_node.get('id')}")
+                                    del ks_inputs["negative"]
+        else:
+            # Simple format: direct node objects with numeric keys
+            checkpoint_loaders = []
+            for node_id, node_data in processed_workflow.items():
+                if isinstance(node_data, dict) and node_data.get("class_type") == "CheckpointLoaderSimple":
+                    checkpoint_loaders.append(node_id)
+            
+            if checkpoint_loaders:
+                logger.info(f"FLUX fix (simple format): Found CheckpointLoaderSimple nodes: {checkpoint_loaders}")
+                negative_prompt_nodes_to_remove = []
+                
+                # Find CLIPTextEncode nodes that use CLIP from checkpoint loaders
+                for node_id, node_data in processed_workflow.items():
+                    if isinstance(node_data, dict) and node_data.get("class_type") == "CLIPTextEncode":
+                        inputs = node_data.get("inputs", {})
+                        clip_ref = inputs.get("clip")
+                        if isinstance(clip_ref, list) and len(clip_ref) > 0:
+                            clip_source_id = str(clip_ref[0])
+                            clip_output_index = clip_ref[1] if len(clip_ref) > 1 else 0
+                            
+                            logger.debug(f"FLUX fix: Checking CLIPTextEncode node {node_id}: clip_source={clip_source_id}, clip_output={clip_output_index}")
+                            
+                            # Check if this CLIP comes from a checkpoint loader (output index 1 is CLIP)
+                            if clip_source_id in checkpoint_loaders and clip_output_index == 1:
+                                logger.info(f"FLUX fix: Node {node_id} uses CLIP from CheckpointLoaderSimple {clip_source_id}")
+                                # Check if this is a negative prompt node - multiple detection methods
+                                is_negative = False
+                                
+                                # Method 1: Check connection to KSampler negative input
+                                for ks_id, ks_data in processed_workflow.items():
+                                    if isinstance(ks_data, dict) and ks_data.get("class_type") in ["KSampler", "KSamplerAdvanced"]:
+                                        ks_inputs = ks_data.get("inputs", {})
+                                        if "negative" in ks_inputs:
+                                            neg_ref = ks_inputs["negative"]
+                                            if isinstance(neg_ref, list) and len(neg_ref) > 0 and str(neg_ref[0]) == str(node_id):
+                                                is_negative = True
+                                                logger.info(f"FLUX fix: Found negative prompt CLIPTextEncode node {node_id} via KSampler connection")
+                                                break
+                                
+                                # Method 2: Check _meta title if connection detection failed
+                                if not is_negative:
+                                    meta = node_data.get("_meta", {})
+                                    title = meta.get("title", "").lower()
+                                    if "negative" in title:
+                                        is_negative = True
+                                        logger.info(f"FLUX fix: Found negative prompt CLIPTextEncode node {node_id} via title: '{title}'")
+                                
+                                # Method 3: If not connected to FluxGuidance (positive prompts go through FluxGuidance), assume it's negative
+                                if not is_negative:
+                                    is_positive_via_flux_guidance = False
+                                    for other_node_id, other_node_data in processed_workflow.items():
+                                        if isinstance(other_node_data, dict) and other_node_data.get("class_type") == "FluxGuidance":
+                                            fg_inputs = other_node_data.get("inputs", {})
+                                            cond_ref = fg_inputs.get("conditioning")
+                                            if isinstance(cond_ref, list) and len(cond_ref) > 0 and str(cond_ref[0]) == str(node_id):
+                                                is_positive_via_flux_guidance = True
+                                                logger.debug(f"FLUX fix: Node {node_id} is positive (connected to FluxGuidance {other_node_id})")
+                                                break
+                                    
+                                    if not is_positive_via_flux_guidance:
+                                        # Not connected to FluxGuidance, and uses CLIP from checkpoint - must be negative
+                                        is_negative = True
+                                        logger.info(f"FLUX fix: Node {node_id} uses CLIP from checkpoint and is not connected to FluxGuidance - assuming negative prompt")
+                                
+                                if is_negative:
+                                    negative_prompt_nodes_to_remove.append(node_id)
+                                    logger.warning(f"FLUX fix: Marking negative prompt CLIPTextEncode node {node_id} for removal")
+                                else:
+                                    logger.debug(f"FLUX fix: Node {node_id} uses CLIP from checkpoint but is positive (connected to FluxGuidance)")
+                
+                # Remove negative prompt nodes and disconnect them from KSamplers
+                if negative_prompt_nodes_to_remove:
+                    logger.info(f"FLUX fix: Removing {len(negative_prompt_nodes_to_remove)} negative prompt nodes: {negative_prompt_nodes_to_remove}")
+                    for node_id in negative_prompt_nodes_to_remove:
+                        # Disconnect from all KSamplers first
+                        for ks_id, ks_data in processed_workflow.items():
+                            if isinstance(ks_data, dict) and ks_data.get("class_type") in ["KSampler", "KSamplerAdvanced"]:
+                                ks_inputs = ks_data.get("inputs", {})
+                                if "negative" in ks_inputs:
+                                    neg_ref = ks_inputs["negative"]
+                                    if isinstance(neg_ref, list) and len(neg_ref) > 0 and str(neg_ref[0]) == str(node_id):
+                                        # Remove the negative input entirely for FLUX models
+                                        logger.info(f"FLUX fix: Removing negative input from KSampler {ks_id}")
+                                        del ks_inputs["negative"]
+                        
+                        # Remove the node
+                        logger.info(f"FLUX fix: Removing CLIPTextEncode node {node_id}")
+                        if node_id in processed_workflow:
+                            del processed_workflow[node_id]
+                        else:
+                            logger.warning(f"FLUX fix: Node {node_id} not found in workflow (may have been removed already)")
+                else:
+                    logger.warning(f"FLUX fix: No negative prompt nodes found to remove (this may indicate the fix didn't detect them correctly)")
 
     # Handle source image for img2img workflows
     source_image_filename = None
@@ -533,27 +926,17 @@ async def process_workflow(
         processed_workflow = update_loadimageoutput_nodes(processed_workflow, source_image_filename)
 
     # Pre-calculate commonly reused payload fields
-    payload_steps = payload.get("ddim_steps") or payload.get("steps")
-    payload_cfg = payload.get("cfg_scale") or payload.get("cfg") or payload.get("guidance")
-    payload_sampler_raw = payload.get("sampler_name") or payload.get("sampler")
-    payload_sampler = map_sampler_name(payload_sampler_raw) if payload_sampler_raw else None
-    payload_scheduler = payload.get("scheduler")
-    if not payload_scheduler and payload.get("karras") is not None:
-        payload_scheduler = "karras" if payload.get("karras") else "normal"
-    payload_denoise = payload.get("denoising_strength") or payload.get("denoise")
-    
-    # Validate payload values to prevent applying values that are too low
-    # Minimum thresholds for quality
-    MIN_STEPS = 10  # Minimum steps for reasonable quality
-    MIN_CFG = 3.0   # Minimum CFG for reasonable quality
-    
-    if payload_steps is not None and payload_steps < MIN_STEPS:
-        logger.warning(f"Payload steps ({payload_steps}) is below minimum ({MIN_STEPS}), ignoring payload value")
-        payload_steps = None
-    
-    if payload_cfg is not None and payload_cfg < MIN_CFG:
-        logger.warning(f"Payload cfg ({payload_cfg}) is below minimum ({MIN_CFG}), ignoring payload value")
-        payload_cfg = None
+    # NOTE: steps and cfg are intentionally NOT read from payload - we always use workflow defaults
+    # payload_steps and payload_cfg are set to None below to ensure workflow values are used
+    # WORKFLOW FILE IS SOURCE OF TRUTH
+    # Never override workflow values with payload values - workflow files have optimized settings
+    # Only prompt, seed, and dimensions come from payload
+    payload_steps = None
+    payload_cfg = None
+    payload_sampler = None
+    payload_scheduler = None
+    payload_denoise = None
+    logger.debug(f"Using workflow defaults for all KSampler parameters (steps, cfg, sampler, scheduler, denoise)")
 
     def _apply_ksampler_dict(inputs: Dict[str, Any]) -> Dict[str, Any]:
         # Only apply steps if payload value is higher than workflow default
@@ -616,6 +999,7 @@ async def process_workflow(
     # Process each node in the workflow
     # Handle ComfyUI format (nodes array)
     if isinstance(processed_workflow, dict) and "nodes" in processed_workflow:
+        logger.info("Processing workflow in ComfyUI native format (nodes array)")
         nodes = processed_workflow.get("nodes", [])
         # Don't modify WanVideo workflows - they work correctly as-is
         for node in nodes:
@@ -659,10 +1043,16 @@ async def process_workflow(
                 title = node.get("title", "") or ""
                 if isinstance(widgets, list) and len(widgets) >= 1:
                     if "negative" in title.lower():
-                        neg = payload.get("negative_prompt")
-                        if isinstance(neg, str) and neg:
+                        neg = payload.get("negative_prompt", "").strip()
+                        if neg:
                             widgets[0] = neg
                             logger.debug(f"Updated negative prompt: {neg}")
+                        else:
+                            # Inject default negative prompt for FLUX models if none provided
+                            if model_type == "flux":
+                                default_neg = FLUX_DEFAULT_NEGATIVE_PROMPT
+                                widgets[0] = default_neg
+                                logger.info(f"CLIPTextEncode node: Injected FLUX default negative prompt: {default_neg[:50]}...")
                     elif "positive" in title.lower():
                         # This is a positive prompt node
                         pos = payload.get("prompt")
@@ -743,6 +1133,12 @@ async def process_workflow(
                 if isinstance(inputs, dict):
                     node_id_str = str(node.get('id', 'unknown'))
                     
+                    # Log workflow defaults being used (WORKFLOW FILE IS SOURCE OF TRUTH)
+                    workflow_steps = inputs.get("steps")
+                    workflow_cfg = inputs.get("cfg")
+                    workflow_scheduler = inputs.get("scheduler")
+                    logger.info(f"WanVideoSampler node {node_id_str}: Using WORKFLOW DEFAULTS - steps={workflow_steps}, cfg={workflow_cfg}, scheduler={workflow_scheduler}")
+
                     # Apply scheduler from payload if provided, otherwise validate workflow scheduler
                     if payload_scheduler and "scheduler" in inputs:
                         valid_scheduler = map_wanvideo_scheduler(payload_scheduler)
@@ -754,8 +1150,10 @@ async def process_workflow(
                         if current_scheduler != valid_scheduler:
                             logger.info(f"Node {node_id_str}: Validating workflow scheduler: '{current_scheduler}' -> '{valid_scheduler}'")
                             inputs["scheduler"] = valid_scheduler
-                    
-                    # Apply parameters from payload - only if they're reasonable
+
+                    # NOTE: payload_steps and payload_cfg are always None (set at line ~745)
+                    # This ensures workflow file is the source of truth for steps/cfg
+                    # The conditions below will NEVER execute because payload_steps/payload_cfg are None
                     if payload_steps is not None and "steps" in inputs:
                         old_steps = inputs.get("steps")
                         # Only apply if payload steps is higher than workflow default
@@ -780,7 +1178,21 @@ async def process_workflow(
                         old_riflex = inputs.get("riflex_freq_index")
                         inputs["riflex_freq_index"] = payload.get("riflex_freq_index")
                         logger.info(f"Node {node_id_str}: Applied riflex_freq_index: {old_riflex} -> {payload.get('riflex_freq_index')}")
-                    
+
+                    node["inputs"] = inputs
+
+            # Handle WanVideoDecode nodes - prevent payload parameters from causing tensor mismatches
+            elif class_type == "WanVideoDecode":
+                logger.info(f"Processing WanVideoDecode node {node.get('id', 'unknown')} in native format")
+                # WanVideoDecode tile parameters should NOT be overridden by payload width/height
+                # as they need to match the WanVideoSampler output tensor dimensions
+                if isinstance(inputs, dict):
+                    node_id_str = str(node.get('id', 'unknown'))
+                    # Log current tile settings for debugging tensor dimension issues
+                    tile_x = inputs.get("tile_x")
+                    tile_y = inputs.get("tile_y")
+                    logger.info(f"WanVideoDecode node {node_id_str}: tile_x={tile_x}, tile_y={tile_y}")
+                    # Keep workflow tile settings - do not override with payload width/height
                     node["inputs"] = inputs
             
             # Handle BasicScheduler nodes - update steps and scheduler via widgets_values
@@ -837,17 +1249,14 @@ async def process_workflow(
                     widgets[1] = seed  # Update noise_seed
                     node["widgets_values"] = widgets
             
-            # Handle WanVideoEmptyEmbeds nodes - update dimensions and frame count (ComfyUI native format)
+            # Handle WanVideoEmptyEmbeds nodes - ALWAYS use workflow defaults (ComfyUI native format)
             elif class_type == "WanVideoEmptyEmbeds":
                 if isinstance(inputs, dict):
-                    if payload.get("width") and "width" in inputs:
-                        inputs["width"] = payload.get("width")
-                    if payload.get("height") and "height" in inputs:
-                        inputs["height"] = payload.get("height")
-                    if payload.get("length") or payload.get("video_length"):
-                        num_frames = payload.get("length") or payload.get("video_length")
-                        if "num_frames" in inputs:
-                            inputs["num_frames"] = num_frames
+                    # IMPORTANT: Always use workflow defaults for WAN video dimensions
+                    # The workflow is carefully designed with specific width/height/num_frames
+                    # that must match the WanVideoDecode tiling parameters to avoid tensor mismatches
+                    # DO NOT apply payload width/height/num_frames - they cause decoding errors
+                    logger.info(f"WanVideoEmptyEmbeds: Using workflow defaults - width={inputs.get('width')}, height={inputs.get('height')}, frames={inputs.get('num_frames')}")
                     node["inputs"] = inputs
 
             # Handle LoadImageOutput nodes for source images
@@ -863,6 +1272,7 @@ async def process_workflow(
 
     # Handle simple format (direct node objects)
     else:
+        logger.info("Processing workflow in simple format (node objects)")
         for node_id, node_data in processed_workflow.items():
             if not isinstance(node_data, dict):
                 continue
@@ -908,27 +1318,48 @@ async def process_workflow(
                                     logger.info(f"Node {node_id} identified as negative prompt (connected to KSampler {ks_id} negative input)")
                                     break
                     
-                    # If not negative, check if it's connected to positive input
+                    # If not negative, check if it's connected to positive input (directly or via FluxGuidance)
                     if not is_negative_prompt:
                         for ks_id, ks_data in processed_workflow.items():
                             if isinstance(ks_data, dict) and ks_data.get("class_type") in ["KSampler", "KSamplerAdvanced"]:
                                 ks_inputs = ks_data.get("inputs", {})
                                 if "positive" in ks_inputs:
                                     pos_ref = ks_inputs["positive"]
-                                    logger.info(f"Checking KSampler {ks_id}: positive ref={pos_ref}, node_id={node_id}, match={isinstance(pos_ref, list) and len(pos_ref) > 0 and str(pos_ref[0]) == str(node_id)}")
+                                    logger.info(f"Checking KSampler {ks_id}: positive ref={pos_ref}, node_id={node_id}")
+                                    
+                                    # Direct connection check
                                     if isinstance(pos_ref, list) and len(pos_ref) > 0 and str(pos_ref[0]) == str(node_id):
                                         is_positive_prompt = True
                                         logger.info(f"Node {node_id} identified as positive prompt (connected to KSampler {ks_id} positive input)")
                                         break
+                                    
+                                    # Check through FluxGuidance intermediary
+                                    if isinstance(pos_ref, list) and len(pos_ref) > 0:
+                                        intermediate_node_id = str(pos_ref[0])
+                                        intermediate_node = processed_workflow.get(intermediate_node_id, {})
+                                        if isinstance(intermediate_node, dict) and intermediate_node.get("class_type") == "FluxGuidance":
+                                            fg_inputs = intermediate_node.get("inputs", {})
+                                            cond_ref = fg_inputs.get("conditioning")
+                                            logger.info(f"Found FluxGuidance {intermediate_node_id}, conditioning ref={cond_ref}")
+                                            if isinstance(cond_ref, list) and len(cond_ref) > 0 and str(cond_ref[0]) == str(node_id):
+                                                is_positive_prompt = True
+                                                logger.info(f"Node {node_id} identified as positive prompt (via FluxGuidance {intermediate_node_id} -> KSampler {ks_id})")
+                                                break
                     
                     # Now handle the prompt based on connection type
                     if is_negative_prompt:
-                        neg = payload.get("negative_prompt")
-                        if isinstance(neg, str) and neg:
+                        neg = payload.get("negative_prompt", "").strip()
+                        if neg:
                             inputs["text"] = neg
                             logger.info(f"Node {node_id}: Updated negative prompt: {neg[:50]}...")
                         else:
-                            logger.info(f"Node {node_id}: Keeping workflow default negative prompt: {inputs.get('text', '')[:50]}...")
+                            # Inject default negative prompt for FLUX models if none provided
+                            if model_type == "flux":
+                                default_neg = FLUX_DEFAULT_NEGATIVE_PROMPT
+                                inputs["text"] = default_neg
+                                logger.info(f"Node {node_id}: Injected FLUX default negative prompt: {default_neg[:50]}...")
+                            else:
+                                logger.info(f"Node {node_id}: Keeping workflow default negative prompt: {inputs.get('text', '')[:50]}...")
                     elif is_positive_prompt:
                         pos = payload.get("prompt")
                         if isinstance(pos, str) and pos:
@@ -947,12 +1378,18 @@ async def process_workflow(
                         logger.info(f"Node {node_id}: Connection detection failed, using title fallback. Title: '{title}'")
                         
                         if "negative" in title:
-                            neg = payload.get("negative_prompt")
-                            if isinstance(neg, str) and neg:
+                            neg = payload.get("negative_prompt", "").strip()
+                            if neg:
                                 inputs["text"] = neg
                                 logger.info(f"Node {node_id}: Updated negative prompt by title fallback: {neg[:50]}...")
                             else:
-                                logger.info(f"Node {node_id}: Keeping workflow default negative prompt by title: {inputs.get('text', '')[:50]}...")
+                                # Inject default negative prompt for FLUX models if none provided
+                                if model_type == "flux":
+                                    default_neg = FLUX_DEFAULT_NEGATIVE_PROMPT
+                                    inputs["text"] = default_neg
+                                    logger.info(f"Node {node_id}: Injected FLUX default negative prompt by title fallback: {default_neg[:50]}...")
+                                else:
+                                    logger.info(f"Node {node_id}: Keeping workflow default negative prompt by title: {inputs.get('text', '')[:50]}...")
                         elif "positive" in title:
                             # Explicitly check for positive in title
                             pos = payload.get("prompt")
@@ -1036,6 +1473,12 @@ async def process_workflow(
             
             # Handle WanVideoSampler nodes - validate scheduler and apply parameters
             elif class_type == "WanVideoSampler":
+                # Log workflow defaults being used (WORKFLOW FILE IS SOURCE OF TRUTH)
+                workflow_steps = inputs.get("steps")
+                workflow_cfg = inputs.get("cfg")
+                workflow_scheduler = inputs.get("scheduler")
+                logger.info(f"WanVideoSampler node {node_id}: Using WORKFLOW DEFAULTS - steps={workflow_steps}, cfg={workflow_cfg}, scheduler={workflow_scheduler}")
+                
                 # Apply scheduler from payload if provided, otherwise validate workflow scheduler
                 if payload_scheduler and "scheduler" in inputs:
                     valid_scheduler = map_wanvideo_scheduler(payload_scheduler)
@@ -1049,7 +1492,9 @@ async def process_workflow(
                         logger.info(f"Node {node_id}: Validating workflow scheduler: '{current_scheduler}' -> '{valid_scheduler}'")
                         inputs["scheduler"] = valid_scheduler
                 
-                # Apply parameters from payload (only override if provided)
+                # NOTE: payload_steps and payload_cfg are always None (set at line ~745)
+                # This ensures workflow file is the source of truth for steps/cfg
+                # The conditions below will NEVER execute because payload_steps/payload_cfg are None
                 if payload_steps is not None and "steps" in inputs:
                     old_steps = inputs.get("steps")
                     inputs["steps"] = payload_steps
@@ -1069,47 +1514,126 @@ async def process_workflow(
                     inputs["riflex_freq_index"] = payload.get("riflex_freq_index")
                     logger.info(f"Node {node_id}: Applied riflex_freq_index: {old_riflex} -> {payload.get('riflex_freq_index')}")
                 node_data["inputs"] = inputs
-            
-            # Handle WanVideoEmptyEmbeds nodes - update dimensions and frame count
+
+            # Handle WanVideoDecode nodes - prevent payload parameters from causing tensor mismatches
+            elif class_type == "WanVideoDecode":
+                logger.info(f"Processing WanVideoDecode node {node_id} in simple format")
+                # WanVideoDecode tile parameters should NOT be overridden by payload width/height
+                # as they need to match the WanVideoSampler output tensor dimensions
+                node_id_str = str(node_id)
+                # Log current tile settings for debugging tensor dimension issues
+                tile_x = inputs.get("tile_x")
+                tile_y = inputs.get("tile_y")
+                logger.info(f"WanVideoDecode node {node_id_str}: tile_x={tile_x}, tile_y={tile_y}")
+                # Keep workflow tile settings - do not override with payload width/height
+                node_data["inputs"] = inputs
+
+            # Handle WanVideoEmptyEmbeds nodes - ALWAYS use workflow defaults
             # NOTE: Text-to-video models (t2v) don't support img2img properly.
             # Only image-to-video models (ti2v) can handle source images.
-            # VAEEncode outputs latents, not the image_embeds format that WanVideoSampler expects.
             elif class_type == "WanVideoEmptyEmbeds":
-                # Check if this is an img2img job
+                # Check if this is an img2img job - warn but continue with workflow defaults
                 if job.get("source_processing") == "img2img" and source_image_filename:
                     model_name = job.get("model", "").lower()
-                    # Check if this is a text-to-video model (t2v) vs image-to-video (ti2v)
                     if "t2v" in model_name and "ti2v" not in model_name:
-                        # This is a text-to-video only model - img2img won't work properly
                         logger.warning(
                             f"Model {job.get('model')} is text-to-video only (t2v), not image-to-video (ti2v). "
                             f"Ignoring source image and using empty embeddings for text-to-video generation."
                         )
-                        # Fall through to standard text-to-video handling
                     else:
-                        # This might be an image-to-video model - but we still can't properly convert
-                        # WanVideoEmptyEmbeds to image embeddings without a proper encoder node
                         logger.warning(
                             f"img2img requested for WanVideo model, but WanVideoEmptyEmbeds cannot be "
                             f"converted to image embeddings. Using empty embeddings (text-to-video mode)."
                         )
-                        # Fall through to standard text-to-video handling
                 
-                # Standard text-to-video: update dimensions
-                if payload.get("width") and "width" in inputs:
-                    logger.debug(f"Node {node_id}: Setting width from {inputs.get('width')} to {payload.get('width')}")
-                    inputs["width"] = payload.get("width")
-                if payload.get("height") and "height" in inputs:
-                    logger.debug(f"Node {node_id}: Setting height from {inputs.get('height')} to {payload.get('height')}")
-                    inputs["height"] = payload.get("height")
-                if payload.get("length") or payload.get("video_length"):
-                    num_frames = payload.get("length") or payload.get("video_length")
-                    if "num_frames" in inputs:
-                        logger.debug(f"Node {node_id}: Setting num_frames from {inputs.get('num_frames')} to {num_frames}")
-                        inputs["num_frames"] = num_frames
+                # IMPORTANT: Always use workflow defaults for WAN video dimensions
+                # The workflow is carefully designed with specific width/height/num_frames
+                # that must match the WanVideoDecode tiling parameters to avoid tensor mismatches
+                # DO NOT apply payload width/height/num_frames - they cause decoding errors
+                logger.info(f"Node {node_id} WanVideoEmptyEmbeds: Using workflow defaults - width={inputs.get('width')}, height={inputs.get('height')}, frames={inputs.get('num_frames')}")
                 node_data["inputs"] = inputs
 
     return processed_workflow
+
+
+def validate_wanvideo_workflow(workflow: Dict[str, Any]) -> None:
+    """
+    Validate WanVideo workflow parameters to catch tensor dimension mismatches early.
+    
+    Checks that WanVideoDecode tile_x/tile_y are compatible with WanVideoEmptyEmbeds dimensions.
+    Raises ValueError if incompatible parameters are detected.
+    """
+    model_type = detect_workflow_model_type(workflow)
+    if model_type != "wanvideo":
+        return
+    
+    # Find WanVideoDecode and WanVideoEmptyEmbeds nodes
+    wan_decode_nodes = []
+    wan_embeds_nodes = []
+    
+    # Handle ComfyUI native format (nodes array)
+    if isinstance(workflow, dict) and "nodes" in workflow:
+        nodes = workflow.get("nodes", [])
+        for node in nodes:
+            if not isinstance(node, dict):
+                continue
+            class_type = node.get("type", "")
+            node_id = node.get("id")
+            
+            if class_type == "WanVideoDecode":
+                inputs = node.get("inputs", {})
+                if isinstance(inputs, dict):
+                    wan_decode_nodes.append((node_id, inputs))
+            elif class_type == "WanVideoEmptyEmbeds":
+                inputs = node.get("inputs", {})
+                if isinstance(inputs, dict):
+                    wan_embeds_nodes.append((node_id, inputs))
+    else:
+        # Handle simple format (direct node objects)
+        for node_id, node_data in workflow.items():
+            if not isinstance(node_data, dict):
+                continue
+            class_type = node_data.get("class_type", "")
+            inputs = node_data.get("inputs", {})
+            
+            if class_type == "WanVideoDecode":
+                wan_decode_nodes.append((node_id, inputs))
+            elif class_type == "WanVideoEmptyEmbeds":
+                wan_embeds_nodes.append((node_id, inputs))
+    
+    # Validate each WanVideoDecode node
+    for decode_id, decode_inputs in wan_decode_nodes:
+        tile_x = decode_inputs.get("tile_x")
+        tile_y = decode_inputs.get("tile_y")
+        
+        if tile_x is None or tile_y is None:
+            logger.warning(
+                f"WanVideoDecode node {decode_id}: Missing tile_x or tile_y parameters "
+                f"(tile_x={tile_x}, tile_y={tile_y}). This may cause tensor dimension errors."
+            )
+            continue
+        
+        # Log for debugging
+        logger.debug(
+            f"WanVideoDecode node {decode_id}: tile_x={tile_x}, tile_y={tile_y}"
+        )
+        
+        # Check if tile dimensions are reasonable (must be multiples of 8 for VAE tiling)
+        if tile_x % 8 != 0 or tile_y % 8 != 0:
+            logger.warning(
+                f"WanVideoDecode node {decode_id}: tile_x ({tile_x}) or tile_y ({tile_y}) "
+                f"is not a multiple of 8. This may cause tensor dimension errors."
+            )
+    
+    # Log WanVideoEmptyEmbeds dimensions for debugging
+    for embeds_id, embeds_inputs in wan_embeds_nodes:
+        width = embeds_inputs.get("width")
+        height = embeds_inputs.get("height")
+        num_frames = embeds_inputs.get("num_frames")
+        logger.debug(
+            f"WanVideoEmptyEmbeds node {embeds_id}: width={width}, height={height}, "
+            f"num_frames={num_frames}"
+        )
 
 
 def convert_native_workflow_to_simple(workflow: Dict[str, Any]) -> Dict[str, Any]:
@@ -1189,9 +1713,16 @@ def convert_native_workflow_to_simple(workflow: Dict[str, Any]) -> Dict[str, Any
 async def build_workflow(job: Dict[str, Any]) -> Dict[str, Any]:
     model_name = job.get("model", "")
     source_processing = job.get("source_processing", "txt2img")
+    
+    logger.info(f"🔨 BUILD_WORKFLOW called for job:")
+    logger.info(f"   Job ID: {job.get('id', 'unknown')}")
+    logger.info(f"   Job model: '{model_name}'")
+    logger.info(f"   Source processing: {source_processing}")
 
     # Use the mapped workflow for all jobs (the mapper handles the logic)
     workflow_filename = get_workflow_file(model_name)
+    
+    logger.info(f"   get_workflow_file('{model_name}') returned: '{workflow_filename}'")
     
     # Validate that we have a proper workflow mapping
     if not workflow_filename:
@@ -1201,7 +1732,7 @@ async def build_workflow(job: Dict[str, Any]) -> Dict[str, Any]:
         logger.error(error_msg)
         raise RuntimeError(error_msg)
     
-    logger.info(f"Loading workflow: {workflow_filename} for model: {model_name} (type: {source_processing})")
+    logger.info(f"🔧 Loading workflow: {workflow_filename} for model: {model_name} (type: {source_processing})")
     
     try:
         workflow = load_workflow_file(workflow_filename)
