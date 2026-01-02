@@ -268,3 +268,92 @@ export function getAllDownloadStates(): Map<string, ModelDownloadState> {
 
   return statesMap;
 }
+
+// Wrapper functions for route compatibility
+// Get the current active download state (first downloading or pending download)
+export function getDownloadState(): ModelDownloadState | null {
+  const downloads = downloadStateManager.getAllDownloads();
+  
+  // Find the first active download (downloading or pending)
+  const activeDownload = downloads.find(
+    d => d.status === 'downloading' || d.status === 'pending'
+  );
+  
+  if (!activeDownload) {
+    return null;
+  }
+
+  return {
+    is_downloading: activeDownload.status === 'downloading',
+    progress: activeDownload.progress,
+    total_files: activeDownload.files?.length || 0,
+    completed_files: activeDownload.files?.filter(f => f.status === 'completed').length || 0,
+    message: activeDownload.message,
+    speed: activeDownload.files?.[0]?.speed,
+    eta: activeDownload.files?.[0]?.eta,
+    files: activeDownload.files || [],
+    error_message: activeDownload.error,
+    status: activeDownload.status,
+    processId: activeDownload.processId,
+  };
+}
+
+// Clear/cancel the current active download
+export function clearDownloadState(): void {
+  const downloads = downloadStateManager.getAllDownloads();
+  
+  // Cancel all active downloads
+  for (const download of downloads) {
+    if (download.status === 'downloading' || download.status === 'pending') {
+      downloadStateManager.updateDownload(download.id, {
+        status: 'cancelled',
+        message: 'Download cancelled',
+        completedAt: new Date(),
+      });
+    }
+  }
+}
+
+// Update download state from route body
+export function updateDownloadState(updates: Partial<ModelDownloadState> & { modelId?: string }): void {
+  const downloads = downloadStateManager.getAllDownloads();
+  
+  // If modelId is provided, update that specific model's downloads
+  if (updates.modelId) {
+    const modelDownloads = downloadStateManager.getDownloadsByModel(updates.modelId);
+    for (const download of modelDownloads) {
+      const downloadUpdates: Partial<DownloadProgress> = {
+        progress: updates.progress,
+        message: updates.message,
+        status: updates.status,
+        error: updates.error_message,
+      };
+      
+      if (updates.files) {
+        downloadUpdates.files = updates.files;
+      }
+      
+      downloadStateManager.updateDownload(download.id, downloadUpdates);
+    }
+  } else {
+    // Update the first active download
+    const activeDownload = downloads.find(
+      d => d.status === 'downloading' || d.status === 'pending'
+    );
+    
+    if (activeDownload) {
+      const downloadUpdates: Partial<DownloadProgress> = {
+        progress: updates.progress,
+        message: updates.message,
+        status: updates.status,
+        error: updates.error_message,
+      };
+      
+      if (updates.files) {
+        downloadUpdates.files = updates.files;
+      }
+      
+      downloadStateManager.updateDownload(activeDownload.id, downloadUpdates);
+    }
+  }
+}
