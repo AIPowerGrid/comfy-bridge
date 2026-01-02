@@ -274,6 +274,16 @@ class ComfyUIBridge:
         if Settings.DEBUG:
             logger.info("DEBUG MODE ENABLED - Detailed logging active")
         
+        # Start recipe sync service if RecipesVault is enabled
+        if Settings.RECIPESVAULT_ENABLED and Settings.RECIPESVAULT_CONTRACT:
+            try:
+                from .recipe_sync import get_recipe_sync_service
+                recipe_sync = get_recipe_sync_service()
+                await recipe_sync.start_periodic_sync()
+                logger.info("RecipesVault: Enabled - Recipes will be synced every 12 hours")
+            except Exception as e:
+                logger.warning(f"Failed to start recipe sync service: {e}")
+        
         await initialize_model_mapper(Settings.COMFYUI_URL)
 
         # Prioritize WORKFLOW_FILE when set, otherwise use auto-detected models
@@ -618,6 +628,15 @@ class ComfyUIBridge:
                 logger.debug("WebSocket error", exc_info=True)
 
     async def cleanup(self):
+        # Stop recipe sync service
+        if Settings.RECIPESVAULT_ENABLED and Settings.RECIPESVAULT_CONTRACT:
+            try:
+                from .recipe_sync import get_recipe_sync_service
+                recipe_sync = get_recipe_sync_service()
+                await recipe_sync.stop_periodic_sync()
+            except Exception as e:
+                logger.debug(f"Error stopping recipe sync service: {e}")
+        
         await self.comfy.close()
         if hasattr(self.api, 'client'):
             await self.api.client.aclose()

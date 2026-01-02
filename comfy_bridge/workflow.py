@@ -620,6 +620,15 @@ async def download_image(url: str, filename: str) -> str:
 
 
 def load_workflow_file(workflow_filename: str) -> Dict[str, Any]:
+    """
+    Load workflow from local file (synced from RecipesVault) or fallback to blockchain.
+    
+    Priority:
+    1. Local JSON file (synced from RecipesVault every 12 hours)
+    2. RecipesVault (blockchain) - if local file not found and RecipesVault enabled
+    3. Legacy local JSON files - for backward compatibility
+    """
+    # First, try to load from local file (synced from blockchain)
     workflow_path = os.path.join(Settings.WORKFLOW_DIR, workflow_filename)
 
     if not os.path.exists(workflow_path):
@@ -632,17 +641,53 @@ def load_workflow_file(workflow_filename: str) -> Dict[str, Any]:
                     break
         except FileNotFoundError:
             pass
-        if not os.path.exists(workflow_path):
-            raise FileNotFoundError(f"Workflow file not found: {workflow_path}")
-
-    with open(workflow_path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-        
-    # Validate workflow has actual model file names, not placeholders
-    _validate_workflow_model_names(data, workflow_filename)
     
-    # Return a deep copy so callers can safely mutate without caching stale fields
-    return copy.deepcopy(data)
+    # If local file exists, use it
+    if os.path.exists(workflow_path):
+        logger.debug(f"Loading workflow '{workflow_filename}' from local file (synced from RecipesVault)")
+        with open(workflow_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        
+        # Validate workflow has actual model file names, not placeholders
+        _validate_workflow_model_names(data, workflow_filename)
+        
+        # Return a deep copy so callers can safely mutate without caching stale fields
+        return copy.deepcopy(data)
+    
+    # If local file not found and RecipesVault is enabled, try blockchain
+    if Settings.RECIPESVAULT_ENABLED and Settings.RECIPESVAULT_CONTRACT:
+        try:
+            from .recipesvault_client import get_recipesvault_client
+            
+            client = get_recipesvault_client()
+            # Remove .json extension if present for recipe lookup
+            recipe_name = workflow_filename.replace('.json', '')
+            recipe = client.find_recipe(recipe_name)
+            
+            if recipe:
+                logger.info(f"Loaded workflow '{workflow_filename}' from RecipesVault (blockchain) - will be synced locally")
+                workflow_dict = recipe.get_workflow_dict()
+                if workflow_dict:
+                    # Validate workflow has actual model file names, not placeholders
+                    _validate_workflow_model_names(workflow_dict, workflow_filename)
+                    
+                    # Save to local file for future use
+                    try:
+                        os.makedirs(Settings.WORKFLOW_DIR, exist_ok=True)
+                        with open(workflow_path, 'w', encoding='utf-8') as f:
+                            json.dump(workflow_dict, f, indent=2, ensure_ascii=False)
+                        logger.debug(f"Saved workflow '{workflow_filename}' to local file for future use")
+                    except Exception as e:
+                        logger.warning(f"Failed to save workflow to local file: {e}")
+                    
+                    return copy.deepcopy(workflow_dict)
+                else:
+                    logger.warning(f"Failed to parse workflow JSON from RecipesVault for '{workflow_filename}'")
+        except Exception as e:
+            logger.debug(f"Failed to load workflow from RecipesVault: {e}")
+    
+    # Final fallback: raise error if file not found
+    raise FileNotFoundError(f"Workflow file not found: {workflow_path}")
 
 
 def _validate_workflow_model_names(workflow: Dict[str, Any], filename: str) -> None:

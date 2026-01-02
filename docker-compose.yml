@@ -72,7 +72,7 @@ services:
       # To force a clean rebuild: DOCKER_BUILDKIT=1 docker-compose build --no-cache comfy-bridge
       # Enable BuildKit for cache mounts (default in Docker Desktop)
       args:
-        # Pass model configuration as build args to download models during image build
+        # Build args (model downloads during build are disabled - use Management UI instead)
         GRID_MODEL: ${GRID_MODEL:-}
         WORKFLOW_FILE: ${WORKFLOW_FILE:-}
         MODELVAULT_CONTRACT: ${MODELVAULT_CONTRACT:-0x79F39f2a0eA476f53994812e6a8f3C8CFe08c609}

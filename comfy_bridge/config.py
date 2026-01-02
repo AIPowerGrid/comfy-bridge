@@ -38,6 +38,13 @@ class Settings:
     MODELVAULT_ENABLED = os.getenv("MODELVAULT_ENABLED", "true").lower() == "true"
     MODELVAULT_RPC_URL = os.getenv("MODELVAULT_RPC_URL", "https://mainnet.base.org")
     MODELVAULT_CONTRACT = os.getenv("MODELVAULT_CONTRACT", "0x79F39f2a0eA476f53994812e6a8f3C8CFe08c609")
+    
+    # RecipesVault on-chain workflow/recipe registry (Base Mainnet, diamond proxy facet)
+    # The blockchain is the single source of truth for workflow/recipe registration
+    RECIPESVAULT_ENABLED = os.getenv("RECIPESVAULT_ENABLED", "true").lower() == "true"
+    RECIPESVAULT_RPC_URL = os.getenv("RECIPESVAULT_RPC_URL", MODELVAULT_RPC_URL)
+    RECIPESVAULT_CONTRACT = os.getenv("RECIPESVAULT_CONTRACT", "")
+    RECIPESVAULT_CHAIN_ID = int(os.getenv("RECIPESVAULT_CHAIN_ID", "8453"))
 
     @classmethod
     def validate(cls):
