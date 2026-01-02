@@ -237,6 +237,7 @@ export function generateModelHash(fileName: string): string {
 }
 
 // Re-export ModelType and RegisterModelParams for easier imports
+// ModelType is already imported above for internal use, now re-export it
 export { ModelType };
 export type { RegisterModelParams, UseModelVaultRegisterReturn };
 
