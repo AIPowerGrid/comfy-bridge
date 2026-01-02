@@ -5,79 +5,83 @@ echo "================================================"
 echo "  ComfyUI Bridge - Blockchain Model Registry"
 echo "================================================"
 
-# Note: Models downloaded during build are in the image at /app/ComfyUI/models
-# When the volume is mounted, if it's empty, the image contents are visible
-# If the volume has files, those take precedence
-# Runtime downloads will add to whatever is in the volume
+# Note: Model downloads during build are disabled to speed up builds
+# Models should be downloaded via the Management UI (http://localhost:5000) at runtime
+# Users can select and download models through the aipg-art-gallery interface
 
-# Function to download required models FROM BLOCKCHAIN
+# Function to download required models FROM BLOCKCHAIN (DISABLED - use Management UI instead)
+# Model downloads are now handled exclusively through the Management UI at http://localhost:5000
+# This speeds up container startup and allows users to choose which models to download
 download_models() {
-    echo "Downloading models from blockchain registry..."
-    cd /app/comfy-bridge
+    echo "Model downloads disabled - use Management UI at http://localhost:5000 to download models"
+    return 0
+    # Original download code disabled below:
+    # echo "Downloading models from blockchain registry..."
+    # cd /app/comfy-bridge
 
     # Remove legacy Wan 2.1 VAE symlink if it pointed at the 2.2 file
-    WAN21_PATH="/app/ComfyUI/models/vae/wan_2.1_vae.safetensors"
-    if [ -L "$WAN21_PATH" ]; then
-        echo "Removing legacy wan_2.1_vae.safetensors symlink"
-        rm -f "$WAN21_PATH"
-    fi
+    # WAN21_PATH="/app/ComfyUI/models/vae/wan_2.1_vae.safetensors"
+    # if [ -L "$WAN21_PATH" ]; then
+    #     echo "Removing legacy wan_2.1_vae.safetensors symlink"
+    #     rm -f "$WAN21_PATH"
+    # fi
     
-    if python3 <<'PY'
-import os
-import sys
-
-# Import blockchain-based download
-from download_models_from_chain import download_models_from_chain
-
-# Parse model list from environment
-def parse_model_env(raw: str) -> list[str]:
-    if not raw:
-        return []
-    if "," in raw:
-        tokens = raw.split(",")
-    else:
-        tokens = raw.split()
-    return [token.strip() for token in tokens if token.strip()]
-
-# Get models from environment
-grid_env = os.environ.get("GRID_MODELS", "")  # Fixed: was GRID_MODEL, should be GRID_MODELS
-workflow_env = os.environ.get("WORKFLOW_FILE", "")
-
-# Parse workflow files to get actual model names 
-workflow_models = []
-for entry in parse_model_env(workflow_env):
-    # Remove .json extension if present
-    if entry.endswith('.json'):
-        entry = entry[:-5]
-    workflow_models.append(entry)
-
-requested_models = parse_model_env(grid_env) or workflow_models
-
-if not requested_models:
-    print("No models configured in GRID_MODEL or WORKFLOW_FILE")
-    print("   Please visit http://localhost:5000 to select models via the Management UI")
-    sys.exit(0)
-
-print(f"Downloading configured models: {', '.join(requested_models)}")
-
-models_path = os.environ.get("MODELS_PATH", "/app/ComfyUI/models")
-success = download_models_from_chain(requested_models, models_path)
-
-if success:
-    print("Model download completed successfully")
-    sys.exit(0)
-else:
-    print("Some models may not have download URLs registered")
-    print("   Models without blockchain download info need to be registered with the V2 contract")
-    sys.exit(0)  # Don't fail - allow worker to start
-PY
-    then
-        return 0
-    else
-        echo "Model download had issues, but continuing..."
-        echo "   You can manage models via the UI at http://localhost:5000"
-        return 0
-    fi
+    # if python3 <<'PY'
+    # import os
+    # import sys
+    #
+    # # Import blockchain-based download
+    # from download_models_from_chain import download_models_from_chain
+    #
+    # # Parse model list from environment
+    # def parse_model_env(raw: str) -> list[str]:
+    #     if not raw:
+    #         return []
+    #     if "," in raw:
+    #         tokens = raw.split(",")
+    #     else:
+    #         tokens = raw.split()
+    #     return [token.strip() for token in tokens if token.strip()]
+    #
+    # # Get models from environment
+    # grid_env = os.environ.get("GRID_MODELS", "")
+    # workflow_env = os.environ.get("WORKFLOW_FILE", "")
+    #
+    # # Parse workflow files to get actual model names 
+    # workflow_models = []
+    # for entry in parse_model_env(workflow_env):
+    #     # Remove .json extension if present
+    #     if entry.endswith('.json'):
+    #         entry = entry[:-5]
+    #     workflow_models.append(entry)
+    #
+    # requested_models = parse_model_env(grid_env) or workflow_models
+    #
+    # if not requested_models:
+    #     print("No models configured in GRID_MODEL or WORKFLOW_FILE")
+    #     print("   Please visit http://localhost:5000 to select models via the Management UI")
+    #     sys.exit(0)
+    #
+    # print(f"Downloading configured models: {', '.join(requested_models)}")
+    #
+    # models_path = os.environ.get("MODELS_PATH", "/app/ComfyUI/models")
+    # success = download_models_from_chain(requested_models, models_path)
+    #
+    # if success:
+    #     print("Model download completed successfully")
+    #     sys.exit(0)
+    # else:
+    #     print("Some models may not have download URLs registered")
+    #     print("   Models without blockchain download info need to be registered with the V2 contract")
+    #     sys.exit(0)
+    # PY
+    # then
+    #     return 0
+    # else
+    #     echo "Model download had issues, but continuing..."
+    #     echo "   You can manage models via the UI at http://localhost:5000"
+    #     return 0
+    # fi
 }
 
 # Function to check if ComfyUI is ready
@@ -121,8 +125,12 @@ else
     echo "GPU API running on port 8001"
 fi
 
-# Download required models FROM BLOCKCHAIN
-download_models
+# Model downloads are now handled exclusively through the Management UI
+# Users can select and download models via http://localhost:5000
+# This speeds up container startup and allows users to choose which models to download
+echo "Skipping automatic model downloads - use Management UI to download models"
+echo "Visit http://localhost:5000 to select and download models"
+# download_models  # Disabled - use UI instead
 
 # Normalize Wan asset locations
 echo "Normalizing Wan asset locations..."
