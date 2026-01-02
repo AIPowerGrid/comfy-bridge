@@ -174,9 +174,41 @@ export function updateDownloadMessage(modelId: string, message: string): void {
   }
 }
 
-export function getDownloadState(modelId: string): DownloadProgress | undefined {
-  const downloads = downloadStateManager.getDownloadsByModel(modelId);
-  return downloads[0]; // Return the first (most recent) download for this model
+// Get download state - supports both modelId-specific and global active download
+export function getDownloadState(): ModelDownloadState | null;
+export function getDownloadState(modelId: string): DownloadProgress | undefined;
+export function getDownloadState(modelId?: string): DownloadProgress | ModelDownloadState | null | undefined {
+  // If modelId is provided, return DownloadProgress for that model
+  if (modelId) {
+    const downloads = downloadStateManager.getDownloadsByModel(modelId);
+    return downloads[0]; // Return the first (most recent) download for this model
+  }
+  
+  // Otherwise, return the current active download state (for route compatibility)
+  const downloads = downloadStateManager.getAllDownloads();
+  
+  // Find the first active download (downloading or pending)
+  const activeDownload = downloads.find(
+    d => d.status === 'downloading' || d.status === 'pending'
+  );
+  
+  if (!activeDownload) {
+    return null;
+  }
+
+  return {
+    is_downloading: activeDownload.status === 'downloading',
+    progress: activeDownload.progress,
+    total_files: activeDownload.files?.length || 0,
+    completed_files: activeDownload.files?.filter(f => f.status === 'completed').length || 0,
+    message: activeDownload.message,
+    speed: activeDownload.files?.[0]?.speed,
+    eta: activeDownload.files?.[0]?.eta,
+    files: activeDownload.files || [],
+    error_message: activeDownload.error,
+    status: activeDownload.status,
+    processId: activeDownload.processId,
+  };
 }
 
 // Helper functions for common operations
@@ -269,34 +301,6 @@ export function getAllDownloadStates(): Map<string, ModelDownloadState> {
   return statesMap;
 }
 
-// Wrapper functions for route compatibility
-// Get the current active download state (first downloading or pending download)
-export function getDownloadState(): ModelDownloadState | null {
-  const downloads = downloadStateManager.getAllDownloads();
-  
-  // Find the first active download (downloading or pending)
-  const activeDownload = downloads.find(
-    d => d.status === 'downloading' || d.status === 'pending'
-  );
-  
-  if (!activeDownload) {
-    return null;
-  }
-
-  return {
-    is_downloading: activeDownload.status === 'downloading',
-    progress: activeDownload.progress,
-    total_files: activeDownload.files?.length || 0,
-    completed_files: activeDownload.files?.filter(f => f.status === 'completed').length || 0,
-    message: activeDownload.message,
-    speed: activeDownload.files?.[0]?.speed,
-    eta: activeDownload.files?.[0]?.eta,
-    files: activeDownload.files || [],
-    error_message: activeDownload.error,
-    status: activeDownload.status,
-    processId: activeDownload.processId,
-  };
-}
 
 // Clear/cancel the current active download
 export function clearDownloadState(): void {
