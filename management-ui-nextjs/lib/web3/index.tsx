@@ -236,8 +236,8 @@ export function generateModelHash(fileName: string): string {
   return Math.abs(hash).toString(16).padStart(16, '0').slice(0, 16);
 }
 
-// Re-export ModelType and RegisterModelParams for easier imports
+// Re-export ModelType for easier imports
 // ModelType is already imported above for internal use, now re-export it
+// Note: RegisterModelParams and UseModelVaultRegisterReturn are already exported above as types
 export { ModelType };
-export type { RegisterModelParams, UseModelVaultRegisterReturn };
 
