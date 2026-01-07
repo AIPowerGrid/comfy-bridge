@@ -274,15 +274,22 @@ class ComfyUIBridge:
         if Settings.DEBUG:
             logger.info("DEBUG MODE ENABLED - Detailed logging active")
         
-        # Start recipe sync service if RecipesVault is enabled
+        # Start recipe sync service if RecipeVault is enabled and available
         if Settings.RECIPESVAULT_ENABLED and Settings.RECIPESVAULT_CONTRACT:
             try:
                 from .recipe_sync import get_recipe_sync_service
-                recipe_sync = get_recipe_sync_service()
-                await recipe_sync.start_periodic_sync()
-                logger.info("RecipesVault: Enabled - Recipes will be synced every 12 hours")
+                from .recipevault_client import get_recipevault_client
+                
+                # Check if RecipeVault client is actually enabled (facet available)
+                recipevault_client = get_recipevault_client()
+                if recipevault_client.enabled:
+                    recipe_sync = get_recipe_sync_service()
+                    await recipe_sync.start_periodic_sync()
+                    logger.info("RecipeVault: Enabled - Recipes will be synced every 12 hours")
+                else:
+                    logger.info("RecipeVault: Facet not available - using local workflow files (this is normal if RecipeVault is not yet deployed)")
             except Exception as e:
-                logger.warning(f"Failed to start recipe sync service: {e}")
+                logger.info(f"RecipeVault not available - using local workflow files: {e}")
         
         await initialize_model_mapper(Settings.COMFYUI_URL)
 

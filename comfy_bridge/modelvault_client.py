@@ -9,6 +9,7 @@ import time
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass, field
 from enum import IntEnum
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 
 logger = logging.getLogger(__name__)
 
@@ -299,10 +300,34 @@ class ModelVaultClient:
         if enabled:
             self._init_web3_with_fallback()
 
+    def _call_with_timeout(self, func, timeout=35):
+        """
+        Execute a function with a hard timeout using ThreadPoolExecutor.
+        This ensures contract calls don't hang indefinitely even if HTTPProvider timeout fails.
+        
+        Args:
+            func: The function to call
+            timeout: Maximum time to wait in seconds (default 35s, slightly longer than HTTPProvider timeout)
+        
+        Returns:
+            The result of the function call
+        
+        Raises:
+            TimeoutError: If the call exceeds the timeout
+        """
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(func)
+            try:
+                return future.result(timeout=timeout)
+            except FuturesTimeoutError:
+                future.cancel()
+                raise TimeoutError(f"Contract call timed out after {timeout} seconds")
+    
     def _retry_with_backoff(self, func, max_retries=3, initial_wait=1.0):
         """
         Retry a function with exponential backoff for rate limiting errors.
         Can also switch to a different RPC endpoint if persistently rate limited.
+        Handles timeouts and connection errors gracefully.
         
         Args:
             func: The function to call
@@ -315,23 +340,63 @@ class ModelVaultClient:
         wait_time = initial_wait
         last_error = None
         consecutive_429s = 0
+        consecutive_timeouts = 0
+        rpc_switches_this_call = 0
+        max_rpc_switches = len(self.rpc_endpoints) * 2  # Prevent infinite loops
         
         for attempt in range(max_retries + 1):
             try:
-                result = func()
+                # Wrap function call with hard timeout to prevent indefinite hangs
+                result = self._call_with_timeout(func, timeout=35)
                 consecutive_429s = 0  # Reset on success
+                consecutive_timeouts = 0  # Reset on success
                 return result
             except Exception as e:
                 error_msg = str(e)
+                error_type = type(e).__name__
                 last_error = e
                 
+                # Check for timeout errors
+                is_timeout = (
+                    "timeout" in error_msg.lower() or 
+                    "timed out" in error_msg.lower() or
+                    "Timeout" in error_type or
+                    "ReadTimeout" in error_type or
+                    "ConnectTimeout" in error_type
+                )
+                
                 # Check if it's a rate limiting error (429)
-                if "429" in error_msg or "Too Many Requests" in error_msg:
+                is_rate_limit = "429" in error_msg or "Too Many Requests" in error_msg
+                
+                if is_timeout:
+                    consecutive_timeouts += 1
+                    logger.debug(f"Timeout on attempt {attempt + 1}/{max_retries + 1}: {error_type}")
+                    
+                    # If we've had multiple timeouts, try switching RPC endpoint
+                    if consecutive_timeouts >= 2 and len(self.rpc_endpoints) > 1 and rpc_switches_this_call < max_rpc_switches:
+                        logger.debug(f"Multiple timeouts detected, switching RPC endpoint...")
+                        self._switch_rpc_endpoint()
+                        rpc_switches_this_call += 1
+                        consecutive_timeouts = 0
+                        continue
+                    
+                    if attempt < max_retries:
+                        logger.debug(f"Timeout, waiting {wait_time:.1f}s before retry {attempt + 1}/{max_retries}")
+                        time.sleep(wait_time)
+                        wait_time = min(wait_time * 2, 10)  # Cap at 10 seconds for timeouts
+                        continue
+                    else:
+                        logger.warning(f"Max retries reached after timeout. Giving up.")
+                        raise
+                
+                elif is_rate_limit:
                     consecutive_429s += 1
                     
                     # If we've had multiple 429s, try switching RPC endpoint
-                    if consecutive_429s >= 2 and len(self.rpc_endpoints) > 1:
+                    if consecutive_429s >= 2 and len(self.rpc_endpoints) > 1 and rpc_switches_this_call < max_rpc_switches:
+                        logger.debug(f"Multiple rate limits detected, switching RPC endpoint...")
                         self._switch_rpc_endpoint()
+                        rpc_switches_this_call += 1
                         consecutive_429s = 0
                         continue
                     
@@ -344,7 +409,8 @@ class ModelVaultClient:
                         logger.error(f"Max retries reached. RPC endpoint still rate limiting after {max_retries} attempts")
                         raise
                 else:
-                    # For non-rate-limiting errors, raise immediately
+                    # For other errors, log and raise immediately (don't retry)
+                    logger.debug(f"Non-retryable error: {error_type}: {error_msg[:100]}")
                     raise
         
         # Should not reach here, but just in case
@@ -660,7 +726,12 @@ class ModelVaultClient:
             return None
         
         try:
-            result = self._contract.functions.getConstraints(model_hash).call()
+            # Use retry logic with shorter timeout for constraints (non-critical data)
+            result = self._retry_with_backoff(
+                lambda: self._contract.functions.getConstraints(model_hash).call(),
+                max_retries=1,  # Only 1 retry for constraints (fail fast)
+                initial_wait=0.5  # Short wait
+            )
             # Grid ModelVault constraints struct:
             # [0] stepsMin, [1] stepsMax, [2] cfgMinTenths, [3] cfgMaxTenths,
             # [4] clipSkip, [5] allowedSamplers, [6] allowedSchedulers, [7] exists
@@ -772,12 +843,16 @@ class ModelVaultClient:
                 logger.info(f"Fetching {total} models from blockchain...")
                 
                 failed_count = 0
+                timeout_count = 0
+                # Log progress every 5 models
                 for model_id in range(1, total + 1):
+                    if model_id % 5 == 0 or model_id == 1:
+                        logger.info(f"Fetching model {model_id}/{total}...")
                     try:
                         # Use retry logic for individual model fetches
                         result = self._retry_with_backoff(
                             lambda mid=model_id: self._contract.functions.getModel(mid).call(),
-                            max_retries=3,
+                            max_retries=2,  # Reduced retries to prevent long hangs
                             initial_wait=0.5  # Shorter wait for individual fetches
                         )
                         if result and len(result) > 0 and result[0] != b'\x00' * 32:
@@ -813,10 +888,16 @@ class ModelVaultClient:
                             )
                             
                             # Fetch constraints for this model (skip for video models)
+                            # Wrap in try-except to ensure constraints failure doesn't block model registration
                             if model_type != ModelType.VIDEO_MODEL:
-                                constraints = self.get_constraints(model_hash_bytes)
-                                if constraints:
-                                    model_info.constraints = constraints
+                                try:
+                                    constraints = self.get_constraints(model_hash_bytes)
+                                    if constraints:
+                                        model_info.constraints = constraints
+                                except Exception as e:
+                                    # Log but don't fail - constraints are optional
+                                    logger.debug(f"Could not fetch constraints for model {model_id}: {type(e).__name__}")
+                                    # Continue without constraints
                             
                             temp_models.append(model_info)
                             blockchain_success = True
@@ -824,14 +905,23 @@ class ModelVaultClient:
                             failed_count += 1
                     except Exception as e:
                         failed_count += 1
-                        logger.debug(f"Failed to fetch model {model_id}: {type(e).__name__}")
+                        error_type = type(e).__name__
+                        # Track timeouts separately for debugging
+                        if "timeout" in str(e).lower() or "Timeout" in error_type:
+                            timeout_count += 1
+                            logger.warning(f"Timeout fetching model {model_id}/{total}: {error_type}")
+                        else:
+                            logger.debug(f"Failed to fetch model {model_id}/{total}: {error_type}")
                         continue
                 
                 # Log summary at appropriate level
                 if blockchain_success and temp_models:
                     logger.info(f"✓ Loaded {len(temp_models)} models from blockchain")
                 if failed_count > 0:
-                    logger.debug(f"Could not decode {failed_count}/{total} models (ABI mismatch or invalid model IDs)")
+                    if timeout_count > 0:
+                        logger.warning(f"Could not fetch {failed_count}/{total} models ({timeout_count} timeouts, {failed_count - timeout_count} other errors)")
+                    else:
+                        logger.debug(f"Could not decode {failed_count}/{total} models (ABI mismatch or invalid model IDs)")
             except Exception as e:
                 logger.warning(f"Blockchain fetch failed, will use local catalog: {type(e).__name__}")
         

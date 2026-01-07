@@ -623,41 +623,28 @@ class ModelMapper:
         """Get the workflow file for a Grid model.
         
         Priority:
-        1. RecipesVault (blockchain) - if enabled and recipe found
+        1. RecipeVault (blockchain) - if enabled and recipe found
         2. Local workflow map and file system lookup
         
         Returns the workflow filename (recipe name from blockchain or local filename).
         """
         from .config import Settings
         
-        # Try RecipesVault first if enabled
+        # Try RecipeVault first if enabled
         if Settings.RECIPESVAULT_ENABLED and Settings.RECIPESVAULT_CONTRACT:
             try:
-                from .recipesvault_client import get_recipesvault_client
-                from .modelvault_client import ModelVaultClient
+                from .recipevault_client import get_recipevault_client
                 
-                client = get_recipesvault_client()
-                modelvault_client = get_modelvault_client()
+                client = get_recipevault_client()
                 
-                # Try to find recipe by model name
+                # Try to find recipe by model name (matches RecipeSDK interface)
                 recipe = client.find_recipe(horde_model_name)
                 if recipe:
-                    logger.debug(f"Found recipe '{recipe.recipe_name}' for model '{horde_model_name}' in RecipesVault")
+                    logger.debug(f"Found recipe '{recipe.name}' for model '{horde_model_name}' in RecipeVault")
                     # Return recipe name (will be loaded from blockchain by load_workflow_file)
-                    return f"{recipe.recipe_name}.json"
-                
-                # Try to find recipe by model hash
-                chain_model = self.chain_models.get(horde_model_name)
-                if chain_model:
-                    model_hash = bytes.fromhex(chain_model.model_hash) if isinstance(chain_model.model_hash, str) else chain_model.model_hash
-                    recipes = client.get_recipes_by_model(model_hash)
-                    if recipes:
-                        # Use the first active recipe
-                        active_recipe = next((r for r in recipes if r.is_active), recipes[0])
-                        logger.debug(f"Found recipe '{active_recipe.recipe_name}' for model '{horde_model_name}' by model hash")
-                        return f"{active_recipe.recipe_name}.json"
+                    return f"{recipe.name}.json"
             except Exception as e:
-                logger.debug(f"Failed to lookup recipe in RecipesVault: {e}, falling back to local lookup")
+                logger.debug(f"Failed to lookup recipe in RecipeVault: {e}, falling back to local lookup")
         
         # Fallback to local workflow lookup
         # Try to find workflow file for each potential match

@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 def detect_workflow_model_type(workflow: Dict[str, Any]) -> str:
-    """Detect the model type (flux, wanvideo, sdxl, etc.) from workflow nodes"""
+    """Detect the model type (flux, wanvideo, ltxv, sdxl, etc.) from workflow nodes"""
     # Handle ComfyUI native format (has "nodes" array)
     if isinstance(workflow, dict) and "nodes" in workflow:
         nodes = workflow.get("nodes", [])
@@ -23,6 +23,14 @@ def detect_workflow_model_type(workflow: Dict[str, Any]) -> str:
                 continue
             
             class_type = node.get("type", "")
+            
+            # LTXV workflows use LTXV-specific nodes
+            if class_type in [
+                "LTXVConditioning",
+                "EmptyLTXVLatentVideo",
+                "LTXVScheduler",
+            ]:
+                return "ltxv"
             
             # WanVideo workflows use WanVideo-specific or Hunyuan latent nodes
             if class_type in [
@@ -52,6 +60,14 @@ def detect_workflow_model_type(workflow: Dict[str, Any]) -> str:
                 continue
             
             class_type = node_data.get("class_type", "")
+            
+            # LTXV workflows use LTXV-specific nodes
+            if class_type in [
+                "LTXVConditioning",
+                "EmptyLTXVLatentVideo",
+                "LTXVScheduler",
+            ]:
+                return "ltxv"
             
             # WanVideo workflows use WanVideo-specific or Hunyuan latent nodes
             if class_type in [
@@ -107,18 +123,52 @@ def is_model_compatible(model_name: str, model_type: str) -> bool:
 
 
 def _force_video_processing(job: Dict[str, Any], model_type: str) -> None:
-    """Video models cannot run through img2img flow – force img2vid semantics."""
-    if model_type != "wanvideo":
+    """Video models cannot run through img2img flow – force video semantics."""
+    # Handle all video model types
+    if model_type not in ["wanvideo", "ltxv"]:
         return
 
-    current_processing = job.get("source_processing")
-    if current_processing != "img2vid":
-        job["source_processing"] = "img2vid"
+    # Force media_type to video
+    current_media_type = job.get("media_type")
+    if current_media_type != "video":
+        job["media_type"] = "video"
         logger.info(
-            "Overriding source_processing for WanVideo job %s: %s -> img2vid",
+            "Overriding media_type for %s job %s: %s -> video",
+            model_type,
             job.get("id", "unknown"),
-            current_processing or "unset",
+            current_media_type or "unset",
         )
+
+    # Force source_processing to video variants
+    current_processing = job.get("source_processing")
+    if model_type == "wanvideo":
+        # WAN video models use img2vid for image-to-video
+        if current_processing not in ["img2vid", "txt2video"]:
+            # If there's a source image, use img2vid, otherwise txt2video
+            if job.get("source_image"):
+                job["source_processing"] = "img2vid"
+            else:
+                job["source_processing"] = "txt2video"
+            logger.info(
+                "Overriding source_processing for WanVideo job %s: %s -> %s",
+                job.get("id", "unknown"),
+                current_processing or "unset",
+                job["source_processing"],
+            )
+    elif model_type == "ltxv":
+        # LTXV models use txt2video/img2video
+        if current_processing not in ["txt2video", "img2video"]:
+            # If there's a source image, use img2video, otherwise txt2video
+            if job.get("source_image"):
+                job["source_processing"] = "img2video"
+            else:
+                job["source_processing"] = "txt2video"
+            logger.info(
+                "Overriding source_processing for LTXV job %s: %s -> %s",
+                job.get("id", "unknown"),
+                current_processing or "unset",
+                job["source_processing"],
+            )
 
 
 async def validate_and_fix_model_filenames(
@@ -621,11 +671,11 @@ async def download_image(url: str, filename: str) -> str:
 
 def load_workflow_file(workflow_filename: str) -> Dict[str, Any]:
     """
-    Load workflow from local file (synced from RecipesVault) or fallback to blockchain.
+    Load workflow from local file (synced from RecipeVault) or fallback to blockchain.
     
     Priority:
-    1. Local JSON file (synced from RecipesVault every 12 hours)
-    2. RecipesVault (blockchain) - if local file not found and RecipesVault enabled
+    1. Local JSON file (synced from RecipeVault every 12 hours)
+    2. RecipeVault (blockchain) - if local file not found and RecipeVault enabled
     3. Legacy local JSON files - for backward compatibility
     """
     # First, try to load from local file (synced from blockchain)
@@ -644,7 +694,7 @@ def load_workflow_file(workflow_filename: str) -> Dict[str, Any]:
     
     # If local file exists, use it
     if os.path.exists(workflow_path):
-        logger.debug(f"Loading workflow '{workflow_filename}' from local file (synced from RecipesVault)")
+        logger.debug(f"Loading workflow '{workflow_filename}' from local file (synced from RecipeVault)")
         with open(workflow_path, "r", encoding="utf-8") as f:
             data = json.load(f)
         
@@ -654,18 +704,18 @@ def load_workflow_file(workflow_filename: str) -> Dict[str, Any]:
         # Return a deep copy so callers can safely mutate without caching stale fields
         return copy.deepcopy(data)
     
-    # If local file not found and RecipesVault is enabled, try blockchain
+    # If local file not found and RecipeVault is enabled, try blockchain
     if Settings.RECIPESVAULT_ENABLED and Settings.RECIPESVAULT_CONTRACT:
         try:
-            from .recipesvault_client import get_recipesvault_client
+            from .recipevault_client import get_recipevault_client
             
-            client = get_recipesvault_client()
+            client = get_recipevault_client()
             # Remove .json extension if present for recipe lookup
             recipe_name = workflow_filename.replace('.json', '')
             recipe = client.find_recipe(recipe_name)
             
             if recipe:
-                logger.info(f"Loaded workflow '{workflow_filename}' from RecipesVault (blockchain) - will be synced locally")
+                logger.info(f"Loaded workflow '{workflow_filename}' from RecipeVault (blockchain) - will be synced locally")
                 workflow_dict = recipe.get_workflow_dict()
                 if workflow_dict:
                     # Validate workflow has actual model file names, not placeholders
@@ -682,9 +732,9 @@ def load_workflow_file(workflow_filename: str) -> Dict[str, Any]:
                     
                     return copy.deepcopy(workflow_dict)
                 else:
-                    logger.warning(f"Failed to parse workflow JSON from RecipesVault for '{workflow_filename}'")
+                    logger.warning(f"Failed to parse workflow JSON from RecipeVault for '{workflow_filename}'")
         except Exception as e:
-            logger.debug(f"Failed to load workflow from RecipesVault: {e}")
+            logger.debug(f"Failed to load workflow from RecipeVault: {e}")
     
     # Final fallback: raise error if file not found
     raise FileNotFoundError(f"Workflow file not found: {workflow_path}")
@@ -754,7 +804,9 @@ async def process_workflow(
     model_type = detect_workflow_model_type(processed_workflow)
     if model_type == "unknown":
         model_name_lower = (job.get("model") or "").lower()
-        if "wan" in model_name_lower:
+        if "ltxv" in model_name_lower or "ltx" in model_name_lower:
+            model_type = "ltxv"
+        elif "wan" in model_name_lower:
             model_type = "wanvideo"
         elif "flux" in model_name_lower:
             model_type = "flux"

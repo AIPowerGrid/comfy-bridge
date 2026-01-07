@@ -43,8 +43,10 @@ services:
           - ./get_gpu_info.py:/app/comfy-bridge/get_gpu_info.py:ro
           # Access to models directory to check installed models
           - models:/app/ComfyUI/models
-          # Access to workflows directory
+          # Access to workflows directory (writable for recipe sync)
           - ./workflows:/app/comfy-bridge/workflows
+          # Mount aipg-smart-contracts for RecipeVault local SDK mode
+          - ../aipg-smart-contracts:/app/aipg-smart-contracts:ro
           # Docker socket for container restarts (Windows: //var/run/docker.sock, Linux: /var/run/docker.sock)
           - //var/run/docker.sock:/var/run/docker.sock
           # Share docker-compose.yml for restarts
@@ -107,6 +109,8 @@ services:
       - DEBUG=${DEBUG:-true}
       - MODELVAULT_CONTRACT=${MODELVAULT_CONTRACT:-0x79F39f2a0eA476f53994812e6a8f3C8CFe08c609}
       - MODELVAULT_RPC=${MODELVAULT_RPC:-https://mainnet.base.org}
+      - RECIPESVAULT_USE_LOCAL_SDK=${RECIPESVAULT_USE_LOCAL_SDK:-false}
+      - RECIPESVAULT_SDK_PATH=${RECIPESVAULT_SDK_PATH:-aipg-smart-contracts}
       - MODELS_PATH=/app/ComfyUI/models
     
     # Ports
@@ -125,8 +129,8 @@ services:
       - input:/app/ComfyUI/input
       # Model cache and metadata - for tracking downloads and checksums
       - cache:/app/comfy-bridge/.cache
-      # Workflows (optional: use local workflows)
-      - ./workflows:/app/comfy-bridge/workflows:ro
+      # Workflows - writable so recipes can be synced from blockchain
+      - ./workflows:/app/comfy-bridge/workflows
       # Config file (optional)
       - ./.env:/app/comfy-bridge/.env:ro
       # Grid image model reference repository removed - blockchain is source of truth
@@ -134,6 +138,10 @@ services:
       # Mount local Python code for development (allows hot-reload of code changes)
       - ./comfy_bridge:/app/comfy-bridge/comfy_bridge:ro
       - ./download_models_from_chain.py:/app/comfy-bridge/download_models_from_chain.py:ro
+      # Mount aipg-smart-contracts for RecipeVault local SDK mode
+      # On Windows: c:/dev/aipg-smart-contracts
+      # On Linux/Mac: ../aipg-smart-contracts (relative to comfy-bridge)
+      - ../aipg-smart-contracts:/app/aipg-smart-contracts:ro
     
     # Restart policy
     restart: unless-stopped

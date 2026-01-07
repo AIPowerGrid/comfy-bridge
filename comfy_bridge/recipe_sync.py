@@ -1,5 +1,5 @@
 """
-Recipe Sync Service - Downloads recipes from RecipesVault and stores them locally.
+Recipe Sync Service - Downloads recipes from RecipeVault and stores them locally.
 Syncs recipes every 12 hours and saves them as JSON files in the workflows directory.
 """
 
@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Dict, Optional
 
 from .config import Settings
-from .recipesvault_client import get_recipesvault_client, OnChainRecipeInfo
+from .recipevault_client import get_recipevault_client, OnChainRecipeInfo
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ SYNC_INTERVAL_SECONDS = 12 * 60 * 60  # 12 hours
 
 
 class RecipeSyncService:
-    """Service to sync recipes from RecipesVault to local files."""
+    """Service to sync recipes from RecipeVault to local files."""
     
     def __init__(self):
         self.workflow_dir = Path(Settings.WORKFLOW_DIR)
@@ -32,7 +32,7 @@ class RecipeSyncService:
         
     async def sync_recipes(self, force: bool = False) -> Dict[str, bool]:
         """
-        Download all recipes from RecipesVault and save them as JSON files.
+        Download all recipes from RecipeVault and save them as JSON files.
         
         Args:
             force: If True, sync even if recently synced
@@ -49,16 +49,16 @@ class RecipeSyncService:
                     return {}
             
             if not Settings.RECIPESVAULT_ENABLED or not Settings.RECIPESVAULT_CONTRACT:
-                logger.debug("RecipesVault not enabled or contract not configured")
+                logger.debug("RecipeVault not enabled or contract not configured - using local workflow files")
                 return {}
             
             try:
-                client = get_recipesvault_client()
+                client = get_recipevault_client()
                 if not client.enabled:
-                    logger.warning("RecipesVault client not enabled")
+                    logger.debug("RecipeVault client not enabled - using local workflow files")
                     return {}
                 
-                logger.info("Starting recipe sync from RecipesVault...")
+                logger.info("Starting recipe sync from RecipeVault...")
                 recipes = client.fetch_all_recipes(force_refresh=True)
                 
                 results = {}
@@ -75,13 +75,13 @@ class RecipeSyncService:
                             continue
                             
                         # Save recipe as JSON file
-                        filename = self._get_workflow_filename(recipe_info.recipe_name)
+                        filename = self._get_workflow_filename(recipe_info.name)
                         filepath = self.workflow_dir / filename
                         
                         # Parse workflow JSON
                         workflow_dict = recipe_info.get_workflow_dict()
                         if not workflow_dict:
-                            logger.warning(f"Failed to parse workflow JSON for recipe '{recipe_info.recipe_name}'")
+                            logger.warning(f"Failed to parse workflow JSON for recipe '{recipe_info.name}'")
                             results[recipe_name] = False
                             failed_count += 1
                             continue
@@ -90,7 +90,7 @@ class RecipeSyncService:
                         with open(filepath, 'w', encoding='utf-8') as f:
                             json.dump(workflow_dict, f, indent=2, ensure_ascii=False)
                         
-                        logger.debug(f"Synced recipe '{recipe_info.recipe_name}' -> {filename}")
+                        logger.debug(f"Synced recipe '{recipe_info.name}' -> {filename}")
                         results[recipe_name] = True
                         synced_count += 1
                         

@@ -39,12 +39,18 @@ class Settings:
     MODELVAULT_RPC_URL = os.getenv("MODELVAULT_RPC_URL", "https://mainnet.base.org")
     MODELVAULT_CONTRACT = os.getenv("MODELVAULT_CONTRACT", "0x79F39f2a0eA476f53994812e6a8f3C8CFe08c609")
     
-    # RecipesVault on-chain workflow/recipe registry (Base Mainnet, diamond proxy facet)
+    # RecipeVault on-chain workflow/recipe registry (Base Mainnet, diamond proxy facet)
     # The blockchain is the single source of truth for workflow/recipe registration
+    # RecipeVault uses the same diamond proxy contract as ModelVault
+    # Both are facets of the same diamond proxy, accessed through the same contract address
     RECIPESVAULT_ENABLED = os.getenv("RECIPESVAULT_ENABLED", "true").lower() == "true"
     RECIPESVAULT_RPC_URL = os.getenv("RECIPESVAULT_RPC_URL", MODELVAULT_RPC_URL)
-    RECIPESVAULT_CONTRACT = os.getenv("RECIPESVAULT_CONTRACT", "")
+    # Default to MODELVAULT_CONTRACT (diamond proxy address) if not specified
+    RECIPESVAULT_CONTRACT = os.getenv("RECIPESVAULT_CONTRACT", MODELVAULT_CONTRACT)
     RECIPESVAULT_CHAIN_ID = int(os.getenv("RECIPESVAULT_CHAIN_ID", "8453"))
+    # Local SDK mode - use files from aipg-smart-contracts directory instead of blockchain
+    RECIPESVAULT_USE_LOCAL_SDK = os.getenv("RECIPESVAULT_USE_LOCAL_SDK", "true").lower() == "true"
+    RECIPESVAULT_SDK_PATH = os.getenv("RECIPESVAULT_SDK_PATH", "aipg-smart-contracts")
 
     @classmethod
     def validate(cls):

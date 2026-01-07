@@ -100,6 +100,7 @@ RUN chmod +x get_gpu_info.py download_models_from_chain.py gpu_info_api.py downl
 # Install optional performance dependencies (inlined to avoid Windows CRLF issues)
 RUN --mount=type=cache,target=/root/.cache/pip \
     echo "Installing optional performance dependencies..." && \
+    pip3 install --timeout 60 onnx>=1.15.0 || echo "onnx not available" && \
     pip3 install --timeout 60 onnxruntime>=1.15.0 || echo "onnxruntime not available" && \
     pip3 install --timeout 60 flash-attn>=2.0.0 || echo "flash-attn not available" && \
     pip3 install --timeout 60 sageattention>=1.0.0 || echo "sageattention not available" && \

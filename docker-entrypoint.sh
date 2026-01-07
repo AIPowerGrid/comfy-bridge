@@ -134,7 +134,9 @@ echo "Visit http://localhost:5000 to select and download models"
 
 # Normalize Wan asset locations
 echo "Normalizing Wan asset locations..."
-python3 - <<'PY' || echo "Wan asset normalization reported an issue (continuing)"
+cd /app/comfy-bridge && python3 - <<'PY' || echo "Wan asset normalization reported an issue (continuing)"
+import sys
+sys.path.insert(0, '/app/comfy-bridge')
 from comfy_bridge.wan_assets import ensure_wan_symlinks
 ensure_wan_symlinks()
 PY
