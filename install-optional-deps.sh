@@ -22,6 +22,7 @@ try_install() {
 
 # Try to install performance optimization packages
 echo "Performance Optimizations:"
+try_install "onnx>=1.15.0" "ONNX support for model serialization"
 try_install "onnxruntime>=1.15.0" "ONNX Runtime for optimized model execution"
 try_install "flash-attn>=2.0.0" "Flash Attention for memory-efficient attention"
 try_install "sageattention>=1.0.0" "High-performance attention optimization"

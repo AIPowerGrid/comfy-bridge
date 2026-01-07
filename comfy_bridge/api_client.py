@@ -106,7 +106,7 @@ class APIClient:
                         logger.info(f"   → {skipped['nsfw']} jobs skipped: NSFW content (GRID_NSFW={Settings.NSFW})")
                     if skipped.get("models", 0) > 0:
                         logger.info(f"   → {skipped['models']} jobs skipped: model mismatch (jobs exist but for models we don't support)")
-                        logger.info(f"      We are advertising: {models_to_use}")
+                        logger.info(f"      📋 MODELS WE ARE ADVERTISING ({len(models_to_use)}): {models_to_use}")
                         # Check which models actually have jobs in the queue
                         logger.info(f"      Fetching models status from API...")
                         try:
@@ -116,6 +116,9 @@ class APIClient:
                             if models_status:
                                 if isinstance(models_status, list):
                                     models_with_jobs = []
+                                    supported_with_jobs = []
+                                    unsupported_with_jobs = []
+                                    
                                     for model_info in models_status:
                                         if isinstance(model_info, dict):
                                             name = model_info.get("name", "")
@@ -123,24 +126,66 @@ class APIClient:
                                             jobs = model_info.get("jobs", 0)  # Actual job count
                                             if queued > 0 or jobs > 0:
                                                 models_with_jobs.append((name, queued, jobs))
+                                                if name in models_to_use:
+                                                    supported_with_jobs.append((name, queued, jobs))
+                                                else:
+                                                    unsupported_with_jobs.append((name, queued, jobs))
                                     
                                     logger.info(f"      Found {len(models_with_jobs)} models with queued work")
+                                    
+                                    # Show supported models with jobs first
+                                    if supported_with_jobs:
+                                        logger.info(f"      ✅ SUPPORTED MODELS WITH JOBS ({len(supported_with_jobs)}):")
+                                        for name, queued, jobs in sorted(supported_with_jobs, key=lambda x: -x[1]):
+                                            logger.info(f"         ✓ '{name}' - {jobs} jobs ({queued:.0f} megapixels)")
+                                    else:
+                                        logger.info(f"      ⚠️  NO SUPPORTED MODELS HAVE JOBS IN QUEUE")
+                                    
+                                    # Show unsupported models with jobs
+                                    if unsupported_with_jobs:
+                                        logger.info(f"      ❌ UNSUPPORTED MODELS WITH JOBS ({len(unsupported_with_jobs)}):")
+                                        for name, queued, jobs in sorted(unsupported_with_jobs, key=lambda x: -x[1])[:20]:
+                                            logger.info(f"         ✗ '{name}' - {jobs} jobs ({queued:.0f} megapixels)")
+                                        
+                                        # Check for near-matches (case-insensitive, partial matches)
+                                        logger.info(f"      🔍 CHECKING FOR NAME MISMATCHES...")
+                                        for unsupported_name, _, _ in unsupported_with_jobs[:10]:  # Check first 10
+                                            unsupported_lower = unsupported_name.lower()
+                                            for supported_name in models_to_use:
+                                                supported_lower = supported_name.lower()
+                                                # Check for exact match (case-insensitive)
+                                                if unsupported_lower == supported_lower:
+                                                    logger.warning(f"      ⚠️  CASE MISMATCH: '{unsupported_name}' (queue) vs '{supported_name}' (advertised)")
+                                                # Check for partial match
+                                                elif unsupported_lower in supported_lower or supported_lower in unsupported_lower:
+                                                    logger.warning(f"      ⚠️  PARTIAL MATCH: '{unsupported_name}' (queue) might match '{supported_name}' (advertised)")
+                                        
+                                        logger.info(f"      💡 TIP: If '{unsupported_with_jobs[0][0]}' should be supported, check:")
+                                        logger.info(f"         - Model name spelling/casing in workflow mappings")
+                                        logger.info(f"         - Model registration in ModelVault")
+                                        logger.info(f"         - Workflow file exists for this model")
+                                    else:
+                                        logger.info(f"      ✅ All models with jobs are supported")
+                                    
+                                    # Summary
+                                    logger.info(f"      📊 SUMMARY:")
+                                    logger.info(f"         • We advertise: {len(models_to_use)} model(s)")
+                                    logger.info(f"         • Models with jobs: {len(models_with_jobs)}")
+                                    logger.info(f"         • Supported models with jobs: {len(supported_with_jobs)}")
+                                    logger.info(f"         • Unsupported models with jobs: {len(unsupported_with_jobs)}")
+                                    if unsupported_with_jobs:
+                                        logger.warning(f"         ⚠️  {skipped['models']} job(s) skipped because model names don't match!")
+                                        logger.warning(f"         Check if these model names need to be added to your workflow mappings:")
+                                        for name, _, jobs in unsupported_with_jobs[:5]:
+                                            logger.warning(f"            - '{name}' ({jobs} jobs)")
+                                    
+                                    # Show all models with jobs for reference
                                     if models_with_jobs:
-                                        logger.info(f"      🔍 MODELS WITH QUEUED WORK (sorted by queue size):")
+                                        logger.info(f"      📊 ALL MODELS WITH QUEUED WORK (sorted by queue size):")
                                         logger.info(f"         Note: 'queued' = megapixels of work, 'jobs' = actual job count")
                                         for name, queued, jobs in sorted(models_with_jobs, key=lambda x: -x[1])[:20]:
-                                            supported = "✓ SUPPORTED" if name in models_to_use else "✗ NOT SUPPORTED"
-                                            logger.info(f"         {supported}: '{name}' - {jobs} jobs ({queued:.0f} megapixels)")
-                                        
-                                        # Check for near-matches to help with naming issues
-                                        unsupported = [n for n, _ in models_with_jobs if n not in models_to_use]
-                                        if unsupported:
-                                            logger.info(f"      ⚠️  UNSUPPORTED MODELS WITH JOBS: {unsupported}")
-                                            logger.info(f"         These are the models you need to add to WORKFLOW_FILE or create mappings for")
-                                    else:
-                                        logger.info(f"      No models with queued jobs found (all models have 0 queued)")
-                                        # Log first few models to see structure
-                                        logger.info(f"      Sample of models status: {models_status[:3] if len(models_status) > 0 else 'empty'}")
+                                            supported = "✓" if name in models_to_use else "✗"
+                                            logger.info(f"         {supported} '{name}' - {jobs} jobs ({queued:.0f} megapixels)")
                                 else:
                                     logger.info(f"      Models status response is not a list: {type(models_status)}")
                                     logger.info(f"      Raw response: {str(models_status)[:500]}")

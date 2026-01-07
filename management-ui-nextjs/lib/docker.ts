@@ -94,6 +94,40 @@ async function findComposeFile(): Promise<string> {
 }
 
 /**
+ * Checks if containers are already running
+ */
+async function areContainersRunning(composeDir: string, composeFile: string): Promise<boolean> {
+  try {
+    const checkCommand = `docker compose -f "${composeFile}" ps --format json`;
+    const { stdout } = await execAsync(checkCommand, {
+      cwd: composeDir,
+      timeout: 10000, // 10 seconds
+    });
+    
+    // Parse JSON output to check if containers are running
+    const lines = stdout.trim().split('\n').filter(l => l.trim());
+    if (lines.length === 0) return false;
+    
+    for (const line of lines) {
+      try {
+        const container = JSON.parse(line);
+        if (container.State === 'running') {
+          return true;
+        }
+      } catch {
+        // Skip invalid JSON lines
+        continue;
+      }
+    }
+    
+    return false;
+  } catch {
+    // If check fails, assume containers might not be running and proceed with restart
+    return false;
+  }
+}
+
+/**
  * Restarts Docker containers using docker compose
  */
 export async function restartDockerContainers(): Promise<RestartResult> {
@@ -127,20 +161,32 @@ export async function restartDockerContainers(): Promise<RestartResult> {
     );
   }
 
+  // Check if containers are already running - if so, use 'restart' instead of 'up -d'
+  // This can help avoid hangs when containers are already up
+  const containersRunning = await areContainersRunning(composeDir, absoluteComposeFile);
+  console.log(`Containers running: ${containersRunning}`);
+
   // Try docker compose (newer) first, then docker-compose (legacy)
   // Use absolute path with -f flag to ensure docker-compose can find it
   // Use --project-directory to ensure relative paths in compose file resolve correctly
-  // Use 'up -d' instead of 'restart' to recreate containers with new env vars
-  const commands = [
-    `docker compose -f "${absoluteComposeFile}" --project-directory "${composeDir}" up -d`,
-    `docker-compose -f "${absoluteComposeFile}" --project-directory "${composeDir}" up -d`,
-    // Try without --project-directory as fallback
-    `docker compose -f "${absoluteComposeFile}" up -d`,
-    `docker-compose -f "${absoluteComposeFile}" up -d`,
-    // Fallback to restart if up -d doesn't work
-    `docker compose -f "${absoluteComposeFile}" --project-directory "${composeDir}" restart`,
-    `docker-compose -f "${absoluteComposeFile}" --project-directory "${composeDir}" restart`,
-  ];
+  // If containers are already running, prefer 'restart' over 'up -d' to avoid hangs
+  const commands = containersRunning
+    ? [
+        // If containers are running, restart is faster and less likely to hang
+        `docker compose -f "${absoluteComposeFile}" --project-directory "${composeDir}" restart`,
+        `docker-compose -f "${absoluteComposeFile}" --project-directory "${composeDir}" restart`,
+        // Fallback to up -d if restart doesn't work
+        `docker compose -f "${absoluteComposeFile}" --project-directory "${composeDir}" up -d`,
+        `docker-compose -f "${absoluteComposeFile}" --project-directory "${composeDir}" up -d`,
+      ]
+    : [
+        // If containers aren't running, use up -d to start them
+        `docker compose -f "${absoluteComposeFile}" --project-directory "${composeDir}" up -d`,
+        `docker-compose -f "${absoluteComposeFile}" --project-directory "${composeDir}" up -d`,
+        // Try without --project-directory as fallback
+        `docker compose -f "${absoluteComposeFile}" up -d`,
+        `docker-compose -f "${absoluteComposeFile}" up -d`,
+      ];
 
   let lastError: Error | null = null;
 
@@ -150,6 +196,8 @@ export async function restartDockerContainers(): Promise<RestartResult> {
       
       // Execute in the compose directory to ensure relative paths in docker-compose.yml work
       // Set COMPOSE_FILE environment variable as well
+      // Use a longer timeout (5 minutes) to handle slow container operations
+      // Also add killSignal to ensure the process can be killed if it hangs
       const { stdout, stderr } = await execAsync(command, {
         cwd: composeDir,
         env: {
@@ -157,8 +205,12 @@ export async function restartDockerContainers(): Promise<RestartResult> {
           COMPOSE_FILE: absoluteComposeFile,
           COMPOSE_PROJECT_NAME: 'comfy-bridge',
         },
-        // Increase timeout for container restart operations
-        timeout: 60000, // 60 seconds
+        // Increase timeout significantly for container restart operations (5 minutes)
+        // This handles cases where containers take time to stop/start
+        timeout: 300000, // 5 minutes
+        // Ensure we can kill the process if it hangs
+        killSignal: 'SIGKILL',
+        maxBuffer: 10 * 1024 * 1024, // 10MB buffer for large output
       });
 
       return {
@@ -169,6 +221,13 @@ export async function restartDockerContainers(): Promise<RestartResult> {
       };
     } catch (error: any) {
       lastError = error;
+      // Check if it's a timeout error
+      if (error.code === 'ETIMEDOUT' || error.signal === 'SIGKILL') {
+        console.error(`Command timed out after 5 minutes: ${command}`);
+        console.error('This usually means docker compose is stuck. Try restarting manually.');
+        // Don't try other commands if we timed out - they'll likely timeout too
+        break;
+      }
       // If this command failed, try the next one
       console.warn(`Command failed: ${command}`, error.message);
       if (error.stderr) {
