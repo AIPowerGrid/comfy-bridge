@@ -835,19 +835,17 @@ class ModelVaultClient:
         
         # Descriptions are now generated from model names (no JSON catalog)
         
-        # Try blockchain first
-        if self.enabled and self._contract:
+        # Model fetching disabled - using RecipeVault instead
+        # Try blockchain first (disabled - RecipeVault is now the source of truth)
+        if False and self.enabled and self._contract:
             try:
                 # Grid ModelVault: iterate through model IDs directly
                 total = self.get_total_models()
-                logger.info(f"Fetching {total} models from blockchain...")
                 
                 failed_count = 0
                 timeout_count = 0
                 # Log progress every 5 models
                 for model_id in range(1, total + 1):
-                    if model_id % 5 == 0 or model_id == 1:
-                        logger.info(f"Fetching model {model_id}/{total}...")
                     try:
                         # Use retry logic for individual model fetches
                         result = self._retry_with_backoff(
@@ -914,21 +912,18 @@ class ModelVaultClient:
                             logger.debug(f"Failed to fetch model {model_id}/{total}: {error_type}")
                         continue
                 
-                # Log summary at appropriate level
+                # Log summary at appropriate level (disabled - RecipeVault is now source of truth)
                 if blockchain_success and temp_models:
-                    logger.info(f"✓ Loaded {len(temp_models)} models from blockchain")
+                    pass  # Logging disabled - RecipeVault is now source of truth
                 if failed_count > 0:
-                    if timeout_count > 0:
-                        logger.warning(f"Could not fetch {failed_count}/{total} models ({timeout_count} timeouts, {failed_count - timeout_count} other errors)")
-                    else:
-                        logger.debug(f"Could not decode {failed_count}/{total} models (ABI mismatch or invalid model IDs)")
+                    pass  # Logging disabled
             except Exception as e:
-                logger.warning(f"Blockchain fetch failed, will use local catalog: {type(e).__name__}")
+                pass  # Logging disabled - RecipeVault is now source of truth
         
-        # Fall back to local catalog if blockchain failed or returned no models
+        # Model fetching disabled - RecipeVault is now the source of truth
+        # Return empty list since we're using RecipeVault for workflow discovery
         if not blockchain_success or not temp_models:
-            logger.info("Falling back to local catalog for model data...")
-            temp_models = self._load_models_from_catalog()
+            temp_models = []
         
         # Process models
         seen_names = set()

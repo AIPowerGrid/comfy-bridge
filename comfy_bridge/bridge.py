@@ -443,27 +443,28 @@ class ComfyUIBridge:
                 for model_info in models_status:
                     if isinstance(model_info, dict):
                         name = model_info.get("name", "")
-                        queued = model_info.get("queued", 0)
-                        if queued > 0:
-                            models_with_jobs.append((name, queued))
+                        queued = model_info.get("queued", 0)  # This is megapixels, not job count!
+                        jobs = model_info.get("jobs", 0)  # Actual job count
+                        if queued > 0 or jobs > 0:
+                            models_with_jobs.append((name, queued, jobs))
                 
                 if models_with_jobs:
                     logger.info(f"📊 Models with queued jobs in API:")
-                    for name, queued in sorted(models_with_jobs, key=lambda x: -x[1])[:20]:
+                    for name, queued, jobs in sorted(models_with_jobs, key=lambda x: -x[2])[:20]:  # Sort by job count
                         # Check if we support this model
                         supported = "✓" if name in self.supported_models else "✗"
-                        logger.info(f"   {supported} {name}: {queued} jobs")
+                        logger.info(f"   {supported} {name}: {jobs} jobs ({queued:.0f} megapixels)")
                     
                     # Check for matches
                     our_models_set = set(self.supported_models)
-                    queue_models_set = set(name for name, _ in models_with_jobs)
+                    queue_models_set = set(name for name, _, _ in models_with_jobs)
                     matching = our_models_set & queue_models_set
                     if matching:
                         logger.info(f"✅ We can serve {len(matching)} models with queued jobs: {list(matching)}")
                     else:
                         logger.warning("⚠️  NONE of our models have queued jobs!")
                         logger.warning(f"   Our models: {self.supported_models}")
-                        logger.warning(f"   Models with jobs: {[n for n, _ in models_with_jobs[:10]]}")
+                        logger.warning(f"   Models with jobs: {[n for n, _, _ in models_with_jobs[:10]]}")
                 else:
                     logger.info("📭 No models have queued jobs right now")
             else:
@@ -490,15 +491,16 @@ class ComfyUIBridge:
                         for model_info in models_status:
                             if isinstance(model_info, dict):
                                 name = model_info.get("name", "")
-                                queued = model_info.get("queued", 0)
-                                if queued > 0:
-                                    models_with_jobs.append((name, queued))
+                                queued = model_info.get("queued", 0)  # This is megapixels, not job count!
+                                jobs = model_info.get("jobs", 0)  # Actual job count
+                                if queued > 0 or jobs > 0:
+                                    models_with_jobs.append((name, queued, jobs))
                         
                         if models_with_jobs:
                             logger.info(f"📊 Models with queued jobs (poll #{job_count}):")
-                            for name, queued in sorted(models_with_jobs, key=lambda x: -x[1])[:10]:
+                            for name, queued, jobs in sorted(models_with_jobs, key=lambda x: -x[2])[:10]:  # Sort by job count
                                 supported = "✓" if name in self.supported_models else "✗"
-                                logger.info(f"   {supported} {name}: {queued} jobs")
+                                logger.info(f"   {supported} {name}: {jobs} jobs ({queued:.0f} megapixels)")
                 except Exception as e:
                     logger.debug(f"Could not check queue status: {e}")
             
