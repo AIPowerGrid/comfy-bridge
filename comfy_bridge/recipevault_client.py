@@ -380,8 +380,23 @@ class RecipeVaultClient:
                     continue
         
         self._cache_initialized = True
-        unique_count = len(set(r.name for r in self._recipe_cache.values()))
+        # Get unique recipes by recipe_id (since OnChainRecipeInfo is not hashable)
+        unique_recipe_ids = set()
+        unique_recipes = []
+        for recipe_info in self._recipe_cache.values():
+            if recipe_info.recipe_id not in unique_recipe_ids:
+                unique_recipe_ids.add(recipe_info.recipe_id)
+                unique_recipes.append(recipe_info)
+        
+        unique_count = len(unique_recipes)
         logger.info(f"Loaded {unique_count} recipes from aipg-smart-contracts")
+        
+        # Log recipe details
+        if unique_count > 0:
+            logger.info(f"📋 Recipes loaded from RecipeVault:")
+            for recipe_info in sorted(unique_recipes, key=lambda r: r.name):
+                filename = recipe_info.name.replace(" ", "_").replace(".", "_").replace("-", "_") + ".json"
+                logger.info(f"   ✓ Recipe: '{recipe_info.name}' (ID: {recipe_info.recipe_id}, filename: {filename})")
 
     def _retry_with_backoff(self, func, max_retries=3, initial_wait=1.0):
         """Retry a function with exponential backoff for rate limiting errors."""
@@ -760,7 +775,22 @@ class RecipeVaultClient:
                     continue
             
             if self._recipe_cache:
-                logger.info(f"✓ Loaded {len(set(r.name for r in self._recipe_cache.values()))} active recipes from blockchain")
+                # Get unique recipes by recipe_id (since OnChainRecipeInfo is not hashable)
+                unique_recipe_ids = set()
+                unique_recipes = []
+                for recipe_info in self._recipe_cache.values():
+                    if recipe_info.recipe_id not in unique_recipe_ids:
+                        unique_recipe_ids.add(recipe_info.recipe_id)
+                        unique_recipes.append(recipe_info)
+                
+                unique_count = len(unique_recipes)
+                logger.info(f"✓ Loaded {unique_count} active recipes from blockchain")
+                
+                # Log recipe details
+                logger.info(f"📋 Recipes loaded from RecipeVault:")
+                for recipe_info in sorted(unique_recipes, key=lambda r: r.name):
+                    filename = recipe_info.name.replace(" ", "_").replace(".", "_").replace("-", "_") + ".json"
+                    logger.info(f"   ✓ Recipe: '{recipe_info.name}' (ID: {recipe_info.recipe_id}, filename: {filename})")
             if failed_count > 0:
                 logger.debug(f"Could not decode {failed_count}/{total} recipes")
         except Exception as e:

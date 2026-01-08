@@ -61,6 +61,15 @@ class RecipeSyncService:
                 logger.info("Starting recipe sync from RecipeVault...")
                 recipes = client.fetch_all_recipes(force_refresh=True)
                 
+                # Log recipes returned from RecipeVault
+                if recipes:
+                    logger.info(f"📋 Recipes returned from RecipeVault ({len(recipes)} total):")
+                    for recipe_name, recipe_info in sorted(recipes.items(), key=lambda x: x[1].name):
+                        filename = self._get_workflow_filename(recipe_info.name)
+                        logger.info(f"   ✓ Recipe: '{recipe_info.name}' (ID: {recipe_info.recipe_id}, filename: {filename})")
+                else:
+                    logger.info("📋 No recipes returned from RecipeVault")
+                
                 results = {}
                 synced_count = 0
                 failed_count = 0

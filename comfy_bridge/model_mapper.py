@@ -172,13 +172,14 @@ class ModelMapper:
         logger.info(f"Initialized with {len(self.workflow_map)} model mappings (chain: {len(self.chain_models)} models)")
 
     def _load_chain_models(self):
-        """Load model registry from the blockchain."""
-        try:
-            self.chain_models = get_chain_models()
-            logger.info(f"Loaded {len(self.chain_models)} models from blockchain")
-        except Exception as e:
-            logger.warning(f"Failed to load models from blockchain: {e}")
-            self.chain_models = {}
+        """Load model registry from the blockchain.
+        
+        NOTE: Model fetching is disabled - RecipeVault is now the source of truth for workflows.
+        This method is kept for backward compatibility but returns empty dict.
+        """
+        # Model fetching disabled - RecipeVault is now the source of truth
+        self.chain_models = {}
+        logger.debug("Model fetching disabled - using RecipeVault for workflow discovery")
 
     def _build_workflow_map(self):
         """
@@ -427,55 +428,73 @@ class ModelMapper:
     def _build_workflow_map_from_env(self):
         """Build workflow map based on env-specified workflows.
         
-        Uses blockchain data as primary source for model names.
-        Falls back to local mappings only for models not on chain.
+        Uses RecipeVault as primary source for model names (recipes).
+        Falls back to workflow filename (normalized) if no recipe found.
         """
         self.workflow_map = {}
         env_workflows = self._iter_env_workflow_files()
         
         logger.info("Building workflow map from WORKFLOW_FILE env var")
+        
+        # Try to load recipes from RecipeVault
+        recipes_by_workflow = {}
+        try:
+            from .recipevault_client import get_recipevault_client
+            recipe_client = get_recipevault_client()
+            if recipe_client.enabled:
+                all_recipes = recipe_client.fetch_all_recipes()
+                # Index recipes by workflow filename (normalized)
+                for recipe_name, recipe_info in all_recipes.items():
+                    # Normalize recipe name to match workflow filename patterns
+                    normalized_name = recipe_name.lower().replace(" ", "_").replace(".", "_").replace("-", "_")
+                    recipes_by_workflow[normalized_name] = recipe_info
+                    # Also try with .json removed
+                    if normalized_name.endswith("_json"):
+                        recipes_by_workflow[normalized_name[:-5]] = recipe_info
+        except Exception as e:
+            logger.debug(f"Could not load recipes from RecipeVault: {e}")
+        
         for raw_entry, abs_path in env_workflows:
             filename = os.path.basename(abs_path)
             logger.debug(f"Processing workflow file: {filename}")
             
             if filename.endswith('.json'):
                 workflow_id = filename[:-5]  # Remove .json extension
+                workflow_id_lower = workflow_id.lower()
                 
-                # First check blockchain for models that use this workflow
-                blockchain_models = []
-                for model_name, model_info in self.chain_models.items():
-                    derived_workflow = self._derive_workflow_from_chain_model(model_info)
-                    if derived_workflow == workflow_id:
-                        # Use the blockchain's display_name as the authoritative name
-                        blockchain_models.append(model_info.display_name)
-                        # Also add common variants from blockchain
-                        if model_info.file_name and model_info.file_name != model_info.display_name:
-                            blockchain_models.append(model_info.file_name)
+                # Try to find recipe for this workflow
+                recipe_info = None
+                # Try exact match first
+                if workflow_id_lower in recipes_by_workflow:
+                    recipe_info = recipes_by_workflow[workflow_id_lower]
+                # Try normalized match
+                elif workflow_id_lower.replace("-", "_") in recipes_by_workflow:
+                    recipe_info = recipes_by_workflow[workflow_id_lower.replace("-", "_")]
+                elif workflow_id_lower.replace("_", "-") in recipes_by_workflow:
+                    recipe_info = recipes_by_workflow[workflow_id_lower.replace("_", "-")]
                 
-                if blockchain_models:
-                    # Use blockchain display names only (not filenames)
-                    # Only add display names to avoid advertising .safetensors filenames
-                    for model_name, model_info in self.chain_models.items():
-                        derived_workflow = self._derive_workflow_from_chain_model(model_info)
-                        if derived_workflow == workflow_id:
-                            # Only add the display_name, not file_name
-                            self.workflow_map[model_info.display_name] = workflow_id
-                            logger.info(f"Mapped blockchain model '{model_info.display_name}' -> workflow '{workflow_id}'")
+                if recipe_info:
+                    # Use recipe name as model name (normalize to lowercase for consistency)
+                    model_name = recipe_info.name.lower()
+                    self.workflow_map[model_name] = workflow_id
+                    logger.info(f"Mapped RecipeVault recipe '{recipe_info.name}' -> model '{model_name}' -> workflow '{workflow_id}'")
                 else:
-                    # No blockchain model found for this workflow
-                    # Use the workflow filename as the model name (without .json)
-                    # This allows workflows to be used even if not yet on blockchain
-                    logger.warning(f"No blockchain model found for workflow '{workflow_id}'")
-                    logger.warning(f"Using workflow name as model name: '{workflow_id}'")
-                    self.workflow_map[workflow_id] = workflow_id
+                    # No recipe found - use normalized workflow filename as model name
+                    # Normalize to lowercase and handle common patterns
+                    model_name = workflow_id.lower().replace("_", "-").replace(".", "-")
+                    # Remove common suffixes
+                    if model_name.endswith("-json"):
+                        model_name = model_name[:-5]
+                    self.workflow_map[model_name] = workflow_id
+                    logger.warning(f"No RecipeVault recipe found for workflow '{workflow_id}'")
+                    logger.info(f"Using normalized workflow name as model name: '{model_name}'")
             else:
                 logger.warning(f"Skipping non-JSON file: {filename}")
         
         logger.info(f"🗺️ FINAL WORKFLOW MAP from env: {len(self.workflow_map)} model(s)")
         logger.info(f"   These are the model names we will advertise to the Grid API:")
         for model, workflow in self.workflow_map.items():
-            source = "blockchain" if any(model == m.display_name or model == m.file_name for m in self.chain_models.values()) else "fallback"
-            logger.info(f"   📍 [{source}] '{model}' -> workflow '{workflow}.json'")
+            logger.info(f"   📍 '{model}' -> workflow '{workflow}.json'")
 
     def _has_local_flux_assets(self) -> bool:
         """Fallback detection for Flux assets on disk when ComfyUI doesn't list them."""
@@ -691,49 +710,25 @@ class ModelMapper:
         return None
 
     def get_available_horde_models(self) -> List[str]:
-        """Get list of available models (only blockchain-registered models with workflows).
+        """Get list of available models from workflow map.
         
-        Returns models that are:
-        1. Registered on the blockchain (source of truth)
-        2. Have corresponding workflow files installed
-        
-        This ensures we only advertise models that are officially registered.
+        Since RecipeVault is now the source of truth, we return all model names
+        from the workflow map (which are derived from recipes or normalized workflow names).
         """
         # Return unique model names from workflow map
-        # These are already filtered to only blockchain models with workflows
+        # These are model names (not workflow filenames) derived from RecipeVault or normalized workflow names
         models = list(set(self.workflow_map.keys()))
         
-        # Filter to prefer display_name from blockchain when available
-        blockchain_names = {m.display_name for m in self.chain_models.values()}
-        prioritized = []
-        seen = set()
-        
-        # First add blockchain display names
+        # Ensure no .json extensions in model names
+        cleaned_models = []
         for model in models:
-            if model in blockchain_names and model not in seen:
-                prioritized.append(model)
-                seen.add(model)
+            # Remove .json extension if present
+            if model.endswith('.json'):
+                model = model[:-5]
+            cleaned_models.append(model)
         
-        # Then add any remaining (file names, variants)
-        for model in models:
-            if model not in seen:
-                # Check if this is a variant of an already added model
-                is_variant = False
-                for chain_model in self.chain_models.values():
-                    if model in [chain_model.file_name, chain_model.get_model_id()]:
-                        # This is a variant of a blockchain model
-                        if chain_model.display_name not in seen:
-                            prioritized.append(model)
-                            seen.add(model)
-                        is_variant = True
-                        break
-                
-                if not is_variant:
-                    # Not a blockchain model variant - skip it
-                    logger.debug(f"Skipping non-blockchain model: {model}")
-        
-        logger.debug(f"get_available_horde_models() returning {len(prioritized)} blockchain models")
-        return prioritized
+        logger.debug(f"get_available_horde_models() returning {len(cleaned_models)} models: {cleaned_models}")
+        return cleaned_models
 
     def is_model_on_chain(self, model_name: str) -> bool:
         """Check if a model is registered on the blockchain."""

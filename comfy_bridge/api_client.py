@@ -28,7 +28,12 @@ class APIClient:
         self._job_cache: Dict[str, Dict[str, Any]] = {}
 
     async def pop_job(self, models: Optional[List[str]] = None) -> Dict[str, Any]:
-        models_to_use = models or Settings.GRID_MODELS
+        # Always use the provided models list - never fall back to Settings.GRID_MODELS
+        # Settings.GRID_MODELS contains workflow filenames, not model names
+        if models is None or len(models) == 0:
+            logger.error("pop_job called with no models! This should not happen.")
+            models = []
+        models_to_use = models
         payload: Dict[str, Any] = {
             "name": Settings.GRID_WORKER_NAME,
             "max_pixels": Settings.MAX_PIXELS,  # Very high - accept any resolution
@@ -62,11 +67,35 @@ class APIClient:
             logger.info(f"   Worker: {Settings.GRID_WORKER_NAME}")
             logger.info(f"   Models ({len(models_to_use)}): {models_to_use}")
             logger.info(f"   max_pixels: {Settings.MAX_PIXELS}, nsfw: {Settings.NSFW}, threads: {Settings.THREADS}")
+            
+            # On first poll, also check worker status
+            if self._pop_count == 1:
+                try:
+                    # Try to get worker info to see if it's recognized
+                    logger.debug(f"   Checking if worker is recognized by API...")
+                except Exception:
+                    pass
 
         try:
             response = await self.client.post(
                 "/v2/generate/pop", headers=self.headers, json=payload
             )
+            
+            # Check for 400 Bad Request with unrecognized models error
+            if response.status_code == 400:
+                try:
+                    error_data = response.json()
+                    if "unrecognised models" in error_data.get("message", "").lower() or "unrecognized models" in error_data.get("message", "").lower():
+                        logger.error(f"❌ API rejected models: {models_to_use}")
+                        logger.error(f"   Error: {error_data.get('message')}")
+                        logger.error(f"   This usually means:")
+                        logger.error(f"   1. Model names don't match blockchain registry")
+                        logger.error(f"   2. Models need to be registered on-chain first")
+                        logger.error(f"   3. Model names have wrong case or format")
+                        logger.error(f"   Check blockchain registry for correct model names")
+                except:
+                    pass
+            
             response.raise_for_status()
             result = response.json()
 
@@ -87,18 +116,24 @@ class APIClient:
                 if job_model not in models_to_use:
                     logger.warning(f"⚠️ Model mismatch! API returned model '{job_model}' but we advertised: {models_to_use}")
             else:
-                # Log full response when no job (periodically or when models are skipped)
-                if self._pop_count == 1 or self._pop_count % 50 == 0 or skipped.get("models", 0) > 0:
-                    if Settings.DEBUG or skipped.get("models", 0) > 0:
-                        logger.info(f"📭 No job received. Full API response: {json.dumps(result, indent=2)}")
+                # Always log skipped reasons on first 10 polls, then periodically
+                should_log_full = self._pop_count <= 10 or self._pop_count % 50 == 0
+                should_log_skips = self._pop_count <= 10 or self._pop_count % 50 == 0 or any(v > 0 for v in skipped.values())
+                
+                if should_log_full:
+                    logger.info(f"📭 No job received (poll #{self._pop_count})")
+                    if Settings.DEBUG:
+                        logger.info(f"   Full API response: {json.dumps(result, indent=2)}")
             
-            # Log skipped jobs for debugging
+            # Log skipped jobs for debugging - always show on first polls
             interesting_skips = {k: v for k, v in skipped.items() if v > 0}
-            if interesting_skips:
-                # Log skipped jobs periodically (every 50th poll) or on first poll, OR always if models are skipped
-                should_log = self._pop_count == 1 or self._pop_count % 50 == 0 or skipped.get("models", 0) > 0
-                if should_log:
+            should_log_skips = self._pop_count <= 10 or self._pop_count % 50 == 0 or bool(interesting_skips)
+            
+            if should_log_skips:
+                if interesting_skips:
                     logger.info(f"ℹ️  Skipped jobs (poll #{self._pop_count}): {interesting_skips}")
+                else:
+                    logger.info(f"ℹ️  Skipped jobs (poll #{self._pop_count}): None (all skipped counts are 0)")
                     # Explain what the skips mean
                     if skipped.get("max_pixels", 0) > 0:
                         logger.info(f"   → {skipped['max_pixels']} jobs skipped: requested resolution exceeds max_pixels ({Settings.MAX_PIXELS})")
@@ -198,19 +233,63 @@ class APIClient:
                     if skipped.get("performance", 0) > 0:
                         logger.info(f"   → {skipped['performance']} jobs skipped: performance requirements (worker too slow, jobs need fast workers)")
                     if skipped.get("performance_our_models", 0) > 0:
-                        logger.info(f"   → {skipped['performance_our_models']} jobs FOR OUR MODELS skipped due to speed (worker.speed <= 0.5 MPS/s)")
+                        logger.warning(f"   ⚠️  {skipped['performance_our_models']} jobs FOR OUR MODELS skipped due to speed (worker.speed <= 0.5 MPS/s)")
+                        logger.warning(f"      → Worker may be too slow - check performance metrics")
                     if skipped.get("max_pixels_our_models", 0) > 0:
-                        logger.info(f"   → {skipped['max_pixels_our_models']} jobs FOR OUR MODELS skipped due to resolution")
+                        logger.warning(f"   ⚠️  {skipped['max_pixels_our_models']} jobs FOR OUR MODELS skipped due to resolution")
+                        logger.warning(f"      → Jobs exceed max_pixels ({Settings.MAX_PIXELS})")
                     if skipped.get("untrusted", 0) > 0:
-                        logger.info(f"   → {skipped['untrusted']} jobs skipped: require trusted workers")
+                        logger.warning(f"   ⚠️  {skipped['untrusted']} jobs skipped: require trusted workers")
+                        logger.warning(f"      → Worker needs to be trusted to accept these jobs")
                     if skipped.get("bridge_version", 0) > 0:
-                        logger.info(f"   → {skipped['bridge_version']} jobs skipped: bridge capability mismatch")
+                        logger.warning(f"   ⚠️  {skipped['bridge_version']} jobs skipped: bridge capability mismatch")
+                        logger.warning(f"      → Bridge version may be incompatible")
                     
                     # Debug info for matching jobs that exist but weren't assigned
                     if skipped.get("_debug_matching_model_jobs", 0) > 0:
                         matching = skipped['_debug_matching_model_jobs']
                         logger.info(f"   ℹ️  DEBUG: {matching} jobs exist for our models but weren't assigned")
                         logger.info(f"      This means jobs are being filtered by other conditions (NSFW, lora, resolution, etc.)")
+            
+            # If no skipped reasons but still no job, investigate further
+            if not result.get("id") and not interesting_skips and (self._pop_count <= 10 or self._pop_count % 50 == 0):
+                logger.warning(f"   ⚠️  No skipped reasons but no job assigned (poll #{self._pop_count})")
+                logger.warning(f"      This is unusual - investigating possible causes...")
+                
+                # Check if there are actually jobs available
+                try:
+                    models_status = await self.get_models_status()
+                    if models_status:
+                        for model_info in models_status:
+                            if isinstance(model_info, dict):
+                                name = model_info.get("name", "")
+                                jobs = model_info.get("jobs", 0)
+                                if name in models_to_use and jobs > 0:
+                                    logger.warning(f"      → Found {jobs} jobs for '{name}' but none assigned")
+                                    logger.warning(f"      → Possible causes:")
+                                    logger.warning(f"         1. Jobs may have specific requirements not in skipped counts")
+                                    logger.warning(f"         2. API may be rate-limiting or throttling")
+                                    logger.warning(f"         3. Jobs may be in a different state (processing, etc.)")
+                                    logger.warning(f"         4. Worker may need to be trusted for these jobs")
+                                    
+                                    # Try to check worker status on first occurrence
+                                    if self._pop_count == 1:
+                                        workers_status = await self.get_workers_status()
+                                        if workers_status:
+                                            logger.info(f"      → Workers status available - checking if our worker is recognized...")
+                                            # Log worker info if available
+                                            if isinstance(workers_status, dict):
+                                                our_worker = workers_status.get(Settings.GRID_WORKER_NAME)
+                                                if our_worker:
+                                                    logger.info(f"      → Our worker is recognized by API")
+                                                else:
+                                                    logger.warning(f"      → Our worker '{Settings.GRID_WORKER_NAME}' not found in workers list")
+                                    
+                                    logger.warning(f"      → RECOMMENDATION: Check API dashboard or contact API team")
+                                    logger.warning(f"      → This appears to be a server-side issue, not a worker configuration problem")
+                                    break
+                except Exception as e:
+                    logger.debug(f"      Could not check models status: {e}")
 
             return result
         except httpx.HTTPStatusError as e:
@@ -432,6 +511,29 @@ class APIClient:
         except Exception as e:
             logger.error(f"Error getting models status: {e}", exc_info=True)
             return []
+    
+    async def get_workers_status(self) -> Optional[Dict[str, Any]]:
+        """
+        Fetch current status of workers to see if our worker is recognized.
+        This helps diagnose why jobs aren't being assigned.
+        """
+        try:
+            logger.debug(f"Fetching /v2/status/workers...")
+            response = await self.client.get(
+                "/v2/status/workers", headers=self.headers
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as exc:
+            # 404 is expected if endpoint doesn't exist
+            if exc.response.status_code == 404:
+                logger.debug("Workers status endpoint not available")
+            else:
+                logger.debug(f"Failed to get workers status [{exc.response.status_code}]: {exc.response.text[:200]}")
+            return None
+        except Exception as e:
+            logger.debug(f"Error getting workers status: {e}")
+            return None
 
     async def update_progress(self, job_id: str, current_step: int, total_steps: int) -> bool:
         """
