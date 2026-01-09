@@ -66,7 +66,11 @@ class APIClient:
             logger.info(f"   API URL: {Settings.GRID_API_URL}/v2/generate/pop")
             logger.info(f"   Worker: {Settings.GRID_WORKER_NAME}")
             logger.info(f"   Models ({len(models_to_use)}): {models_to_use}")
+            logger.info(f"   🔍 DETAILED MODEL INFO:")
+            for i, model in enumerate(models_to_use, 1):
+                logger.info(f"      {i}. '{model}' (repr: {repr(model)}, length: {len(model)}, lowercase: '{model.lower()}')")
             logger.info(f"   max_pixels: {Settings.MAX_PIXELS}, nsfw: {Settings.NSFW}, threads: {Settings.THREADS}")
+            logger.info(f"   ⚠️  Model names are case-sensitive - API will match jobs exactly as shown above")
             
             # On first poll, also check worker status
             if self._pop_count == 1:
@@ -93,6 +97,13 @@ class APIClient:
                         logger.error(f"   2. Models need to be registered on-chain first")
                         logger.error(f"   3. Model names have wrong case or format")
                         logger.error(f"   Check blockchain registry for correct model names")
+                        # Check if it's a case issue - suggest trying lowercase
+                        for model in models_to_use:
+                            model_lower = model.lower()
+                            if model != model_lower:
+                                logger.error(f"   💡 SUGGESTION: API may expect lowercase '{model_lower}' instead of '{model}'")
+                                logger.error(f"      The model reference JSON has key '{model}' but 'name' field is '{model_lower}'")
+                                logger.error(f"      Server may be validating against the 'name' field instead of the JSON key")
                 except:
                     pass
             
@@ -101,20 +112,97 @@ class APIClient:
 
             # Get skipped jobs info early for use in logging
             skipped = result.get("skipped", {})
+            if skipped.get("models", 0) > 0:
+                logger.warning(f"   ⚠️  {skipped['models']} jobs skipped due to model mismatch")
+                logger.warning(f"      This means jobs exist in queue but model names don't match exactly")
+                logger.warning(f"      Advertised models: {models_to_use}")
+                # Immediately fetch and analyze models status to diagnose the mismatch
+                logger.warning(f"      🔍 DIAGNOSING MODEL MISMATCH...")
+                try:
+                    models_status = await self.get_models_status()
+                    if models_status and isinstance(models_status, list):
+                        logger.warning(f"      📊 Analyzing {len(models_status)} models from API...")
+                        for model_info in models_status:
+                            if isinstance(model_info, dict):
+                                name = model_info.get("name", "")
+                                jobs = model_info.get("jobs", 0)
+                                queued = model_info.get("queued", 0)
+                                if jobs > 0 or queued > 0:
+                                        logger.warning(f"      • Queue has: '{name}' (repr: {repr(name)}, length: {len(name)}) - {jobs} jobs")
+                                        # Check for case mismatch
+                                        name_lower = name.lower()
+                                        for adv_model in models_to_use:
+                                            adv_lower = adv_model.lower()
+                                            if name_lower == adv_lower:
+                                                if name != adv_model:
+                                                    logger.error(f"      ❌ CASE MISMATCH FOUND!")
+                                                    logger.error(f"         • Queue model: '{name}' (repr: {repr(name)})")
+                                                    logger.error(f"         • Advertised model: '{adv_model}' (repr: {repr(adv_model)})")
+                                                    logger.error(f"         • Lowercase match: '{name_lower}' == '{adv_lower}'")
+                                                    logger.error(f"         • 💡 SOLUTION: Recreate the job with model name '{adv_model}' (lowercase)")
+                                                else:
+                                                    logger.error(f"      ❌ MODEL NAMES MATCH EXACTLY BUT JOB STILL SKIPPED!")
+                                                    logger.error(f"         • This suggests the job in database has different model name than status API shows")
+                                                    logger.error(f"         • Status API shows: '{name}' (might be normalized for display)")
+                                                    logger.error(f"         • Database likely has: Different case or model name")
+                                                    logger.error(f"         • 💡 SOLUTION: Recreate the job with model name '{adv_model}' (lowercase)")
+                                                    logger.error(f"         • The models status API may normalize display, but database query uses stored value")
+                                                    logger.error(f"         • Check the actual WPModels table for the job's stored model name")
+                    else:
+                        logger.warning(f"      ⚠️  Could not fetch models status: {models_status}")
+                except Exception as e:
+                    logger.error(f"      ❌ Failed to diagnose mismatch: {e}", exc_info=True)
 
             # Cache job metadata for potential reuse
-            if result.get("id"):
-                job_id = result.get("id")
+            if result.get("id") or (result.get("ids") and len(result.get("ids", [])) > 0):
+                job_id = result.get("id") or (result.get("ids", [])[0] if result.get("ids") else None)
+                job_model = result.get("model")
+                logger.info(f"✅ Job received (poll #{self._pop_count})")
+                logger.info(f"   • Job ID: {job_id}")
+                logger.info(f"   • Job model: '{job_model}' (repr: {repr(job_model) if job_model else 'None'})")
+                logger.info(f"   • Advertised models: {models_to_use}")
+                if job_model:
+                    job_model_lower = job_model.lower()
+                    matched = False
+                    for adv_model in models_to_use:
+                        if adv_model.lower() == job_model_lower:
+                            if adv_model == job_model:
+                                logger.info(f"   ✅ Model name matches exactly: '{job_model}' == '{adv_model}'")
+                            else:
+                                logger.warning(f"   ⚠️  Case mismatch but matched: '{job_model}' (job) vs '{adv_model}' (advertised)")
+                            matched = True
+                            break
+                    if not matched:
+                        logger.error(f"   ❌ Job model '{job_model}' doesn't match any advertised model!")
                 self._job_cache[job_id] = result
                 # API now uses wallet_address instead of wallet
                 wallet_address = result.get("wallet_address", "") or result.get("wallet", "")
                 wallet_info = f", wallet_address: {wallet_address[:10]}..." if wallet_address and len(wallet_address) > 10 else (f", wallet_address: {wallet_address}" if wallet_address else "")
                 job_model = result.get('model', 'unknown')
                 logger.info(f"✅ Received job {job_id}")
-                logger.info(f"   📌 JOB MODEL: '{job_model}'")
+                logger.info(f"   📌 JOB MODEL: '{job_model}' (repr: {repr(job_model)}, length: {len(job_model)})")
                 logger.info(f"   📌 We advertised: {models_to_use}")
-                if job_model not in models_to_use:
-                    logger.warning(f"⚠️ Model mismatch! API returned model '{job_model}' but we advertised: {models_to_use}")
+                logger.info(f"   🔍 MODEL MATCHING CHECK:")
+                if job_model in models_to_use:
+                    logger.info(f"      ✅ Exact match found: '{job_model}' is in advertised models")
+                else:
+                    # Check case-insensitive match
+                    job_model_lower = job_model.lower()
+                    matched_lowercase = False
+                    for adv_model in models_to_use:
+                        if adv_model.lower() == job_model_lower:
+                            matched_lowercase = True
+                            logger.warning(f"      ⚠️  Case mismatch detected!")
+                            logger.warning(f"         • Job model: '{job_model}' (repr: {repr(job_model)})")
+                            logger.warning(f"         • Advertised: '{adv_model}' (repr: {repr(adv_model)})")
+                            logger.warning(f"         • Lowercase match: '{job_model_lower}' == '{adv_model.lower()}'")
+                            logger.warning(f"         • These differ only in case - API matched them anyway")
+                            break
+                    if not matched_lowercase:
+                        logger.error(f"      ❌ No match found! Job model '{job_model}' doesn't match any advertised model")
+                        logger.error(f"         • Job model: '{job_model}' (repr: {repr(job_model)})")
+                        logger.error(f"         • Advertised models: {models_to_use}")
+                        logger.error(f"         • This should not happen - investigate!")
             else:
                 # Always log skipped reasons on first 10 polls, then periodically
                 should_log_full = self._pop_count <= 10 or self._pop_count % 50 == 0
@@ -140,8 +228,10 @@ class APIClient:
                     if skipped.get("nsfw", 0) > 0:
                         logger.info(f"   → {skipped['nsfw']} jobs skipped: NSFW content (GRID_NSFW={Settings.NSFW})")
                     if skipped.get("models", 0) > 0:
-                        logger.info(f"   → {skipped['models']} jobs skipped: model mismatch (jobs exist but for models we don't support)")
-                        logger.info(f"      📋 MODELS WE ARE ADVERTISING ({len(models_to_use)}): {models_to_use}")
+                        logger.warning(f"   → {skipped['models']} jobs skipped: model mismatch (jobs exist but for models we don't support)")
+                        logger.warning(f"      📋 MODELS WE ARE ADVERTISING ({len(models_to_use)}): {models_to_use}")
+                        logger.warning(f"      🔍 Each model name is case-sensitive - exact match required!")
+                        logger.warning(f"      💡 If jobs exist for similar model names, check for case mismatches above")
                         # Check which models actually have jobs in the queue
                         logger.info(f"      Fetching models status from API...")
                         try:
@@ -184,21 +274,37 @@ class APIClient:
                                         
                                         # Check for near-matches (case-insensitive, partial matches)
                                         logger.info(f"      🔍 CHECKING FOR NAME MISMATCHES...")
+                                        logger.info(f"      📋 DETAILED COMPARISON:")
+                                        logger.info(f"         • Models we advertise: {models_to_use}")
+                                        logger.info(f"         • Models with jobs in queue: {[n for n, _, _ in unsupported_with_jobs]}")
+                                        
+                                        case_mismatches_found = False
                                         for unsupported_name, _, _ in unsupported_with_jobs[:10]:  # Check first 10
                                             unsupported_lower = unsupported_name.lower()
+                                            logger.info(f"         🔎 Checking '{unsupported_name}' (queue) against advertised models...")
                                             for supported_name in models_to_use:
                                                 supported_lower = supported_name.lower()
                                                 # Check for exact match (case-insensitive)
                                                 if unsupported_lower == supported_lower:
-                                                    logger.warning(f"      ⚠️  CASE MISMATCH: '{unsupported_name}' (queue) vs '{supported_name}' (advertised)")
+                                                    case_mismatches_found = True
+                                                    logger.warning(f"      ⚠️  CASE MISMATCH DETECTED!")
+                                                    logger.warning(f"         • Queue model name: '{unsupported_name}' (length: {len(unsupported_name)}, repr: {repr(unsupported_name)})")
+                                                    logger.warning(f"         • Advertised model name: '{supported_name}' (length: {len(supported_name)}, repr: {repr(supported_name)})")
+                                                    logger.warning(f"         • Lowercase match: '{unsupported_lower}' == '{supported_lower}'")
+                                                    logger.warning(f"         • ❌ These don't match due to case sensitivity!")
+                                                    logger.warning(f"         • 💡 SOLUTION: Recreate the job with model name '{supported_name}' (lowercase)")
                                                 # Check for partial match
                                                 elif unsupported_lower in supported_lower or supported_lower in unsupported_lower:
                                                     logger.warning(f"      ⚠️  PARTIAL MATCH: '{unsupported_name}' (queue) might match '{supported_name}' (advertised)")
+                                        
+                                        if not case_mismatches_found:
+                                            logger.info(f"         ✅ No case mismatches detected (all differences are spelling/name differences)")
                                         
                                         logger.info(f"      💡 TIP: If '{unsupported_with_jobs[0][0]}' should be supported, check:")
                                         logger.info(f"         - Model name spelling/casing in workflow mappings")
                                         logger.info(f"         - Model registration in ModelVault")
                                         logger.info(f"         - Workflow file exists for this model")
+                                        logger.info(f"         - Jobs in queue were created with correct model name case")
                                     else:
                                         logger.info(f"      ✅ All models with jobs are supported")
                                     
