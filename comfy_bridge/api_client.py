@@ -139,13 +139,15 @@ class APIClient:
                                                     logger.error(f"         • Queue model: '{name}' (repr: {repr(name)})")
                                                     logger.error(f"         • Advertised model: '{adv_model}' (repr: {repr(adv_model)})")
                                                     logger.error(f"         • Lowercase match: '{name_lower}' == '{adv_lower}'")
-                                                    logger.error(f"         • 💡 SOLUTION: Recreate the job with model name '{adv_model}' (lowercase)")
+                                                    logger.error(f"         • 💡 SOLUTION: Change worker to advertise '{name}' (lowercase) to match queue")
+                                                    logger.error(f"         •   OR recreate the job with model name '{adv_model}' (capital L) to match worker")
                                                 else:
                                                     logger.error(f"      ❌ MODEL NAMES MATCH EXACTLY BUT JOB STILL SKIPPED!")
                                                     logger.error(f"         • This suggests the job in database has different model name than status API shows")
                                                     logger.error(f"         • Status API shows: '{name}' (might be normalized for display)")
                                                     logger.error(f"         • Database likely has: Different case or model name")
-                                                    logger.error(f"         • 💡 SOLUTION: Recreate the job with model name '{adv_model}' (lowercase)")
+                                                    logger.error(f"         • 💡 SOLUTION: Change worker to advertise '{name}' (lowercase) to match queue")
+                                                    logger.error(f"         •   OR recreate the job with model name '{adv_model}' to match worker")
                                                     logger.error(f"         • The models status API may normalize display, but database query uses stored value")
                                                     logger.error(f"         • Check the actual WPModels table for the job's stored model name")
                     else:
@@ -292,7 +294,8 @@ class APIClient:
                                                     logger.warning(f"         • Advertised model name: '{supported_name}' (length: {len(supported_name)}, repr: {repr(supported_name)})")
                                                     logger.warning(f"         • Lowercase match: '{unsupported_lower}' == '{supported_lower}'")
                                                     logger.warning(f"         • ❌ These don't match due to case sensitivity!")
-                                                    logger.warning(f"         • 💡 SOLUTION: Recreate the job with model name '{supported_name}' (lowercase)")
+                                                    logger.warning(f"         • 💡 SOLUTION: Change worker to advertise '{unsupported_name}' to match queue")
+                                                    logger.warning(f"         •   OR recreate the job with model name '{supported_name}' to match worker")
                                                 # Check for partial match
                                                 elif unsupported_lower in supported_lower or supported_lower in unsupported_lower:
                                                     logger.warning(f"      ⚠️  PARTIAL MATCH: '{unsupported_name}' (queue) might match '{supported_name}' (advertised)")
