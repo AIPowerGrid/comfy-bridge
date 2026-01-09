@@ -510,13 +510,9 @@ class ModelMapper:
                         logger.info(f"   • Workflow filename: '{workflow_id}'")
                         logger.info(f"   • Trying to derive model name from workflow filename...")
                         
-                        if workflow_id.lower() == "ltxv":
-                            model_name = "Ltxv"  # Use capitalized form to match model reference JSON key
-                            logger.info(f"   • Detected ltxv pattern - using capitalized: '{model_name}'")
-                        else:
-                            # For other models, capitalize to match model reference JSON keys
-                            model_name = workflow_id.capitalize()
-                            logger.info(f"   • Using capitalized workflow name as model name: '{model_name}'")
+                        # Use lowercase to match API queue (queue stores model names in lowercase)
+                        model_name = workflow_id.lower()
+                        logger.info(f"   • Using lowercase workflow name as model name: '{model_name}' (to match API queue)")
                     except Exception as e:
                         logger.warning(f"   • Exception during model name derivation: {e}")
                         model_name = workflow_id.lower()
