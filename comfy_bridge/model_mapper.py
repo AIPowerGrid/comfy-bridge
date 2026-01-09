@@ -474,19 +474,18 @@ class ModelMapper:
                     recipe_info = recipes_by_workflow[workflow_id_lower.replace("_", "-")]
                 
                 if recipe_info:
-                    # Use recipe name as-is (preserve case) - this matches the model reference JSON key
-                    # The model reference JSON has "Ltxv" as the key, so we use "Ltxv" (capital L)
-                    # However, if API rejects it, we may need to use lowercase "ltxv" instead
-                    model_name = recipe_info.name
+                    # API/server normalizes model names to lowercase when storing jobs
+                    # Even though RecipeVault may have capital L ('Ltxv'), the queue has lowercase ('ltxv')
+                    # Use lowercase to match what's actually in the queue
+                    model_name = recipe_info.name.lower()
                     logger.info(f"🔍 MODEL NAME MAPPING (RecipeVault):")
-                    logger.info(f"   • Recipe name from RecipeVault: '{model_name}'")
+                    logger.info(f"   • Recipe name from RecipeVault: '{recipe_info.name}'")
                     logger.info(f"   • Workflow filename: '{workflow_id}'")
-                    logger.info(f"   • Model name (using recipe name as-is): '{model_name}'")
-                    logger.info(f"   • Reason: Model reference JSON key should be '{model_name}', API validates against JSON keys")
-                    logger.info(f"   • ⚠️  If API rejects '{model_name}', server may be using lowercase 'name' field instead")
-                    logger.debug(f"   • Recipe info name: '{model_name}' -> using as-is (no lowercasing)")
+                    logger.info(f"   • Model name (normalized to lowercase): '{model_name}'")
+                    logger.info(f"   • Reason: API queue stores model names in lowercase, so we normalize to match")
+                    logger.debug(f"   • Recipe info name: '{recipe_info.name}' -> normalized to lowercase: '{model_name}'")
                     self.workflow_map[model_name] = workflow_id
-                    logger.info(f"✅ Mapped RecipeVault recipe '{model_name}' -> model '{model_name}' -> workflow '{workflow_id}'")
+                    logger.info(f"✅ Mapped RecipeVault recipe '{recipe_info.name}' -> model '{model_name}' -> workflow '{workflow_id}'")
                 else:
                     # No recipe found - try to find model in reference by matching workflow name
                     # Check model reference to get exact model name (case-sensitive)
