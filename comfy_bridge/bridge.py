@@ -7,7 +7,7 @@ from typing import List, Dict, Any, Optional, Set, Callable
 from .api_client import APIClient
 from .workflow import build_workflow, detect_workflow_model_type, is_model_compatible
 from .config import Settings
-from .model_mapper import initialize_model_mapper, get_horde_models, get_workflow_file
+from .model_mapper import initialize_model_mapper, get_horde_models, get_workflow_file, get_model_mapper
 from .comfyui_client import ComfyUIClient
 import os
 from .result_processor import ResultProcessor
@@ -419,13 +419,24 @@ class ComfyUIBridge:
             self.supported_models = healthy_models
         
         logger.info(f"🚀 ADVERTISING {len(self.supported_models)} healthy models to Grid API:")
+        logger.info(f"   📋 DETAILED MODEL INFORMATION:")
         for i, model in enumerate(self.supported_models, 1):
             health = worker_health.model_details.get(model)
             status = "✓" if health and health.is_healthy else "~"
             logger.info(f"  {i}. {status} '{model}'")
+            logger.info(f"      • Model name: '{model}' (length: {len(model)}, repr: {repr(model)})")
+            logger.info(f"      • Lowercase: '{model.lower()}'")
+            logger.info(f"      • Health status: {'HEALTHY' if health and health.is_healthy else 'UNHEALTHY'}")
+            mapper = get_model_mapper()
+            if model in mapper.workflow_map:
+                workflow_file = mapper.workflow_map[model]
+                logger.info(f"      • Workflow file: '{workflow_file}'")
         
         # Log the exact model names being sent to API (helps debug case-sensitivity issues)
-        logger.info(f"📋 EXACT MODEL NAMES: {self.supported_models}")
+        logger.info(f"📋 EXACT MODEL NAMES (as JSON list): {self.supported_models}")
+        logger.info(f"   ⚠️  IMPORTANT: These model names are case-sensitive!")
+        logger.info(f"   ⚠️  Jobs in queue must have EXACTLY matching model names (case-sensitive)")
+        logger.info(f"   ⚠️  Example: 'ltxv' ≠ 'Ltxv' ≠ 'LTXV'")
             
         if not self.supported_models:
             logger.error("CRITICAL: No healthy models to advertise! The bridge will not receive any jobs.")

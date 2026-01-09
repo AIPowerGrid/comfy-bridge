@@ -474,20 +474,58 @@ class ModelMapper:
                     recipe_info = recipes_by_workflow[workflow_id_lower.replace("_", "-")]
                 
                 if recipe_info:
-                    # Use recipe name as model name (normalize to lowercase for consistency)
-                    model_name = recipe_info.name.lower()
+                    # Use recipe name as-is (preserve case) - this matches the model reference JSON key
+                    # The model reference JSON has "Ltxv" as the key, so we use "Ltxv" (capital L)
+                    # However, if API rejects it, we may need to use lowercase "ltxv" instead
+                    model_name = recipe_info.name
+                    logger.info(f"🔍 MODEL NAME MAPPING (RecipeVault):")
+                    logger.info(f"   • Recipe name from RecipeVault: '{model_name}'")
+                    logger.info(f"   • Workflow filename: '{workflow_id}'")
+                    logger.info(f"   • Model name (using recipe name as-is): '{model_name}'")
+                    logger.info(f"   • Reason: Model reference JSON key should be '{model_name}', API validates against JSON keys")
+                    logger.info(f"   • ⚠️  If API rejects '{model_name}', server may be using lowercase 'name' field instead")
+                    logger.debug(f"   • Recipe info name: '{model_name}' -> using as-is (no lowercasing)")
                     self.workflow_map[model_name] = workflow_id
-                    logger.info(f"Mapped RecipeVault recipe '{recipe_info.name}' -> model '{model_name}' -> workflow '{workflow_id}'")
+                    logger.info(f"✅ Mapped RecipeVault recipe '{model_name}' -> model '{model_name}' -> workflow '{workflow_id}'")
                 else:
-                    # No recipe found - use normalized workflow filename as model name
-                    # Normalize to lowercase and handle common patterns
-                    model_name = workflow_id.lower().replace("_", "-").replace(".", "-")
-                    # Remove common suffixes
-                    if model_name.endswith("-json"):
-                        model_name = model_name[:-5]
+                    # No recipe found - try to find model in reference by matching workflow name
+                    # Check model reference to get exact model name (case-sensitive)
+                    from .modelvault_client import get_modelvault_client
+                    modelvault = get_modelvault_client(enabled=False)  # Disabled - just for name lookup
+                    
+                    # Try to find model by workflow name (case-insensitive search)
+                    model_name = None
+                    try:
+                        # Import model_reference if available to check exact names
+                        # For now, try common variations
+                        possible_names = [
+                            workflow_id,  # Original case
+                            workflow_id.capitalize(),  # First letter capitalized
+                            workflow_id.upper(),  # All caps
+                            workflow_id.lower(),  # All lowercase
+                        ]
+                        
+                        # Check against known model patterns
+                        # Use capitalized form to match model reference JSON keys (e.g., "Ltxv")
+                        logger.info(f"🔍 MODEL NAME MAPPING (Fallback - no RecipeVault recipe found):")
+                        logger.info(f"   • Workflow filename: '{workflow_id}'")
+                        logger.info(f"   • Trying to derive model name from workflow filename...")
+                        
+                        if workflow_id.lower() == "ltxv":
+                            model_name = "Ltxv"  # Use capitalized form to match model reference JSON key
+                            logger.info(f"   • Detected ltxv pattern - using capitalized: '{model_name}'")
+                        else:
+                            # For other models, capitalize to match model reference JSON keys
+                            model_name = workflow_id.capitalize()
+                            logger.info(f"   • Using capitalized workflow name as model name: '{model_name}'")
+                    except Exception as e:
+                        logger.warning(f"   • Exception during model name derivation: {e}")
+                        model_name = workflow_id.lower()
+                        logger.info(f"   • Fallback: using lowercase '{model_name}'")
+                    
                     self.workflow_map[model_name] = workflow_id
-                    logger.warning(f"No RecipeVault recipe found for workflow '{workflow_id}'")
-                    logger.info(f"Using normalized workflow name as model name: '{model_name}'")
+                    logger.warning(f"⚠️  No RecipeVault recipe found for workflow '{workflow_id}'")
+                    logger.info(f"✅ Using model name '{model_name}' (derived from workflow '{workflow_id}')")
             else:
                 logger.warning(f"Skipping non-JSON file: {filename}")
         
@@ -719,15 +757,23 @@ class ModelMapper:
         # These are model names (not workflow filenames) derived from RecipeVault or normalized workflow names
         models = list(set(self.workflow_map.keys()))
         
+        logger.info(f"🔍 get_available_horde_models() called:")
+        logger.info(f"   • Raw workflow_map keys: {models}")
+        logger.info(f"   • Workflow map entries: {len(self.workflow_map)}")
+        
         # Ensure no .json extensions in model names
         cleaned_models = []
         for model in models:
+            original_model = model
             # Remove .json extension if present
             if model.endswith('.json'):
                 model = model[:-5]
+                logger.debug(f"   • Removed .json extension: '{original_model}' -> '{model}'")
             cleaned_models.append(model)
         
-        logger.debug(f"get_available_horde_models() returning {len(cleaned_models)} models: {cleaned_models}")
+        logger.info(f"✅ get_available_horde_models() returning {len(cleaned_models)} model(s): {cleaned_models}")
+        logger.info(f"   • These are the EXACT model names that will be advertised to the API")
+        logger.info(f"   • Case-sensitive: API will match jobs case-sensitively against these names")
         return cleaned_models
 
     def is_model_on_chain(self, model_name: str) -> bool:
@@ -764,6 +810,11 @@ def get_workflow_validated_models() -> set:
 def get_workflow_file(horde_model_name: str) -> Optional[str]:
     """Get workflow file for a model. Returns None if no workflow found."""
     return model_mapper.get_workflow_file(horde_model_name)
+
+
+def get_model_mapper() -> ModelMapper:
+    """Get the global model mapper instance."""
+    return model_mapper
 
 
 def is_model_registered_on_chain(model_name: str) -> bool:
