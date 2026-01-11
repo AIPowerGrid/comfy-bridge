@@ -1,7 +1,8 @@
 # Multi-stage build for ComfyUI Bridge with integrated ComfyUI
 # Using CUDA 12.8 for Blackwell GPU support (RTX PRO 6000)
 # PyTorch 2.7.0+ with CUDA 12.8 includes Blackwell (sm_120) support
-FROM nvidia/cuda:12.8.0-runtime-ubuntu22.04 AS base
+# Using devel image to enable compilation of flash-attn
+FROM nvidia/cuda:12.8.0-devel-ubuntu22.04 AS base
 
 # Set environment variables
 # Note: PIP_NO_CACHE_DIR removed to allow cache mounts for faster rebuilds
@@ -27,6 +28,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     libxext6 \
     libxrender-dev \
     libgomp1 \
+    ninja-build \
     && rm -rf /var/lib/apt/lists/*
 
 # Create working directories
@@ -98,11 +100,13 @@ COPY download_models_from_chain.py model_manager.py get_gpu_info.py gpu_info_api
 RUN chmod +x get_gpu_info.py download_models_from_chain.py gpu_info_api.py downloads_api.py
 
 # Install optional performance dependencies (inlined to avoid Windows CRLF issues)
+# Note: flash-attn requires CUDA development toolkit and ninja-build (installed above)
 RUN --mount=type=cache,target=/root/.cache/pip \
     echo "Installing optional performance dependencies..." && \
     pip3 install --timeout 60 onnx>=1.15.0 || echo "onnx not available" && \
     pip3 install --timeout 60 onnxruntime>=1.15.0 || echo "onnxruntime not available" && \
-    pip3 install --timeout 60 flash-attn>=2.0.0 || echo "flash-attn not available" && \
+    pip3 install --timeout 60 packaging ninja && \
+    MAX_JOBS=4 pip3 install --timeout 600 flash-attn --no-build-isolation || echo "flash-attn build failed" && \
     pip3 install --timeout 60 sageattention>=1.0.0 || echo "sageattention not available" && \
     echo "Optional dependencies installation complete"
 

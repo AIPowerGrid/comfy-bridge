@@ -365,38 +365,80 @@ class APIClient:
                 logger.warning(f"   ⚠️  No skipped reasons but no job assigned (poll #{self._pop_count})")
                 logger.warning(f"      This is unusual - investigating possible causes...")
                 
-                # Check if there are actually jobs available
+                # Check if there are actually jobs available and what model names are in the queue
                 try:
                     models_status = await self.get_models_status()
                     if models_status:
+                        # Check for exact matches first
+                        exact_matches = []
+                        case_mismatches = []
+                        other_models_with_jobs = []
+                        
                         for model_info in models_status:
                             if isinstance(model_info, dict):
-                                name = model_info.get("name", "")
+                                queue_model_name = model_info.get("name", "")
                                 jobs = model_info.get("jobs", 0)
-                                if name in models_to_use and jobs > 0:
-                                    logger.warning(f"      → Found {jobs} jobs for '{name}' but none assigned")
-                                    logger.warning(f"      → Possible causes:")
-                                    logger.warning(f"         1. Jobs may have specific requirements not in skipped counts")
-                                    logger.warning(f"         2. API may be rate-limiting or throttling")
-                                    logger.warning(f"         3. Jobs may be in a different state (processing, etc.)")
-                                    logger.warning(f"         4. Worker may need to be trusted for these jobs")
+                                queued = model_info.get("queued", 0)
+                                
+                                if jobs > 0 or queued > 0:
+                                    # Check if this matches any of our advertised models
+                                    matched = False
+                                    for adv_model in models_to_use:
+                                        if queue_model_name == adv_model:
+                                            exact_matches.append((queue_model_name, jobs, queued))
+                                            matched = True
+                                            break
+                                        elif queue_model_name.lower() == adv_model.lower():
+                                            case_mismatches.append((queue_model_name, adv_model, jobs, queued))
+                                            matched = True
+                                            break
                                     
-                                    # Try to check worker status on first occurrence
-                                    if self._pop_count == 1:
-                                        workers_status = await self.get_workers_status()
-                                        if workers_status:
-                                            logger.info(f"      → Workers status available - checking if our worker is recognized...")
-                                            # Log worker info if available
-                                            if isinstance(workers_status, dict):
-                                                our_worker = workers_status.get(Settings.GRID_WORKER_NAME)
-                                                if our_worker:
-                                                    logger.info(f"      → Our worker is recognized by API")
-                                                else:
-                                                    logger.warning(f"      → Our worker '{Settings.GRID_WORKER_NAME}' not found in workers list")
-                                    
-                                    logger.warning(f"      → RECOMMENDATION: Check API dashboard or contact API team")
-                                    logger.warning(f"      → This appears to be a server-side issue, not a worker configuration problem")
-                                    break
+                                    if not matched:
+                                        other_models_with_jobs.append((queue_model_name, jobs, queued))
+                        
+                        # Report findings
+                        if exact_matches:
+                            logger.warning(f"      → Found {len(exact_matches)} model(s) with jobs that match exactly:")
+                            for name, jobs, queued in exact_matches:
+                                logger.warning(f"         • '{name}': {jobs} jobs ({queued:.0f} megapixels)")
+                            logger.warning(f"      → Possible causes:")
+                            logger.warning(f"         1. Jobs may have specific requirements not in skipped counts")
+                            logger.warning(f"         2. API may be rate-limiting or throttling")
+                            logger.warning(f"         3. Jobs may be in a different state (processing, etc.)")
+                            logger.warning(f"         4. Worker may need to be trusted for these jobs")
+                        elif case_mismatches:
+                            logger.error(f"      ❌ CASE MISMATCH DETECTED!")
+                            logger.error(f"      → Found {len(case_mismatches)} model(s) with jobs but case doesn't match:")
+                            for queue_name, adv_name, jobs, queued in case_mismatches:
+                                logger.error(f"         • Queue has: '{queue_name}' (repr: {repr(queue_name)})")
+                                logger.error(f"         • Worker advertises: '{adv_name}' (repr: {repr(adv_name)})")
+                                logger.error(f"         • Jobs available: {jobs} ({queued:.0f} megapixels)")
+                            logger.error(f"      → SOLUTION: Update worker to advertise the exact case from queue:")
+                            for queue_name, adv_name, jobs, queued in case_mismatches:
+                                logger.error(f"         • Change advertised model from '{adv_name}' to '{queue_name}'")
+                        elif other_models_with_jobs:
+                            logger.info(f"      → Found {len(other_models_with_jobs)} other model(s) with jobs in queue:")
+                            for name, jobs, queued in other_models_with_jobs[:5]:
+                                logger.info(f"         • '{name}': {jobs} jobs ({queued:.0f} megapixels)")
+                            logger.info(f"      → Worker is advertising: {models_to_use}")
+                            logger.info(f"      → These model names don't match (different names, not just case)")
+                        else:
+                            logger.info(f"      → No jobs found in queue for any models")
+                            logger.info(f"      → Worker is advertising: {models_to_use}")
+                            logger.info(f"      → This suggests there are no jobs waiting for these models")
+                        
+                        # Try to check worker status on first occurrence
+                        if self._pop_count == 1:
+                            workers_status = await self.get_workers_status()
+                            if workers_status:
+                                logger.info(f"      → Workers status available - checking if our worker is recognized...")
+                                # Log worker info if available
+                                if isinstance(workers_status, dict):
+                                    our_worker = workers_status.get(Settings.GRID_WORKER_NAME)
+                                    if our_worker:
+                                        logger.info(f"      → Our worker is recognized by API")
+                                    else:
+                                        logger.warning(f"      → Our worker '{Settings.GRID_WORKER_NAME}' not found in workers list")
                 except Exception as e:
                     logger.debug(f"      Could not check models status: {e}")
 
@@ -525,6 +567,34 @@ class APIClient:
                 except (ValueError, json.JSONDecodeError):
                     parsed_error = None
 
+                # Handle 404 - job expired/doesn't exist (common for videos that take longer than server timeout)
+                if e.response.status_code == 404:
+                    is_video = media_type == "video"
+                    r2_uploads = payload.get("r2_uploads", [])
+                    
+                    if is_video:
+                        logger.warning(
+                            "Job %s expired on server (404) - video took longer than server timeout. "
+                            "This is expected for video generation. Video was still generated and uploaded to R2.",
+                            job_id,
+                        )
+                        if r2_uploads:
+                            logger.info(
+                                "Video is available at R2. The server's job timeout doesn't account for "
+                                "video generation which naturally takes longer than image generation."
+                            )
+                        # For videos, this is acceptable - video was generated and uploaded
+                        self._job_cache.pop(job_id, None)
+                        return
+                    else:
+                        logger.error(
+                            "Job %s not found (404) - may have expired or been cancelled. "
+                            "Dropping the result and continuing.",
+                            job_id,
+                        )
+                        self._job_cache.pop(job_id, None)
+                        return
+                
                 if (
                     e.response.status_code == 400
                     and isinstance(parsed_error, dict)
