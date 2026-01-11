@@ -209,11 +209,77 @@ class ComfyUIBridge:
                 prompt_id, job_id, model_name, filesystem_checker
             )
             
-            # Handle R2 upload for videos if available
+            # Handle R2 upload for videos and images if available
             r2_upload_url = job.get("r2_upload")
-            if media_type == "video" and r2_upload_url:
-                logger.info("Uploading video to R2...")
-                await self.r2_uploader.upload_video(r2_upload_url, media_bytes, filename, media_type)
+            if r2_upload_url:
+                if media_type == "video":
+                    logger.info("Uploading video to R2...")
+                    await self.r2_uploader.upload_video(r2_upload_url, media_bytes, filename, media_type)
+                elif media_type == "image":
+                    logger.info("Uploading image to R2...")
+                    await self.r2_uploader.upload_image(r2_upload_url, media_bytes, filename)
+            
+            # Save image to output folder if it's an image
+            if media_type == "image":
+                try:
+                    output_dir = Settings.COMFYUI_OUTPUT_DIR
+                    # Normalize the path to handle any mixed separators
+                    output_dir = os.path.normpath(output_dir)
+                    logger.debug(f"Saving image - output_dir: {output_dir}, filename: {filename}")
+                    
+                    # Use the original filename if available, otherwise generate one
+                    if filename:
+                        # Check if filename includes a subdirectory path (ComfyUI format: "subdir/filename.png")
+                        if '/' in filename or '\\' in filename:
+                            # Filename includes subdirectory - preserve it
+                            # Normalize path separators
+                            filename_parts = filename.replace('\\', '/').split('/')
+                            subdir = '/'.join(filename_parts[:-1]) if len(filename_parts) > 1 else ''
+                            output_filename = filename_parts[-1]
+                            
+                            if subdir:
+                                # Create subdirectory structure
+                                full_output_dir = os.path.normpath(os.path.join(output_dir, subdir))
+                                os.makedirs(full_output_dir, exist_ok=True)
+                                output_path = os.path.normpath(os.path.join(full_output_dir, output_filename))
+                            else:
+                                output_path = os.path.normpath(os.path.join(output_dir, output_filename))
+                        else:
+                            # Just a filename, no subdirectory
+                            output_filename = filename
+                            output_path = os.path.normpath(os.path.join(output_dir, output_filename))
+                    else:
+                        # No filename provided, generate one
+                        output_filename = f"horde_{job_id}.png"
+                        output_path = os.path.normpath(os.path.join(output_dir, output_filename))
+                    
+                    # Ensure output directory exists
+                    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+                    
+                    # Check if file already exists (ComfyUI may have already saved it)
+                    if os.path.exists(output_path):
+                        existing_size = os.path.getsize(output_path)
+                        if existing_size == len(media_bytes):
+                            logger.info(f"Image already exists at: {output_path} ({existing_size:,} bytes) - skipping save")
+                        else:
+                            logger.warning(f"Image exists but size mismatch: {existing_size:,} vs {len(media_bytes):,} bytes - overwriting")
+                            # Write the image bytes to file
+                            with open(output_path, 'wb') as f:
+                                f.write(media_bytes)
+                            logger.info(f"Overwrote image at: {output_path} ({len(media_bytes):,} bytes)")
+                    else:
+                        # Write the image bytes to file
+                        with open(output_path, 'wb') as f:
+                            f.write(media_bytes)
+                        
+                        # Verify the file was written
+                        if os.path.exists(output_path):
+                            file_size = os.path.getsize(output_path)
+                            logger.info(f"Saved image to output folder: {output_path} ({file_size:,} bytes)")
+                        else:
+                            logger.error(f"Failed to verify saved image at: {output_path}")
+                except Exception as e:
+                    logger.error(f"Failed to save image to output folder: {e}", exc_info=True)
             
             # Build and submit payload
             payload = self.payload_builder.build_payload(
