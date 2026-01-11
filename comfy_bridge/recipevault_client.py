@@ -340,8 +340,9 @@ class RecipeVaultClient:
                     if not isinstance(workflow, dict):
                         continue
                     
-                    # Generate recipe name from filename
-                    recipe_name = json_file.stem.replace("_", " ").replace("-", " ").title()
+                    # Use original filename as recipe name (preserves case and formatting)
+                    # This ensures model names match exactly what workers advertise
+                    recipe_name = json_file.stem
                     
                     # Calculate recipe root
                     recipe_root = self.calculate_recipe_root(workflow)

@@ -554,7 +554,7 @@ class ComfyUIBridge:
         logger.info("Starting job polling loop...")
         while True:
             job_count += 1
-            # Show polling message every 15 attempts (every ~30 seconds)
+            # Show polling message every 15 attempts (every ~15 minutes with 60s interval)
             if job_count % 15 == 1:
                 logger.info(f"👀 Polling for jobs... (poll #{job_count}, models: {len(self.supported_models)})")
             
@@ -592,8 +592,8 @@ class ComfyUIBridge:
                 # Clean up any jobs that might be stuck in processing
                 # Note: We can't easily determine which job failed here, so we'll clean up on next cycle
             
-            # No job received - wait before next poll (shorter interval for faster pickup)
-            await asyncio.sleep(1.0)
+            # No job received - wait before next poll (reduced frequency to avoid spamming core with alive messages)
+            await asyncio.sleep(60.0)
 
     async def listen_comfyui_logs(self, prompt_id: str, job_id: str = None):
         """Listen to ComfyUI WebSocket for real-time logs and progress.
