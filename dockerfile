@@ -101,14 +101,30 @@ RUN chmod +x get_gpu_info.py download_models_from_chain.py gpu_info_api.py downl
 
 # Install optional performance dependencies (inlined to avoid Windows CRLF issues)
 # Note: flash-attn requires CUDA development toolkit and ninja-build (installed above)
+# Split flash-attn into separate step to avoid timeout issues during long compilation
 RUN --mount=type=cache,target=/root/.cache/pip \
     echo "Installing optional performance dependencies..." && \
     pip3 install --timeout 60 onnx>=1.15.0 || echo "onnx not available" && \
     pip3 install --timeout 60 onnxruntime>=1.15.0 || echo "onnxruntime not available" && \
     pip3 install --timeout 60 packaging ninja && \
-    MAX_JOBS=4 pip3 install --timeout 600 flash-attn --no-build-isolation || echo "flash-attn build failed" && \
     pip3 install --timeout 60 sageattention>=1.0.0 || echo "sageattention not available" && \
-    echo "Optional dependencies installation complete"
+    echo "Optional dependencies installation complete (excluding flash-attn)"
+
+# Build argument to skip flash-attn (set SKIP_FLASH_ATTN=true to skip)
+ARG SKIP_FLASH_ATTN=false
+
+# Install flash-attn separately with extended timeout and better error handling
+# flash-attn compilation can take 15-30+ minutes and requires significant resources
+RUN --mount=type=cache,target=/root/.cache/pip \
+    if [ "$SKIP_FLASH_ATTN" = "true" ]; then \
+        echo "Skipping flash-attn build (SKIP_FLASH_ATTN=true)"; \
+    else \
+        echo "Building flash-attn (this may take 15-30 minutes)..." && \
+        (MAX_JOBS=4 pip3 install --timeout 1800 --verbose flash-attn --no-build-isolation 2>&1 | tee /tmp/flash-attn-build.log || \
+         (echo "flash-attn build failed or timed out - this is optional and non-critical" && \
+          echo "Check /tmp/flash-attn-build.log for details if needed" && \
+          false)) || echo "flash-attn installation skipped (optional dependency)"; \
+    fi
 
 # Create startup script (strip CRLF for Windows compatibility)
 COPY docker-entrypoint.sh /app/

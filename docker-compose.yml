@@ -81,6 +81,8 @@ services:
         MODELVAULT_RPC: ${MODELVAULT_RPC:-https://mainnet.base.org}
         HUGGING_FACE_API_KEY: ${HUGGING_FACE_API_KEY:-}
         CIVITAI_API_KEY: ${CIVITAI_API_KEY:-}
+        # Skip flash-attn build if it causes timeout issues (set SKIP_FLASH_ATTN=true)
+        SKIP_FLASH_ATTN: ${SKIP_FLASH_ATTN:-false}
     container_name: comfy-bridge
     
     deploy:

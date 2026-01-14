@@ -997,11 +997,12 @@ async def process_workflow(
                 else:
                     logger.warning(f"FLUX fix: No negative prompt nodes found to remove (this may indicate the fix didn't detect them correctly)")
 
-    # Handle source image for img2img workflows
+    # Handle source image for img2img and img2vid workflows
     source_image_filename = None
+    source_processing = job.get("source_processing", "")
     if (
         job.get("source_image")
-        and job.get("source_processing") == "img2img"
+        and source_processing in ["img2img", "img2vid", "img2video"]
     ):
         # Generate unique filename
         image_ext = "png"  # Default, could be improved to detect from URL
@@ -1011,58 +1012,69 @@ async def process_workflow(
 
         try:
             await download_image(job["source_image"], source_image_filename)
-            logger.debug(f"Downloaded source image: {source_image_filename}")
+            logger.debug(f"Downloaded source image for {source_processing}: {source_image_filename}")
         except Exception as e:
             logger.warning(f"Failed to download source image: {e}")
             source_image_filename = None
     else:
-        logger.debug("Skipping image download - this is a text-to-image job")
+        logger.debug(f"Skipping image download - source_processing: {source_processing}")
 
     # Update LoadImageOutput nodes for img2img jobs
-    if job.get("source_processing") == "img2img" and source_image_filename:
+    if source_processing == "img2img" and source_image_filename:
         processed_workflow = update_loadimageoutput_nodes(processed_workflow, source_image_filename)
 
     # Pre-calculate commonly reused payload fields
-    # NOTE: steps and cfg are intentionally NOT read from payload - we always use workflow defaults
-    # payload_steps and payload_cfg are set to None below to ensure workflow values are used
-    # WORKFLOW FILE IS SOURCE OF TRUTH
-    # Never override workflow values with payload values - workflow files have optimized settings
-    # Only prompt, seed, and dimensions come from payload
-    payload_steps = None
-    payload_cfg = None
-    payload_sampler = None
-    payload_scheduler = None
-    payload_denoise = None
-    logger.debug(f"Using workflow defaults for all KSampler parameters (steps, cfg, sampler, scheduler, denoise)")
+    # Read parameters from job params/payload, using workflow defaults as fallback
+    # Parameters can come from job.get("params", {}) or job.get("payload", {})
+    job_params = job.get("params", {})
+    payload_steps = job_params.get("steps") or payload.get("steps")
+    payload_cfg = job_params.get("cfg_scale") or payload.get("cfg_scale") or payload.get("cfgScale")
+    payload_sampler = job_params.get("sampler_name") or payload.get("sampler_name") or payload.get("sampler")
+    payload_scheduler = job_params.get("scheduler") or payload.get("scheduler")
+    payload_denoise = job_params.get("denoise") or payload.get("denoise")
+    
+    # Log which parameters are being used
+    if payload_steps is not None:
+        logger.info(f"Using payload steps: {payload_steps}")
+    if payload_cfg is not None:
+        logger.info(f"Using payload cfg_scale: {payload_cfg}")
+    if payload_sampler:
+        logger.info(f"Using payload sampler: {payload_sampler}")
+    if payload_scheduler:
+        logger.info(f"Using payload scheduler: {payload_scheduler}")
+    if payload_denoise is not None:
+        logger.info(f"Using payload denoise: {payload_denoise}")
+    if all(v is None for v in [payload_steps, payload_cfg, payload_sampler, payload_scheduler, payload_denoise]):
+        logger.debug(f"Using workflow defaults for all KSampler parameters (steps, cfg, sampler, scheduler, denoise)")
 
     def _apply_ksampler_dict(inputs: Dict[str, Any]) -> Dict[str, Any]:
-        # Only apply steps if payload value is higher than workflow default
+        # Apply steps from payload if provided, otherwise use workflow default
         if payload_steps is not None and "steps" in inputs:
             current_steps = inputs.get("steps")
-            if current_steps is None or payload_steps >= current_steps:
-                inputs["steps"] = payload_steps
-            else:
-                logger.warning(f"KSampler: Ignoring payload steps {payload_steps} (workflow default {current_steps} is higher)")
-        # Only apply cfg if payload value is higher than workflow default
+            inputs["steps"] = payload_steps
+            logger.debug(f"KSampler: Applied payload steps: {current_steps} -> {payload_steps}")
+        # Apply cfg_scale from payload if provided, otherwise use workflow default
         if payload_cfg is not None:
             if "cfg" in inputs:
                 current_cfg = inputs.get("cfg")
-                if current_cfg is None or payload_cfg >= current_cfg:
-                    inputs["cfg"] = payload_cfg
-                else:
-                    logger.warning(f"KSampler: Ignoring payload cfg {payload_cfg} (workflow default {current_cfg} is higher)")
+                inputs["cfg"] = payload_cfg
+                logger.debug(f"KSampler: Applied payload cfg: {current_cfg} -> {payload_cfg}")
             elif "cfg_scale" in inputs:
                 current_cfg = inputs.get("cfg_scale")
-                if current_cfg is None or payload_cfg >= current_cfg:
-                    inputs["cfg_scale"] = payload_cfg
-                else:
-                    logger.warning(f"KSampler: Ignoring payload cfg_scale {payload_cfg} (workflow default {current_cfg} is higher)")
+                inputs["cfg_scale"] = payload_cfg
+                logger.debug(f"KSampler: Applied payload cfg_scale: {current_cfg} -> {payload_cfg}")
         if payload_sampler:
+            current_sampler = inputs.get("sampler_name")
             inputs["sampler_name"] = payload_sampler
+            logger.debug(f"KSampler: Applied payload sampler: {current_sampler} -> {payload_sampler}")
         if payload_scheduler and "scheduler" in inputs:
+            current_scheduler = inputs.get("scheduler")
             inputs["scheduler"] = payload_scheduler
+            logger.debug(f"KSampler: Applied payload scheduler: {current_scheduler} -> {payload_scheduler}")
         if payload_denoise is not None and "denoise" in inputs:
+            current_denoise = inputs.get("denoise")
             inputs["denoise"] = payload_denoise
+            logger.debug(f"KSampler: Applied payload denoise: {current_denoise} -> {payload_denoise}")
         if payload.get("clip_skip") is not None and "clip_skip" in inputs:
             inputs["clip_skip"] = payload.get("clip_skip")
         return inputs
@@ -1070,27 +1082,29 @@ async def process_workflow(
     def _apply_ksampler_widgets(widgets: list) -> list:
         if not isinstance(widgets, list):
             return widgets
-        # seed is handled elsewhere; respect only advanced params here
-        # Only apply steps if payload value is higher than workflow default
+        # seed is handled elsewhere; apply advanced params here
+        # Apply steps from payload if provided, otherwise use workflow default
         if payload_steps is not None and len(widgets) >= 2:
             current_steps = widgets[1] if len(widgets) > 1 else None
-            if current_steps is None or payload_steps >= current_steps:
-                widgets[1] = payload_steps
-            else:
-                logger.warning(f"KSampler widgets: Ignoring payload steps {payload_steps} (workflow default {current_steps} is higher)")
-        # Only apply cfg if payload value is higher than workflow default
+            widgets[1] = payload_steps
+            logger.debug(f"KSampler widgets: Applied payload steps: {current_steps} -> {payload_steps}")
+        # Apply cfg_scale from payload if provided, otherwise use workflow default
         if payload_cfg is not None and len(widgets) >= 3:
             current_cfg = widgets[2] if len(widgets) > 2 else None
-            if current_cfg is None or payload_cfg >= current_cfg:
-                widgets[2] = payload_cfg
-            else:
-                logger.warning(f"KSampler widgets: Ignoring payload cfg {payload_cfg} (workflow default {current_cfg} is higher)")
+            widgets[2] = payload_cfg
+            logger.debug(f"KSampler widgets: Applied payload cfg: {current_cfg} -> {payload_cfg}")
         if payload_sampler and len(widgets) >= 4:
+            current_sampler = widgets[3] if len(widgets) > 3 else None
             widgets[3] = payload_sampler
+            logger.debug(f"KSampler widgets: Applied payload sampler: {current_sampler} -> {payload_sampler}")
         if payload_scheduler and len(widgets) >= 5:
+            current_scheduler = widgets[4] if len(widgets) > 4 else None
             widgets[4] = payload_scheduler
+            logger.debug(f"KSampler widgets: Applied payload scheduler: {current_scheduler} -> {payload_scheduler}")
         if payload_denoise is not None and len(widgets) >= 6:
+            current_denoise = widgets[5] if len(widgets) > 5 else None
             widgets[5] = payload_denoise
+            logger.debug(f"KSampler widgets: Applied payload denoise: {current_denoise} -> {payload_denoise}")
         return widgets
 
     # Process each node in the workflow
@@ -1190,6 +1204,26 @@ async def process_workflow(
                         widgets[2] = length
                     node["widgets_values"] = widgets
                 logger.debug(f"Updated video parameters: width={w}, height={h}, length={length}")
+            
+            # Handle Wan22ImageToVideoLatent nodes - update dimensions and length (native format)
+            # Supports both text-to-video (no source image) and image-to-video (with source image via LoadImage node)
+            elif class_type == "Wan22ImageToVideoLatent":
+                # In native format, Wan22ImageToVideoLatent uses inputs dict for width/height/length
+                if isinstance(inputs, dict):
+                    node_id_str = str(node.get('id', 'unknown'))
+                    if "width" in inputs and payload.get("width"):
+                        inputs["width"] = payload.get("width")
+                    if "height" in inputs and payload.get("height"):
+                        inputs["height"] = payload.get("height")
+                    if "length" in inputs:
+                        # Length can be specified directly or via the length parameter (from styles.json)
+                        video_length = payload.get("length", payload.get("video_length"))
+                        if video_length:
+                            inputs["length"] = video_length
+                    # Note: Source image is handled via LoadImage node connected to start_image input
+                    # The LoadImage node processing above will set the source image filename when available
+                    node["inputs"] = inputs
+                    logger.debug(f"Updated Wan22ImageToVideoLatent node {node_id_str} with dimensions: {inputs.get('width')}x{inputs.get('height')}, length: {inputs.get('length')}")
 
             # Handle save image nodes - update filename prefix for job tracking
             elif class_type == "SaveImage":
@@ -1213,6 +1247,22 @@ async def process_workflow(
                     node["widgets_values"] = widgets
                     logger.debug(f"Updated CreateVideo node fps to {fps}")
             
+            # Handle SaveAnimatedWEBP node - update fps if specified (widgets_values: [filename, fps, ...])
+            elif class_type == "SaveAnimatedWEBP":
+                fps = payload.get("fps")
+                if isinstance(widgets, list) and len(widgets) >= 2 and fps:
+                    widgets[1] = fps
+                    node["widgets_values"] = widgets
+                    logger.debug(f"Updated SaveAnimatedWEBP node fps to {fps}")
+            
+            # Handle SaveWEBM node - update fps if specified (widgets_values: [filename, codec, fps, ...])
+            elif class_type == "SaveWEBM":
+                fps = payload.get("fps")
+                if isinstance(widgets, list) and len(widgets) >= 3 and fps:
+                    widgets[2] = fps
+                    node["widgets_values"] = widgets
+                    logger.debug(f"Updated SaveWEBM node fps to {fps}")
+            
             # Handle UNETLoader nodes - model filename is in widgets_values[0] for ComfyUI native format
             elif class_type == "UNETLoader":
                 # UNETLoader model filename is in widgets_values[0]
@@ -1230,11 +1280,11 @@ async def process_workflow(
                 if isinstance(inputs, dict):
                     node_id_str = str(node.get('id', 'unknown'))
                     
-                    # Log workflow defaults being used (WORKFLOW FILE IS SOURCE OF TRUTH)
+                    # Log workflow defaults
                     workflow_steps = inputs.get("steps")
                     workflow_cfg = inputs.get("cfg")
                     workflow_scheduler = inputs.get("scheduler")
-                    logger.info(f"WanVideoSampler node {node_id_str}: Using WORKFLOW DEFAULTS - steps={workflow_steps}, cfg={workflow_cfg}, scheduler={workflow_scheduler}")
+                    logger.info(f"WanVideoSampler node {node_id_str}: Workflow defaults - steps={workflow_steps}, cfg={workflow_cfg}, scheduler={workflow_scheduler}")
 
                     # Apply scheduler from payload if provided, otherwise validate workflow scheduler
                     if payload_scheduler and "scheduler" in inputs:
@@ -1248,25 +1298,16 @@ async def process_workflow(
                             logger.info(f"Node {node_id_str}: Validating workflow scheduler: '{current_scheduler}' -> '{valid_scheduler}'")
                             inputs["scheduler"] = valid_scheduler
 
-                    # NOTE: payload_steps and payload_cfg are always None (set at line ~745)
-                    # This ensures workflow file is the source of truth for steps/cfg
-                    # The conditions below will NEVER execute because payload_steps/payload_cfg are None
+                    # Apply steps from payload if provided, otherwise use workflow default
                     if payload_steps is not None and "steps" in inputs:
                         old_steps = inputs.get("steps")
-                        # Only apply if payload steps is higher than workflow default
-                        if old_steps is None or payload_steps >= old_steps:
-                            inputs["steps"] = payload_steps
-                            logger.info(f"Node {node_id_str}: Applied steps: {old_steps} -> {payload_steps}")
-                        else:
-                            logger.warning(f"Node {node_id_str}: Ignoring payload steps {payload_steps} (workflow default {old_steps} is higher)")
+                        inputs["steps"] = payload_steps
+                        logger.info(f"Node {node_id_str}: Applied payload steps: {old_steps} -> {payload_steps}")
+                    # Apply cfg from payload if provided, otherwise use workflow default
                     if payload_cfg is not None and "cfg" in inputs:
                         old_cfg = inputs.get("cfg")
-                        # Only apply if payload cfg is higher than workflow default
-                        if old_cfg is None or payload_cfg >= old_cfg:
-                            inputs["cfg"] = payload_cfg
-                            logger.info(f"Node {node_id_str}: Applied cfg: {old_cfg} -> {payload_cfg}")
-                        else:
-                            logger.warning(f"Node {node_id_str}: Ignoring payload cfg {payload_cfg} (workflow default {old_cfg} is higher)")
+                        inputs["cfg"] = payload_cfg
+                        logger.info(f"Node {node_id_str}: Applied payload cfg: {old_cfg} -> {payload_cfg}")
                     if payload.get("shift") is not None and "shift" in inputs:
                         old_shift = inputs.get("shift")
                         inputs["shift"] = payload.get("shift")
@@ -1321,13 +1362,10 @@ async def process_workflow(
                             )
                             widgets[0] = "simple"
 
-                    # Only apply steps if payload value is reasonable and higher than current
+                    # Apply steps from payload if provided, otherwise use workflow default
                     if payload_steps is not None:
-                        if current_steps is None or payload_steps >= current_steps:
-                            widgets[1] = payload_steps
-                            logger.info(f"BasicScheduler node {node.get('id')}: Updated steps from {current_steps} to {payload_steps}")
-                        else:
-                            logger.warning(f"BasicScheduler node {node.get('id')}: Ignoring payload steps {payload_steps} (workflow default {current_steps} is higher)")
+                        widgets[1] = payload_steps
+                        logger.info(f"BasicScheduler node {node.get('id')}: Applied payload steps: {current_steps} -> {payload_steps}")
                     node["widgets_values"] = widgets
             
             # Handle SamplerCustom nodes - update cfg via widgets_values
@@ -1335,16 +1373,29 @@ async def process_workflow(
                 # SamplerCustom widgets_values: [add_noise, noise_seed, seed_type, cfg]
                 if isinstance(widgets, list) and len(widgets) >= 4:
                     current_cfg = widgets[3] if len(widgets) > 3 else None
-                    # Only apply cfg if payload value is reasonable and higher than current
+                    # Apply cfg from payload if provided, otherwise use workflow default
                     if payload_cfg is not None:
-                        if current_cfg is None or payload_cfg >= current_cfg:
-                            widgets[3] = payload_cfg
-                            logger.info(f"SamplerCustom node {node.get('id')}: Updated cfg from {current_cfg} to {payload_cfg}")
-                        else:
-                            logger.warning(f"SamplerCustom node {node.get('id')}: Ignoring payload cfg {payload_cfg} (workflow default {current_cfg} is higher)")
+                        widgets[3] = payload_cfg
+                        logger.info(f"SamplerCustom node {node.get('id')}: Applied payload cfg: {current_cfg} -> {payload_cfg}")
                 if isinstance(widgets, list) and len(widgets) >= 2:
                     widgets[1] = seed  # Update noise_seed
                     node["widgets_values"] = widgets
+            
+            # Handle LTXVScheduler nodes - apply steps from payload if provided (ComfyUI native format)
+            elif class_type == "LTXVScheduler":
+                if payload_steps is not None and "steps" in inputs:
+                    old_steps = inputs.get("steps")
+                    inputs["steps"] = payload_steps
+                    logger.info(f"LTXVScheduler node {node.get('id')}: Applied payload steps: {old_steps} -> {payload_steps}")
+                node["inputs"] = inputs
+            
+            # Handle KSamplerSelect nodes - apply sampler_name from payload if provided (ComfyUI native format)
+            elif class_type == "KSamplerSelect":
+                if payload_sampler and "sampler_name" in inputs:
+                    old_sampler = inputs.get("sampler_name")
+                    inputs["sampler_name"] = payload_sampler
+                    logger.info(f"KSamplerSelect node {node.get('id')}: Applied payload sampler: {old_sampler} -> {payload_sampler}")
+                node["inputs"] = inputs
             
             # Handle WanVideoEmptyEmbeds nodes - ALWAYS use workflow defaults (ComfyUI native format)
             elif class_type == "WanVideoEmptyEmbeds":
@@ -1530,7 +1581,8 @@ async def process_workflow(
                     inputs["fps"] = payload.get("fps")
                 logger.debug(f"Updated EmptyHunyuanLatentVideo node with dimensions: {inputs.get('width')}x{inputs.get('height')}, length: {inputs.get('length')}")
             
-            # Handle Wan22ImageToVideoLatent nodes - update dimensions and length for text-to-video
+            # Handle Wan22ImageToVideoLatent nodes - update dimensions and length
+            # Supports both text-to-video (no source image) and image-to-video (with source image via LoadImage node)
             elif class_type == "Wan22ImageToVideoLatent":
                 if "width" in inputs and payload.get("width"):
                     inputs["width"] = payload.get("width")
@@ -1542,6 +1594,8 @@ async def process_workflow(
                     video_length = payload.get("length", payload.get("video_length"))
                     if video_length:
                         inputs["length"] = video_length
+                # Note: Source image is handled via LoadImage node connected to start_image input
+                # The LoadImage node processing above will set the source image filename when available
                 logger.debug(f"Updated Wan22ImageToVideoLatent node {node_id} with dimensions: {inputs.get('width')}x{inputs.get('height')}, length: {inputs.get('length')}")
 
             # Handle save image nodes - update filename prefix for job tracking
@@ -1561,6 +1615,20 @@ async def process_workflow(
                 if "fps" in inputs and payload.get("fps"):
                     inputs["fps"] = payload.get("fps")
                     logger.debug(f"Updated CreateVideo node fps to {inputs['fps']}")
+            
+            # Handle SaveAnimatedWEBP node - update fps if specified (simple format uses inputs dict)
+            elif class_type == "SaveAnimatedWEBP":
+                if "fps" in inputs and payload.get("fps"):
+                    inputs["fps"] = payload.get("fps")
+                    logger.debug(f"Updated SaveAnimatedWEBP node fps to {inputs['fps']}")
+                node_data["inputs"] = inputs
+            
+            # Handle SaveWEBM node - update fps if specified (simple format uses inputs dict)
+            elif class_type == "SaveWEBM":
+                if "fps" in inputs and payload.get("fps"):
+                    inputs["fps"] = payload.get("fps")
+                    logger.debug(f"Updated SaveWEBM node fps to {inputs['fps']}")
+                node_data["inputs"] = inputs
 
             # Handle LoadImageOutput nodes for source images
             elif class_type == "LoadImageOutput":
@@ -1570,11 +1638,11 @@ async def process_workflow(
             
             # Handle WanVideoSampler nodes - validate scheduler and apply parameters
             elif class_type == "WanVideoSampler":
-                # Log workflow defaults being used (WORKFLOW FILE IS SOURCE OF TRUTH)
+                # Log workflow defaults
                 workflow_steps = inputs.get("steps")
                 workflow_cfg = inputs.get("cfg")
                 workflow_scheduler = inputs.get("scheduler")
-                logger.info(f"WanVideoSampler node {node_id}: Using WORKFLOW DEFAULTS - steps={workflow_steps}, cfg={workflow_cfg}, scheduler={workflow_scheduler}")
+                logger.info(f"WanVideoSampler node {node_id}: Workflow defaults - steps={workflow_steps}, cfg={workflow_cfg}, scheduler={workflow_scheduler}")
                 
                 # Apply scheduler from payload if provided, otherwise validate workflow scheduler
                 if payload_scheduler and "scheduler" in inputs:
@@ -1589,17 +1657,16 @@ async def process_workflow(
                         logger.info(f"Node {node_id}: Validating workflow scheduler: '{current_scheduler}' -> '{valid_scheduler}'")
                         inputs["scheduler"] = valid_scheduler
                 
-                # NOTE: payload_steps and payload_cfg are always None (set at line ~745)
-                # This ensures workflow file is the source of truth for steps/cfg
-                # The conditions below will NEVER execute because payload_steps/payload_cfg are None
+                # Apply steps from payload if provided, otherwise use workflow default
                 if payload_steps is not None and "steps" in inputs:
                     old_steps = inputs.get("steps")
                     inputs["steps"] = payload_steps
-                    logger.info(f"Node {node_id}: Applied steps: {old_steps} -> {payload_steps}")
+                    logger.info(f"Node {node_id}: Applied payload steps: {old_steps} -> {payload_steps}")
+                # Apply cfg from payload if provided, otherwise use workflow default
                 if payload_cfg is not None and "cfg" in inputs:
                     old_cfg = inputs.get("cfg")
                     inputs["cfg"] = payload_cfg
-                    logger.info(f"Node {node_id}: Applied cfg: {old_cfg} -> {payload_cfg}")
+                    logger.info(f"Node {node_id}: Applied payload cfg: {old_cfg} -> {payload_cfg}")
                 if "seed" in inputs:
                     inputs["seed"] = seed
                 if payload.get("shift") is not None and "shift" in inputs:
@@ -1625,6 +1692,22 @@ async def process_workflow(
                 # Keep workflow tile settings - do not override with payload width/height
                 node_data["inputs"] = inputs
 
+            # Handle LTXVScheduler nodes - apply steps from payload if provided
+            elif class_type == "LTXVScheduler":
+                if payload_steps is not None and "steps" in inputs:
+                    old_steps = inputs.get("steps")
+                    inputs["steps"] = payload_steps
+                    logger.info(f"LTXVScheduler node {node_id}: Applied payload steps: {old_steps} -> {payload_steps}")
+                node_data["inputs"] = inputs
+            
+            # Handle KSamplerSelect nodes - apply sampler_name from payload if provided
+            elif class_type == "KSamplerSelect":
+                if payload_sampler and "sampler_name" in inputs:
+                    old_sampler = inputs.get("sampler_name")
+                    inputs["sampler_name"] = payload_sampler
+                    logger.info(f"KSamplerSelect node {node_id}: Applied payload sampler: {old_sampler} -> {payload_sampler}")
+                node_data["inputs"] = inputs
+            
             # Handle WanVideoEmptyEmbeds nodes - ALWAYS use workflow defaults
             # NOTE: Text-to-video models (t2v) don't support img2img properly.
             # Only image-to-video models (ti2v) can handle source images.
