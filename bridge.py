@@ -47,6 +47,7 @@ class DummyJobPopResponse:
         self.id = kwargs.get("id", "")
         self.model = kwargs.get("model", "")
         self.kudos = kwargs.get("kudos", 0)
+        self.r2_upload = kwargs.get("r2_upload")  # R2 presigned upload URL
         
         # Create a payload object
         class Payload:
@@ -377,7 +378,7 @@ class ComfyUIBridge:
                 "max_pixels": self.max_pixels,
                 "nsfw": self.nsfw,
                 "models": self.models,
-                "bridge_agent": "ComfyUI Bridge:1.0",
+                "bridge_agent": "AI Power Grid Worker:11:https://github.com/ai-power-grid/comfy-bridge",
                 "threads": self.threads,
                 "img2img": True,
                 "painting": True,
@@ -397,7 +398,7 @@ class ComfyUIBridge:
                 "models": self.models,
                 "max_pixels": self.max_pixels,
                 "nsfw": self.nsfw,
-                "bridge_agent": "ComfyUI Bridge:1.0",
+                "bridge_agent": "AI Power Grid Worker:11:https://github.com/ai-power-grid/comfy-bridge",
                 "threads": self.threads,
                 "require_upfront_kudos": False,
                 "worker_type": "image",
@@ -475,7 +476,7 @@ class ComfyUIBridge:
                 "models": self.models,
                 "max_pixels": self.max_pixels,
                 "nsfw": self.nsfw,
-                "bridge_agent": "ComfyUI Bridge:1.0",
+                "bridge_agent": "AI Power Grid Worker:11:https://github.com/ai-power-grid/comfy-bridge",
                 "threads": self.threads,
                 "online": False,
                 "maintenance": True,
@@ -539,11 +540,20 @@ class ComfyUIBridge:
             "allow_painting": True
         }
         try:
+            logger.info(f"Polling for jobs... (models: {self.models})")
             async with self.session.post(url, headers=self.headers, json=payload) as response:
                 if response.status == 200:
                     data = await response.json()
-                    if "id" in data:
-                        logger.info(f"Got job {data['id']}")
+                    if data.get("id"):  # Only log if id is truthy (not None or empty)
+                        logger.info(f"🎉 Got job {data['id']}")
+                    else:
+                        # Debug: log why no job was returned
+                        skipped = data.get("skipped", {})
+                        non_zero_skipped = {k: v for k, v in skipped.items() if v > 0}
+                        if non_zero_skipped:
+                            logger.info(f"Jobs skipped: {non_zero_skipped}")
+                        else:
+                            logger.info("No jobs available (all skipped=0)")
                     return data
                 else:
                     logger.error(f"Failed to pop jobs: {response.status} - {await response.text()}")
@@ -552,15 +562,36 @@ class ComfyUIBridge:
             logger.error(f"Error popping jobs: {e}")
             return None
 
+    async def _upload_to_r2(self, r2_upload_url: str, image_data: bytes) -> bool:
+        """Upload image directly to R2 using presigned URL.
+        
+        Args:
+            r2_upload_url: Presigned R2 upload URL
+            image_data: Image data to upload
+            
+        Returns:
+            True if upload succeeded, False otherwise
+        """
+        try:
+            logger.info(f"Uploading to R2, image size: {len(image_data)} bytes")
+            async with self.session.put(
+                r2_upload_url,
+                data=image_data,
+                headers={'Content-Type': 'image/png'}
+            ) as response:
+                if response.status in [200, 204]:
+                    logger.info("R2 upload successful")
+                    return True
+                else:
+                    logger.error(f"R2 upload failed: {response.status} - {await response.text()}")
+                    return False
+        except Exception as e:
+            logger.error(f"Exception during R2 upload: {str(e)}")
+            return False
+    
     async def _submit_result(self, job_id: str, image_data: bytes):
         """Submit a completed job result to the AI Power Grid."""
         logger.info(f"Preparing to submit result for job {job_id}, image size: {len(image_data)} bytes")
-        
-        # Convert image to base64
-        image_base64 = base64.b64encode(image_data).decode()
-        logger.info(f"Base64 encoded image size: {len(image_base64)} characters")
-        
-        url = f"{self.base_url}/v2/generate/submit"
         
         # Get seed and ensure it's an integer
         seed = self.active_jobs.get(job_id, {}).get('seed', 0)
@@ -569,15 +600,41 @@ class ComfyUIBridge:
                 seed = int(seed)
             except (ValueError, TypeError):
                 seed = 0
-                
-        payload = {
-            "id": job_id,
-            "generation": image_base64,
-            "state": "ok",
-            "seed": seed,
-            "r2": False  # Request the API to store the image in R2 and return a URL instead of base64 data
-        }
         
+        # Check if this job requires R2 upload
+        r2_upload_url = self.active_jobs.get(job_id, {}).get('r2_upload')
+        
+        if r2_upload_url:
+            # R2 flow: Upload to R2 first
+            logger.info("Using R2 upload flow")
+            upload_success = await self._upload_to_r2(r2_upload_url, image_data)
+            
+            if not upload_success:
+                logger.error("R2 upload failed, job submission aborted")
+                return False
+            
+            # Submit completion with R2 marker (no base64 image)
+            payload = {
+                "id": job_id,
+                "generation": "R2",  # Special marker indicating R2 upload
+                "state": "ok",
+                "seed": seed,
+            }
+        else:
+            # Legacy flow: Base64 encode and submit
+            logger.info("Using legacy base64 flow")
+            image_base64 = base64.b64encode(image_data).decode()
+            logger.info(f"Base64 encoded image size: {len(image_base64)} characters")
+            
+            payload = {
+                "id": job_id,
+                "generation": image_base64,
+                "state": "ok",
+                "seed": seed,
+                "r2": False
+            }
+        
+        url = f"{self.base_url}/v2/generate/submit"
         logger.info(f"Submitting to API URL: {url}")
         
         try:
@@ -631,13 +688,14 @@ class ComfyUIBridge:
     async def _main_loop(self):
         """Main loop for the bridge"""
         # The session is already initialized in start() method, don't create a new one here
-        if not await self._register_worker():
-            return
-
+        # Worker is already registered in start() method, no need to register again
+        logger.info("Entering main polling loop...")
+        
         try:
             while self.running:
                 jobs = await self._pop_jobs()
-                if jobs and not jobs.get("skipped", {}):
+                # Check if we got a job (has 'id' field) - don't check skipped dict as it's always present
+                if jobs and jobs.get("id"):
                     # Process jobs here
                     logger.info(f"Got jobs: {jobs}")
                     
@@ -705,7 +763,8 @@ class ComfyUIBridge:
             self.active_jobs[job_id] = {
                 'seed': seed,
                 'model': job.model,
-                'kudos': job.kudos or 0
+                'kudos': job.kudos or 0,
+                'r2_upload': job.r2_upload  # Store R2 upload URL if present
             }
             
             # Convert AI Power Grid job to ComfyUI workflow
@@ -833,6 +892,44 @@ class ComfyUIBridge:
             positive_prompt = prompt
             logger.info(f"No ### delimiter found in prompt, using full prompt as positive")
         
+        # === Z-Image-Turbo and similar workflows: Handle PrimitiveStringMultiline nodes ===
+        # These workflows use PrimitiveStringMultiline as the prompt source instead of direct CLIPTextEncode
+        primitive_prompt_updated = False
+        has_conditioning_zero_out = False
+        
+        # First pass: detect workflow type
+        for node_id, node in updated_workflow.items():
+            if not isinstance(node, dict):
+                continue
+            if node.get("class_type") == "ConditioningZeroOut":
+                has_conditioning_zero_out = True
+                break
+        
+        # Second pass: update prompts
+        for node_id, node in updated_workflow.items():
+            if not isinstance(node, dict):
+                continue
+            if node.get("class_type") == "PrimitiveStringMultiline":
+                # Check if this node's output connects to a CLIPTextEncode (it's a prompt source)
+                if "inputs" in node and "value" in node["inputs"]:
+                    node["inputs"]["value"] = positive_prompt
+                    primitive_prompt_updated = True
+                    logger.info(f"Set prompt in PrimitiveStringMultiline node {node_id}: {positive_prompt[:50]}...")
+                elif "inputs" in node:
+                    # Some versions might not have 'value' key yet
+                    node["inputs"]["value"] = positive_prompt
+                    primitive_prompt_updated = True
+                    logger.info(f"Added prompt to PrimitiveStringMultiline node {node_id}: {positive_prompt[:50]}...")
+        
+        if primitive_prompt_updated:
+            logger.info("Detected PrimitiveStringMultiline workflow (Z-Image-Turbo style)")
+        
+        # Log warning if negative prompt provided but workflow doesn't support it
+        if has_conditioning_zero_out and negative_prompt:
+            logger.warning(f"Workflow uses ConditioningZeroOut - negative prompts are NOT supported")
+            logger.warning(f"Ignoring negative prompt: '{negative_prompt[:50]}...'")
+            negative_prompt = ""  # Clear it so we don't try to set it anywhere
+        
         # ONLY update the prompt-related fields, NOT sampler or other parameters
         for node_id, node in updated_workflow.items():
             # Skip string values or non-dictionary nodes
@@ -845,6 +942,14 @@ class ComfyUIBridge:
             
             # Find CLIPTextEncode nodes for prompt and negative prompt based on connections
             if node.get("class_type") == "CLIPTextEncode":
+                # Check if text input is a connection reference (list like ["node_id", slot])
+                # If so, skip - the prompt comes from another node (e.g., PrimitiveStringMultiline)
+                text_is_connection = isinstance(node["inputs"].get("text"), list)
+                
+                if text_is_connection:
+                    logger.info(f"CLIPTextEncode node {node_id} gets text from connection, skipping direct update")
+                    continue
+                
                 # If this is the positive prompt node
                 if node_id == positive_node_id:
                     node["inputs"]["text"] = positive_prompt
@@ -886,6 +991,15 @@ class ComfyUIBridge:
                             # Also update inputs.text for API compatibility
                             node["inputs"]["text"] = negative_prompt
                             logger.info(f"Set negative prompt by placeholder in widgets_values for node {node_id}")
+            
+            # Update EmptyLatentImage or EmptySD3LatentImage node with resolution from job
+            elif node.get("class_type") in ["EmptyLatentImage", "EmptySD3LatentImage"]:
+                if job.payload.width:
+                    node["inputs"]["width"] = job.payload.width
+                    logger.info(f"Set {node.get('class_type')} width to {job.payload.width}")
+                if job.payload.height:
+                    node["inputs"]["height"] = job.payload.height
+                    logger.info(f"Set {node.get('class_type')} height to {job.payload.height}")
             
             # Only update SaveImage node to set filename with job ID
             elif node.get("class_type") == "SaveImage":
