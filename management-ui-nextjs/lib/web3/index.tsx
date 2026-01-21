@@ -105,6 +105,7 @@ export interface ModelWithDetails {
 
 // useModelVault hook
 export function useModelVault() {
+  const { chainId } = useWallet();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [modelsWithDetails, setModelsWithDetails] = useState<ModelWithDetails[]>([]);
@@ -114,8 +115,12 @@ export function useModelVault() {
     setError(null);
     
     try {
-      // Fetch models from the blockchain via API endpoint
-      const response = await fetch('/api/blockchain-models');
+      // Use chainId from wallet connection, or default to Base Mainnet (8453)
+      // Supported chains: 8453 (Base Mainnet), 84532 (Base Sepolia)
+      const targetChainId = chainId || 8453;
+      
+      // Fetch models from the blockchain via API endpoint with chainId parameter
+      const response = await fetch(`/api/blockchain-models?chainId=${targetChainId}`);
       if (!response.ok) {
         throw new Error(`Failed to fetch models: ${response.statusText}`);
       }
@@ -151,7 +156,7 @@ export function useModelVault() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [chainId]);
   
   useEffect(() => {
     fetchModels();

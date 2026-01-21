@@ -1,68 +1,118 @@
 import { NextResponse } from 'next/server';
 import { createPublicClient, http } from 'viem';
-import { base } from 'viem/chains';
+import { base, baseSepolia } from 'viem/chains';
 import * as fs from 'fs/promises';
 
 export const dynamic = 'force-dynamic';
 
-// Grid ModelVault contract on Base Mainnet - matches Python modelvault_client.py
-const MODELVAULT_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_MODELVAULT_CONTRACT || '0x79F39f2a0eA476f53994812e6a8f3C8CFe08c609';
-const MODELVAULT_RPC_URL = process.env.NEXT_PUBLIC_MODELVAULT_RPC_URL || 'https://mainnet.base.org';
+// ModelRegistryV2 contract addresses for both networks
+const BASE_MAINNET_CONTRACT = process.env.NEXT_PUBLIC_MODELVAULT_CONTRACT_V2_MAINNET || process.env.NEXT_PUBLIC_MODELVAULT_CONTRACT_V2 || '0x79F39f2a0eA476f53994812e6a8f3C8CFe08c609';
+const BASE_SEPOLIA_CONTRACT = process.env.NEXT_PUBLIC_MODELVAULT_CONTRACT_V2_SEPOLIA || '0xF5caaB067Bae8ea6Be18903056E20e8DacB92182';
+
+// RPC URLs for both networks
+const BASE_MAINNET_RPC = process.env.NEXT_PUBLIC_MODELVAULT_RPC_URL_MAINNET || process.env.NEXT_PUBLIC_MODELVAULT_RPC_URL || 'https://mainnet.base.org';
+const BASE_SEPOLIA_RPC = process.env.NEXT_PUBLIC_MODELVAULT_RPC_URL_SEPOLIA || 'https://sepolia.base.org';
+
+// Default network (can be overridden by query parameter)
+const DEFAULT_CHAIN_ID = process.env.NEXT_PUBLIC_DEFAULT_CHAIN_ID ? parseInt(process.env.NEXT_PUBLIC_DEFAULT_CHAIN_ID) : 8453; // Base Mainnet
 
 const isWindows = process.platform === 'win32';
 
-// ABI matching Grid proxy ModelVault module
-// Grid ModelVault struct: modelHash, modelType, fileName, name, version, ipfsCid, downloadUrl,
-//                        sizeBytes, quantization, format, vramMB, baseModel, inpainting, img2img,
-//                        controlnet, lora, isActive, isNSFW, timestamp, creator
-const MODEL_REGISTRY_ABI = [
+// ABI for ModelRegistryV2 contract
+// getAllActiveModels() returns only registered active models - ensures blockchain is single source of truth
+const MODEL_REGISTRY_V2_ABI = [
   {
-    inputs: [{ name: 'modelId', type: 'uint256' }],
-    name: 'getModel',
+    inputs: [],
+    name: 'getAllActiveModels',
     outputs: [
       {
         components: [
           { name: 'modelHash', type: 'bytes32' },
           { name: 'modelType', type: 'uint8' },
-          { name: 'fileName', type: 'string' },
           { name: 'name', type: 'string' },
-          { name: 'version', type: 'string' },
-          { name: 'ipfsCid', type: 'string' },
-          { name: 'downloadUrl', type: 'string' },
-          { name: 'sizeBytes', type: 'uint256' },
-          { name: 'quantization', type: 'string' },
-          { name: 'format', type: 'string' },
-          { name: 'vramMB', type: 'uint32' },
-          { name: 'baseModel', type: 'string' },
+          { name: 'description', type: 'string' },
+          { name: 'isNSFW', type: 'bool' },
+          { name: 'timestamp', type: 'uint256' },
+          { name: 'creator', type: 'address' },
           { name: 'inpainting', type: 'bool' },
           { name: 'img2img', type: 'bool' },
           { name: 'controlnet', type: 'bool' },
           { name: 'lora', type: 'bool' },
+          { name: 'baseModel', type: 'string' },
+          { name: 'architecture', type: 'string' },
           { name: 'isActive', type: 'bool' },
-          { name: 'isNSFW', type: 'bool' },
-          { name: 'timestamp', type: 'uint256' },
-          { name: 'creator', type: 'address' },
         ],
-        type: 'tuple',
+        internalType: 'struct ModelRegistryV2.Model[]',
+        name: '',
+        type: 'tuple[]',
       },
     ],
     stateMutability: 'view',
     type: 'function',
   },
   {
-    inputs: [],
-    name: 'getModelCount',
+    inputs: [{ name: 'modelId', type: 'uint256' }],
+    name: 'getModelFiles',
+    outputs: [
+      {
+        components: [
+          { name: 'fileName', type: 'string' },
+          { name: 'fileType', type: 'string' },
+          { name: 'downloadUrl', type: 'string' },
+          { name: 'mirrorUrl', type: 'string' },
+          { name: 'sha256Hash', type: 'bytes32' },
+          { name: 'sizeBytes', type: 'uint256' },
+        ],
+        internalType: 'struct ModelRegistryV2.ModelFile[]',
+        name: '',
+        type: 'tuple[]',
+      },
+    ],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ name: 'modelHash', type: 'bytes32' }],
+    name: 'hashToModelId',
     outputs: [{ type: 'uint256' }],
     stateMutability: 'view',
     type: 'function',
   },
 ] as const;
 
-function getPublicClient() {
-  return createPublicClient({
+// Network configuration
+const NETWORK_CONFIG = {
+  8453: { // Base Mainnet
     chain: base,
-    transport: http(MODELVAULT_RPC_URL),
+    contract: BASE_MAINNET_CONTRACT,
+    rpc: BASE_MAINNET_RPC,
+    name: 'Base Mainnet',
+  },
+  84532: { // Base Sepolia
+    chain: baseSepolia,
+    contract: BASE_SEPOLIA_CONTRACT,
+    rpc: BASE_SEPOLIA_RPC,
+    name: 'Base Sepolia',
+  },
+} as const;
+
+function getPublicClient(chainId: number = DEFAULT_CHAIN_ID) {
+  const config = NETWORK_CONFIG[chainId as keyof typeof NETWORK_CONFIG];
+  if (!config) {
+    throw new Error(`Unsupported chain ID: ${chainId}`);
+  }
+  return createPublicClient({
+    chain: config.chain,
+    transport: http(config.rpc),
   });
+}
+
+function getContractAddress(chainId: number = DEFAULT_CHAIN_ID): string {
+  const config = NETWORK_CONFIG[chainId as keyof typeof NETWORK_CONFIG];
+  if (!config) {
+    throw new Error(`Unsupported chain ID: ${chainId}`);
+  }
+  return config.contract;
 }
 
 // Load descriptions from local catalog to enrich blockchain data
@@ -123,6 +173,9 @@ function generateDescription(displayName: string): string {
   }
   
   if (nameLower.includes('flux')) {
+    if (nameLower.includes('flux.2') || nameLower.includes('flux2')) {
+      return 'FLUX.2-dev - Next generation text to image model';
+    }
     if (nameLower.includes('kontext')) {
       return 'FLUX Kontext model for context-aware image generation';
     }
@@ -147,81 +200,113 @@ function generateDescription(displayName: string): string {
   return `${displayName} model`;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  // Get chainId from query parameter or use default
+  const { searchParams } = new URL(request.url);
+  const chainIdParam = searchParams.get('chainId');
+  const chainId = chainIdParam ? parseInt(chainIdParam) : DEFAULT_CHAIN_ID;
+  
   console.log('[blockchain-models] GET request received');
+  console.log('[blockchain-models] Chain ID:', chainId);
+  
+  const networkConfig = NETWORK_CONFIG[chainId as keyof typeof NETWORK_CONFIG];
+  if (!networkConfig) {
+    return NextResponse.json({
+      success: false,
+      models: [],
+      error: `Unsupported chain ID: ${chainId}. Supported: 8453 (Base Mainnet), 84532 (Base Sepolia)`,
+    }, { status: 400 });
+  }
+  
   console.log('[blockchain-models] Environment check:', {
-    MODELVAULT_CONTRACT: MODELVAULT_CONTRACT_ADDRESS,
-    MODELVAULT_RPC: MODELVAULT_RPC_URL,
+    NETWORK: networkConfig.name,
+    CONTRACT: networkConfig.contract,
+    RPC: networkConfig.rpc,
   });
   
   try {
-    const client = getPublicClient();
-    const contractAddress = MODELVAULT_CONTRACT_ADDRESS as `0x${string}`;
+    const client = getPublicClient(chainId);
+    const contractAddress = getContractAddress(chainId) as `0x${string}`;
 
-    console.log(`[blockchain-models] Connecting to contract ${contractAddress} on ${MODELVAULT_RPC_URL}`);
+    console.log(`[blockchain-models] Connecting to ModelRegistryV2 contract ${contractAddress} on ${networkConfig.name} (${networkConfig.rpc})`);
 
     // Load descriptions from catalog for enrichment
     const catalogData = await loadDescriptionsFromCatalog();
 
-    // Get total model count
-    let totalModels: bigint;
-    console.log('[blockchain-models] Calling getModelCount()...');
+    // Fetch ONLY registered active models from blockchain
+    // getAllActiveModels() ensures we only get models that are registered and active
+    console.log('[blockchain-models] Calling getAllActiveModels() to fetch registered models...');
+    let activeModels: any[];
     try {
-      totalModels = await client.readContract({
+      activeModels = await client.readContract({
         address: contractAddress,
-        abi: MODEL_REGISTRY_ABI,
-        functionName: 'getModelCount',
-      });
-      console.log(`[blockchain-models] Found ${totalModels} models on chain`);
+        abi: MODEL_REGISTRY_V2_ABI,
+        functionName: 'getAllActiveModels',
+      }) as any[];
+      console.log(`[blockchain-models] Found ${activeModels.length} registered active models on chain`);
     } catch (error: any) {
-      console.error('[blockchain-models] Failed to get model count:', error.message);
+      console.error('[blockchain-models] Failed to fetch active models:', error.message);
       return NextResponse.json({
         success: false,
         models: [],
         count: 0,
-        error: 'Failed to get model count from blockchain: ' + error.message,
+        error: 'Failed to fetch registered models from blockchain: ' + error.message,
       });
     }
 
     const models: any[] = [];
-    const total = Number(totalModels);
 
-    console.log(`[blockchain-models] Fetching ${total} models...`);
-
-    // Iterate through all model IDs (1-indexed)
-    for (let modelId = 1; modelId <= total; modelId++) {
+    // Process each registered model
+    for (let i = 0; i < activeModels.length; i++) {
       try {
-        const result = await client.readContract({
-          address: contractAddress,
-          abi: MODEL_REGISTRY_ABI,
-          functionName: 'getModel',
-          args: [BigInt(modelId)],
-        }) as any;
+        const result = activeModels[i];
 
-        // viem returns an object with named properties matching the ABI components
-        if (!result || typeof result !== 'object') {
-          console.warn(`[blockchain-models] Model ${modelId} returned invalid result type: ${typeof result}`);
-          continue;
-        }
-
-        // Check if model is valid (modelHash is not zero)
+        // Validate model hash exists
         const modelHash = result.modelHash;
         if (!modelHash || modelHash === '0x0000000000000000000000000000000000000000000000000000000000000000') {
-          console.log(`[blockchain-models] Model ${modelId} has zero hash, skipping`);
+          console.log(`[blockchain-models] Model ${i + 1} has zero hash, skipping`);
           continue;
         }
 
-        // Skip inactive models
+        // Double-check isActive (should already be filtered by getAllActiveModels, but verify)
         if (result.isActive === false) {
-          console.log(`[blockchain-models] Model ${modelId} is inactive, skipping`);
+          console.log(`[blockchain-models] Model ${i + 1} is inactive, skipping`);
           continue;
         }
 
         const displayName = result.name || '';
-        const fileName = result.fileName || '';
+        
+        // Get model files to determine fileName and total size
+        let fileName = '';
+        let totalSizeBytes = 0;
+        try {
+          const modelId = await client.readContract({
+            address: contractAddress,
+            abi: MODEL_REGISTRY_V2_ABI,
+            functionName: 'hashToModelId',
+            args: [modelHash],
+          });
+          
+          const files = await client.readContract({
+            address: contractAddress,
+            abi: MODEL_REGISTRY_V2_ABI,
+            functionName: 'getModelFiles',
+            args: [modelId],
+          }) as any[];
+          
+          if (files && files.length > 0) {
+            // Use first file's name as fileName, sum all file sizes
+            fileName = files[0].fileName || '';
+            totalSizeBytes = files.reduce((sum: number, file: any) => {
+              return sum + Number(file.sizeBytes || 0);
+            }, 0);
+          }
+        } catch (fileError: any) {
+          console.warn(`[blockchain-models] Could not fetch files for model ${displayName}:`, fileError.message);
+        }
         
         // Get description from catalog or generate one
-        let description = '';
+        let description = result.description || '';
         let enrichedSizeBytes = 0;
         
         // Try to find enrichment data from catalog
@@ -231,7 +316,7 @@ export async function GET() {
                             catalogData[fileName.toLowerCase()];
         
         if (catalogEntry) {
-          description = catalogEntry.description;
+          if (!description) description = catalogEntry.description;
           enrichedSizeBytes = catalogEntry.sizeBytes;
         }
         
@@ -240,15 +325,14 @@ export async function GET() {
           description = generateDescription(displayName);
         }
         
-        // Use chain sizeBytes if available, otherwise use catalog value
-        const chainSizeBytes = result.sizeBytes ? Number(result.sizeBytes) : 0;
-        const finalSizeBytes = chainSizeBytes > 0 ? chainSizeBytes : enrichedSizeBytes;
+        // Use total file size if available, otherwise use catalog value
+        const finalSizeBytes = totalSizeBytes > 0 ? totalSizeBytes : enrichedSizeBytes;
 
         // Map result to frontend format
         const model = {
           hash: modelHash,
           modelType: Number(result.modelType || 0),
-          fileName: fileName,
+          fileName: fileName || displayName,
           displayName: displayName,
           description: description,
           isNSFW: result.isNSFW || false,
@@ -258,33 +342,29 @@ export async function GET() {
           controlnet: result.controlnet || false,
           lora: result.lora || false,
           baseModel: result.baseModel || '',
-          architecture: result.format || '',
-          isActive: result.isActive !== false,
-          downloadUrl: result.downloadUrl || '',
-          ipfsCid: result.ipfsCid || '',
-          quantization: result.quantization || '',
-          vramMB: Number(result.vramMB || 0),
+          architecture: result.architecture || '',
+          isActive: true, // All models from getAllActiveModels are active
         };
 
         models.push(model);
-        console.log(`[blockchain-models] Model ${modelId}: ${displayName} (${fileName})`);
+        console.log(`[blockchain-models] Registered model ${i + 1}: ${displayName} (${fileName || 'no files'})`);
       } catch (error: any) {
         // Check for rate limiting
         if (error.message?.includes('rate') || error.message?.includes('429')) {
-          console.warn(`[blockchain-models] Rate limited at model ${modelId}, pausing...`);
+          console.warn(`[blockchain-models] Rate limited at model ${i + 1}, pausing...`);
           await new Promise(r => setTimeout(r, 1000)); // Wait 1 second
-          modelId--; // Retry this model
+          i--; // Retry this model
           continue;
         }
-        // Skip models that fail to fetch (might be invalid IDs)
-        console.debug(`[blockchain-models] Failed to fetch model ${modelId}:`, error.message?.substring(0, 100));
+        // Skip models that fail to process
+        console.debug(`[blockchain-models] Failed to process model ${i + 1}:`, error.message?.substring(0, 100));
         continue;
       }
     }
 
-    console.log(`[blockchain-models] Successfully fetched ${models.length} models from blockchain`);
+    console.log(`[blockchain-models] Successfully fetched ${models.length} registered models from blockchain`);
 
-    // Remove duplicates by displayName
+    // Remove duplicates by displayName (shouldn't happen, but safety check)
     const seenNames = new Set<string>();
     const uniqueModels = models.filter(model => {
       const name = model.displayName.toLowerCase();
@@ -293,15 +373,16 @@ export async function GET() {
       return true;
     });
 
-    console.log(`[blockchain-models] Returning ${uniqueModels.length} unique models`);
+    console.log(`[blockchain-models] Returning ${uniqueModels.length} unique registered models`);
 
     return NextResponse.json({
       success: true,
       models: uniqueModels,
       count: uniqueModels.length,
-      total,
-      contractAddress: MODELVAULT_CONTRACT_ADDRESS,
-      chainId: 8453, // Base Mainnet
+      total: activeModels.length,
+      contractAddress: contractAddress,
+      chainId: chainId,
+      network: networkConfig.name,
     });
   } catch (error: any) {
     console.error('[blockchain-models] API error:', error);
@@ -309,7 +390,7 @@ export async function GET() {
       {
         success: false,
         models: [],
-        error: error.message || 'Failed to fetch models from blockchain',
+        error: error.message || 'Failed to fetch registered models from blockchain',
       },
       { status: 500 }
     );

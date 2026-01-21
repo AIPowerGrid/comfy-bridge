@@ -1,9 +1,9 @@
 {
   "71": {
     "inputs": {
-      "clip_name": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
-      "type": "wan",
-      "device": "default"
+      "clip_name": "{{CLIP_NAME}}",
+      "type": "{{CLIP_TYPE}}",
+      "device": "{{DEVICE}}"
     },
     "class_type": "CLIPLoader",
     "_meta": {
@@ -12,7 +12,7 @@
   },
   "72": {
     "inputs": {
-      "text": "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走，裸露，NSFW",
+      "text": "{{NEGATIVE_PROMPT}}",
       "clip": [
         "71",
         0
@@ -25,7 +25,7 @@
   },
   "73": {
     "inputs": {
-      "vae_name": "wan_2.1_vae.safetensors"
+      "vae_name": "{{VAE_NAME}}"
     },
     "class_type": "VAELoader",
     "_meta": {
@@ -34,10 +34,10 @@
   },
   "74": {
     "inputs": {
-      "width": 640,
-      "height": 640,
-      "length": 81,
-      "batch_size": 1
+      "width": "{{WIDTH}}",
+      "height": "{{HEIGHT}}",
+      "length": "{{LENGTH}}",
+      "batch_size": "{{BATCH_SIZE}}"
     },
     "class_type": "EmptyHunyuanLatentVideo",
     "_meta": {
@@ -56,8 +56,8 @@
   },
   "76": {
     "inputs": {
-      "unet_name": "wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors",
-      "weight_dtype": "default"
+      "unet_name": "{{UNET_NAME_2}}",
+      "weight_dtype": "{{WEIGHT_DTYPE}}"
     },
     "class_type": "UNETLoader",
     "_meta": {
@@ -66,15 +66,15 @@
   },
   "78": {
     "inputs": {
-      "add_noise": "disable",
-      "noise_seed": 0,
-      "steps": 4,
-      "cfg": 1,
-      "sampler_name": "euler",
-      "scheduler": "simple",
-      "start_at_step": 2,
-      "end_at_step": 4,
-      "return_with_leftover_noise": "disable",
+      "add_noise": "{{ADD_NOISE}}",
+      "noise_seed": "{{SEED}}",
+      "steps": "{{STEPS}}",
+      "cfg": "{{CFG}}",
+      "sampler_name": "{{SAMPLER}}",
+      "scheduler": "{{SCHEDULER}}",
+      "start_at_step": "{{START_AT_STEP}}",
+      "end_at_step": "{{END_AT_STEP}}",
+      "return_with_leftover_noise": "{{RETURN_WITH_LEFTOVER_NOISE}}",
       "model": [
         "86",
         0
@@ -114,15 +114,15 @@
   },
   "81": {
     "inputs": {
-      "add_noise": "enable",
-      "noise_seed": 392459563371087,
-      "steps": 4,
-      "cfg": 1,
-      "sampler_name": "euler",
-      "scheduler": "simple",
-      "start_at_step": 0,
-      "end_at_step": 2,
-      "return_with_leftover_noise": "enable",
+      "add_noise": "{{ADD_NOISE}}",
+      "noise_seed": "{{SEED}}",
+      "steps": "{{STEPS}}",
+      "cfg": "{{CFG}}",
+      "sampler_name": "{{SAMPLER}}",
+      "scheduler": "{{SCHEDULER}}",
+      "start_at_step": "{{START_AT_STEP}}",
+      "end_at_step": "{{END_AT_STEP}}",
+      "return_with_leftover_noise": "{{RETURN_WITH_LEFTOVER_NOISE}}",
       "model": [
         "82",
         0
@@ -160,8 +160,8 @@
   },
   "83": {
     "inputs": {
-      "lora_name": "wan2.2_t2v_lightx2v_4steps_lora_v1.1_high_noise.safetensors",
-      "strength_model": 1.0000000000000002,
+      "lora_name": "{{LORA_NAME}}",
+      "strength_model": "{{LORA_STRENGTH}}",
       "model": [
         "75",
         0
@@ -188,7 +188,7 @@
   },
   "86": {
     "inputs": {
-      "shift": 5.000000000000001,
+      "shift": "{{SHIFT}}",
       "model": [
         "85",
         0
@@ -230,7 +230,7 @@
   },
   "89": {
     "inputs": {
-      "text": "Beautiful young European woman with honey blonde hair gracefully turning her head back over shoulder, gentle smile, bright eyes looking at camera. Hair flowing in slow motion as she turns. Soft natural lighting, clean background, cinematic slow-motion portrait.",
+      "text": "{{PROMPT}}",
       "clip": [
         "71",
         0

@@ -61,7 +61,7 @@ class APIClient:
             self._pop_count = 0
         self._pop_count += 1
         
-        if self._pop_count == 1 or self._pop_count % 50 == 0:
+        if self._pop_count == 1 or self._pop_count % 3600 == 0:  # Log every hour at 1s polling
             logger.info(f"📋 pop_job request #{self._pop_count}:")
             logger.info(f"   API URL: {Settings.GRID_API_URL}/v2/generate/pop")
             logger.info(f"   Worker: {Settings.GRID_WORKER_NAME}")
@@ -206,9 +206,9 @@ class APIClient:
                         logger.error(f"         • Advertised models: {models_to_use}")
                         logger.error(f"         • This should not happen - investigate!")
             else:
-                # Always log skipped reasons on first 10 polls, then periodically
-                should_log_full = self._pop_count <= 10 or self._pop_count % 50 == 0
-                should_log_skips = self._pop_count <= 10 or self._pop_count % 50 == 0 or any(v > 0 for v in skipped.values())
+                # Always log skipped reasons on first poll, then periodically (every hour at 1s polling)
+                should_log_full = self._pop_count == 1 or self._pop_count % 3600 == 0
+                should_log_skips = self._pop_count == 1 or self._pop_count % 3600 == 0 or any(v > 0 for v in skipped.values())
                 
                 if should_log_full:
                     logger.info(f"📭 No job received (poll #{self._pop_count})")
@@ -217,7 +217,7 @@ class APIClient:
             
             # Log skipped jobs for debugging - always show on first polls
             interesting_skips = {k: v for k, v in skipped.items() if v > 0}
-            should_log_skips = self._pop_count <= 10 or self._pop_count % 50 == 0 or bool(interesting_skips)
+            should_log_skips = self._pop_count == 1 or self._pop_count % 3600 == 0 or bool(interesting_skips)
             
             if should_log_skips:
                 if interesting_skips:
@@ -361,7 +361,7 @@ class APIClient:
                         logger.info(f"      This means jobs are being filtered by other conditions (NSFW, lora, resolution, etc.)")
             
             # If no skipped reasons but still no job, investigate further
-            if not result.get("id") and not interesting_skips and (self._pop_count <= 10 or self._pop_count % 50 == 0):
+            if not result.get("id") and not interesting_skips and (self._pop_count == 1 or self._pop_count % 3600 == 0):
                 logger.warning(f"   ⚠️  No skipped reasons but no job assigned (poll #{self._pop_count})")
                 logger.warning(f"      This is unusual - investigating possible causes...")
                 

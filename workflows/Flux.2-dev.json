@@ -1,7 +1,7 @@
 {
     "6": {
       "inputs": {
-        "text": "cats doing cat things",
+        "text": "{{PROMPT}}",
         "clip": [
           "38",
           0
@@ -30,7 +30,7 @@
     },
     "9": {
       "inputs": {
-        "filename_prefix": "Flux2",
+        "filename_prefix": "{{FILENAME_PREFIX}}",
         "images": [
           "8",
           0
@@ -43,7 +43,7 @@
     },
     "10": {
       "inputs": {
-        "vae_name": "flux2-vae.safetensors"
+        "vae_name": "{{VAE_NAME}}"
       },
       "class_type": "VAELoader",
       "_meta": {
@@ -52,8 +52,8 @@
     },
     "12": {
       "inputs": {
-        "unet_name": "flux2_dev_fp8mixed.safetensors",
-        "weight_dtype": "default"
+        "unet_name": "{{UNET_NAME}}",
+        "weight_dtype": "{{WEIGHT_DTYPE}}"
       },
       "class_type": "UNETLoader",
       "_meta": {
@@ -90,7 +90,7 @@
     },
     "16": {
       "inputs": {
-        "sampler_name": "euler"
+        "sampler_name": "{{SAMPLER}}"
       },
       "class_type": "KSamplerSelect",
       "_meta": {
@@ -115,7 +115,7 @@
     },
     "25": {
       "inputs": {
-        "noise_seed": 706799543439186
+        "noise_seed": "{{SEED}}"
       },
       "class_type": "RandomNoise",
       "_meta": {
@@ -124,7 +124,7 @@
     },
     "26": {
       "inputs": {
-        "guidance": 4,
+        "guidance": "{{CFG}}",
         "conditioning": [
           "6",
           0
@@ -137,9 +137,9 @@
     },
     "38": {
       "inputs": {
-        "clip_name": "mistral_3_small_flux2_bf16.safetensors",
-        "type": "flux2",
-        "device": "default"
+        "clip_name": "{{CLIP_NAME}}",
+        "type": "{{CLIP_TYPE}}",
+        "device": "{{DEVICE}}"
       },
       "class_type": "CLIPLoader",
       "_meta": {
@@ -159,9 +159,9 @@
     },
     "48": {
       "inputs": {
-        "steps": 20,
-        "width": 1248,
-        "height": 832
+        "steps": "{{STEPS}}",
+        "width": "{{WIDTH}}",
+        "height": "{{HEIGHT}}"
       },
       "class_type": "Flux2Scheduler",
       "_meta": {

@@ -2788,7 +2788,7 @@
           "Node name for S&R": "CLIPTextEncode"
         },
         "widgets_values": [
-          "Slow motion, Overexposure, static, blurred details, subtitles, paintings, pictures, still, overall gray, worst quality, low quality, JPEG compression residue, ugly, mutilated, redundant fingers, poorly painted hands, poorly painted faces, deformed, disfigured, deformed limbs, fused fingers, cluttered background, three legs, a lot of people in the background, upside down"
+          "{{NEGATIVE_PROMPT}}"
         ],
         "color": "#322",
         "bgcolor": "#533"
@@ -3160,7 +3160,7 @@
           "Node name for S&R": "ModelSamplingSD3"
         },
         "widgets_values": [
-          8.000000000000002
+          "{{SHIFT}}"
         ],
         "color": "#223",
         "bgcolor": "#335",
@@ -3204,7 +3204,7 @@
           "Node name for S&R": "ModelSamplingSD3"
         },
         "widgets_values": [
-          8.000000000000002
+          "{{SHIFT}}"
         ],
         "color": "#223",
         "bgcolor": "#335",
@@ -3599,16 +3599,16 @@
           "Node name for S&R": "KSamplerAdvanced"
         },
         "widgets_values": [
-          "enable",
-          857345635539784,
-          "randomize",
-          20,
-          3.5,
-          "euler",
-          "simple",
-          0,
-          10,
-          "enable",
+          "{{ADD_NOISE}}",
+          "{{SEED}}",
+          "{{RANDOMIZE}}",
+          "{{STEPS}}",
+          "{{CFG}}",
+          "{{SAMPLER}}",
+          "{{SCHEDULER}}",
+          "{{START_AT_STEP}}",
+          "{{END_AT_STEP}}",
+          "{{RETURN_WITH_LEFTOVER_NOISE}}",
           ""
         ],
         "color": "#323",
@@ -3709,16 +3709,16 @@
           "Node name for S&R": "KSamplerAdvanced"
         },
         "widgets_values": [
-          "disable",
-          0,
-          "fixed",
-          20,
-          3.5,
-          "euler",
-          "simple",
-          10,
-          10000,
-          "disable",
+          "{{ADD_NOISE}}",
+          "{{SEED}}",
+          "{{RANDOMIZE}}",
+          "{{STEPS}}",
+          "{{CFG}}",
+          "{{SAMPLER}}",
+          "{{SCHEDULER}}",
+          "{{START_AT_STEP}}",
+          "{{END_AT_STEP}}",
+          "{{RETURN_WITH_LEFTOVER_NOISE}}",
           ""
         ],
         "color": "#323",
@@ -4499,7 +4499,7 @@
           "Node name for S&R": "VAELoader"
         },
         "widgets_values": [
-          "wan_2.1_vae.safetensors"
+          "{{VAE_NAME}}"
         ],
         "color": "#322",
         "bgcolor": "#533",
@@ -4536,8 +4536,8 @@
           "Node name for S&R": "CLIPLoaderGGUF"
         },
         "widgets_values": [
-          "umt5-xxl-encoder-Q5_K_S.gguf",
-          "wan"
+          "{{CLIP_NAME}}",
+          "{{CLIP_TYPE}}"
         ],
         "color": "#432",
         "bgcolor": "#653",
@@ -5542,7 +5542,7 @@
           "Node name for S&R": "CLIPTextEncode"
         },
         "widgets_values": [
-          "Welcome to the Fictiverse"
+          "{{PROMPT}}"
         ],
         "color": "#232",
         "bgcolor": "#353"
@@ -5604,10 +5604,10 @@
           "Node name for S&R": "EmptyHunyuanLatentVideo"
         },
         "widgets_values": [
-          832,
-          480,
-          33,
-          1
+          "{{WIDTH}}",
+          "{{HEIGHT}}",
+          "{{LENGTH}}",
+          "{{BATCH_SIZE}}"
         ]
       },
       {
