@@ -53,6 +53,13 @@ class Settings:
     RECIPESVAULT_USE_LOCAL_SDK = os.getenv("RECIPESVAULT_USE_LOCAL_SDK", "true").lower() == "true"
     RECIPESVAULT_SDK_PATH = os.getenv("RECIPESVAULT_SDK_PATH", "aipg-smart-contracts")
 
+    # CSAM Safety Filter Configuration
+    # Filters prompts to prevent generation of CSAM (Child Sexual Abuse Material)
+    # Based on the detection system used in AI Power Grid / Horde infrastructure
+    # Reference: https://github.com/AIPowerGrid/image-worker
+    # NOTE: This filter is ALWAYS enabled and cannot be disabled.
+    CSAM_FILTER_ENABLED = True  # Hardcoded - CSAM filtering is mandatory
+
     @classmethod
     def validate(cls):
         if not cls.GRID_API_KEY:

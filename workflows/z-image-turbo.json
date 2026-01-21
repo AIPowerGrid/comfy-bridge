@@ -1,0 +1,127 @@
+{
+  "60": {
+    "inputs": {
+      "filename_prefix": "z-image-turbo",
+      "images": [
+        "83:8",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "83:30": {
+    "inputs": {
+      "clip_name": "qwen_3_4b.safetensors",
+      "type": "lumina2",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "Load CLIP"
+    }
+  },
+  "83:29": {
+    "inputs": {
+      "vae_name": "ae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Load VAE"
+    }
+  },
+  "83:13": {
+    "inputs": {
+      "width": 1024,
+      "height": 1024,
+      "batch_size": 1
+    },
+    "class_type": "EmptySD3LatentImage",
+    "_meta": {
+      "title": "EmptySD3LatentImage"
+    }
+  },
+  "83:33": {
+    "inputs": {
+      "conditioning": [
+        "83:27",
+        0
+      ]
+    },
+    "class_type": "ConditioningZeroOut",
+    "_meta": {
+      "title": "ConditioningZeroOut"
+    }
+  },
+  "83:8": {
+    "inputs": {
+      "samples": [
+        "83:3",
+        0
+      ],
+      "vae": [
+        "83:29",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "83:3": {
+    "inputs": {
+      "seed": 528562900154240,
+      "steps": 4,
+      "cfg": 1,
+      "sampler_name": "res_multistep",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "83:28",
+        0
+      ],
+      "positive": [
+        "83:27",
+        0
+      ],
+      "negative": [
+        "83:33",
+        0
+      ],
+      "latent_image": [
+        "83:13",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "KSampler"
+    }
+  },
+  "83:27": {
+    "inputs": {
+      "text": "Giant blue and purple big billboard on rooftop in san francisco city billboard says \"ComfyUI is built with love\" All kinds of buoildings in different shapes and colors. Some buildings have grafitti \"We\" \"Here\" \"Today\"",
+      "clip": [
+        "83:30",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Prompt)"
+    }
+  },
+  "83:28": {
+    "inputs": {
+      "unet_name": "z_image_turbo_bf16.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "Load Diffusion Model"
+    }
+  }
+}

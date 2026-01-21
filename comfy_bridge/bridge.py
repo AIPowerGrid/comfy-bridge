@@ -12,6 +12,7 @@ from .comfyui_client import ComfyUIClient
 import os
 from .result_processor import ResultProcessor
 from .payload_builder import PayloadBuilder
+from .prompt_checker import check_prompt_safety, PromptCheckResult
 from .job_poller import JobPoller
 from .r2_uploader import R2Uploader
 from .filesystem_checker import FilesystemChecker
@@ -128,6 +129,38 @@ class ComfyUIBridge:
                         logger.error(f"Failed to report fault for job {job_id}: {fault_error}")
                     self.processing_jobs.discard(job_id)
                     return False
+
+            # CSAM Safety Check: Validate prompt before generation
+            # Based on AIPowerGrid/image-worker detection system
+            # Reference: https://github.com/AIPowerGrid/image-worker
+            prompt = job.get("prompt", "") or job.get("payload", {}).get("prompt", "")
+            gen_metadata = []  # Track censorship/safety metadata
+            
+            if prompt:
+                is_nsfw_model = Settings.NSFW or "nsfw" in model_name.lower()
+                prompt_check = check_prompt_safety(prompt, is_nsfw_model=is_nsfw_model)
+                
+                if prompt_check.blocked:
+                    logger.error(f"🚫 CSAM BLOCKED: Job {job_id} rejected - {prompt_check.reason}")
+                    logger.warning(f"   Matched terms: {prompt_check.matched_terms}")
+                    try:
+                        await self.api.submit_fault(job_id, f"Content policy violation: {prompt_check.reason}")
+                    except Exception as fault_error:
+                        logger.error(f"Failed to report fault for job {job_id}: {fault_error}")
+                    self.processing_jobs.discard(job_id)
+                    return False
+                
+                if prompt_check.suspicion_level > 0:
+                    logger.warning(f"⚠️ Prompt suspicion level {prompt_check.suspicion_level} for job {job_id}")
+                    if prompt_check.sanitized_prompt:
+                        logger.info(f"   Using sanitized prompt for NSFW model safety")
+                        # Update job with sanitized prompt
+                        if "payload" in job:
+                            job["payload"]["prompt"] = prompt_check.sanitized_prompt
+                        else:
+                            job["prompt"] = prompt_check.sanitized_prompt
+                        # Record that we applied censorship/sanitization
+                        gen_metadata.append({"type": "censorship", "value": "sanitized"})
 
             # Build workflow
             logger.info(f"Building workflow for {model_name}")
@@ -283,7 +316,8 @@ class ComfyUIBridge:
             
             # Build and submit payload
             payload = self.payload_builder.build_payload(
-                job, media_bytes, media_type, filename
+                job, media_bytes, media_type, filename,
+                gen_metadata=gen_metadata if gen_metadata else None
             )
             
             # Clean up WebSocket task
@@ -551,15 +585,24 @@ class ComfyUIBridge:
 
         job_count = 0
         last_queue_check = 0
-        logger.info("Starting job polling loop...")
+        last_heartbeat = 0
+        import time
+        heartbeat_interval = 60  # Log heartbeat every 60 seconds
+        poll_interval = 1.0  # Poll every 1 second for fast job pickup
+        
+        logger.info(f"Starting job polling loop (polling every {poll_interval}s, heartbeat every {heartbeat_interval}s)...")
+        
         while True:
             job_count += 1
-            # Show polling message every 15 attempts (every ~15 minutes with 60s interval)
-            if job_count % 15 == 1:
-                logger.info(f"👀 Polling for jobs... (poll #{job_count}, models: {len(self.supported_models)})")
+            current_time = time.time()
             
-            # Periodically check which models have jobs (every 100 polls)
-            if job_count - last_queue_check >= 100:
+            # Show heartbeat message every 60 seconds (not every poll)
+            if current_time - last_heartbeat >= heartbeat_interval:
+                last_heartbeat = current_time
+                logger.info(f"💓 Heartbeat: polling for jobs (poll #{job_count}, models: {len(self.supported_models)})")
+            
+            # Periodically check which models have jobs (every 60 heartbeats = ~60 minutes)
+            if job_count - last_queue_check >= 3600:  # Every 3600 polls (~1 hour at 1s interval)
                 last_queue_check = job_count
                 try:
                     models_status = await self.api.get_models_status()
@@ -592,8 +635,8 @@ class ComfyUIBridge:
                 # Clean up any jobs that might be stuck in processing
                 # Note: We can't easily determine which job failed here, so we'll clean up on next cycle
             
-            # No job received - wait before next poll (reduced frequency to avoid spamming core with alive messages)
-            await asyncio.sleep(60.0)
+            # No job received - wait before next poll (fast polling for responsive job pickup)
+            await asyncio.sleep(poll_interval)
 
     async def listen_comfyui_logs(self, prompt_id: str, job_id: str = None):
         """Listen to ComfyUI WebSocket for real-time logs and progress.

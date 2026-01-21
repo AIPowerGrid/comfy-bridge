@@ -1,0 +1,67 @@
+{
+  "description": "Example JSON payloads for testing image generation API",
+  "endpoint": "POST /api/jobs",
+  "baseUrl": "http://localhost:8080",
+  
+  "test1_basic": {
+    "modelId": "flux.1-krea-dev",
+    "prompt": "A beautiful sunset over mountains",
+    "apiKey": "your-api-key-here",
+    "params": {
+      "width": 1024,
+      "height": 1024,
+      "steps": 20,
+      "cfgScale": 3.5
+    }
+  },
+
+  "test2_full_parameters": {
+    "modelId": "flux.1-krea-dev",
+    "prompt": "A stunning photorealistic landscape with mountains and lakes, cinematic lighting, highly detailed",
+    "negativePrompt": "blurry, low quality, distorted, deformed, ugly, bad anatomy, watermark",
+    "apiKey": "your-api-key-here",
+    "params": {
+      "width": 1024,
+      "height": 1024,
+      "steps": 25,
+      "cfgScale": 3.5,
+      "sampler": "euler",
+      "scheduler": "simple",
+      "denoise": 1.0,
+      "seed": "12345"
+    }
+  },
+
+  "test3_flux2": {
+    "modelId": "Flux.2-dev",
+    "prompt": "cats doing cat things",
+    "apiKey": "your-api-key-here",
+    "params": {
+      "width": 1248,
+      "height": 832,
+      "steps": 20,
+      "cfgScale": 4.0,
+      "sampler": "euler",
+      "scheduler": "simple"
+    }
+  },
+
+  "curl_examples": {
+    "basic": "curl -X POST http://localhost:8080/api/jobs -H 'Content-Type: application/json' -d @test_image_generation.json#test1_basic",
+    "full": "curl -X POST http://localhost:8080/api/jobs -H 'Content-Type: application/json' -d @test_image_generation.json#test2_full_parameters",
+    "flux2": "curl -X POST http://localhost:8080/api/jobs -H 'Content-Type: application/json' -d @test_image_generation.json#test3_flux2"
+  },
+
+  "notes": {
+    "required_fields": ["modelId", "prompt", "apiKey"],
+    "optional_fields": ["negativePrompt", "params"],
+    "params_fields": [
+      "width", "height", "steps", "cfgScale", "sampler", "scheduler",
+      "denoise", "seed", "length", "fps", "frameRate", "batchSize",
+      "videoFormat", "videoCodec", "filenamePrefix"
+    ],
+    "model_ids": [
+      "flux.1-krea-dev"
+    ]
+  }
+}

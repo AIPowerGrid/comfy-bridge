@@ -1,7 +1,7 @@
 {
   "9": {
     "inputs": {
-      "filename_prefix": "flux_krea",
+      "filename_prefix": "{{FILENAME_PREFIX}}",
       "images": [
         "53:8",
         0
@@ -14,10 +14,10 @@
   },
   "53:40": {
     "inputs": {
-      "clip_name1": "clip_l.safetensors",
-      "clip_name2": "t5xxl_fp16.safetensors",
-      "type": "flux",
-      "device": "default"
+      "clip_name1": "{{CLIP_NAME1}}",
+      "clip_name2": "{{CLIP_NAME2}}",
+      "type": "{{CLIP_TYPE}}",
+      "device": "{{DEVICE}}"
     },
     "class_type": "DualCLIPLoader",
     "_meta": {
@@ -26,7 +26,7 @@
   },
   "53:39": {
     "inputs": {
-      "vae_name": "ae.safetensors"
+      "vae_name": "{{VAE_NAME}}"
     },
     "class_type": "VAELoader",
     "_meta": {
@@ -63,8 +63,8 @@
   },
   "53:38": {
     "inputs": {
-      "unet_name": "flux1-krea-dev_fp8_scaled.safetensors",
-      "weight_dtype": "default"
+      "unet_name": "{{UNET_NAME}}",
+      "weight_dtype": "{{WEIGHT_DTYPE}}"
     },
     "class_type": "UNETLoader",
     "_meta": {
@@ -73,7 +73,7 @@
   },
   "53:45": {
     "inputs": {
-      "text": "Highly realistic portrait of a Nordic woman with blonde hair and blue eyes, gaze sharp and intellectual. The lighting should reflect the unique coolness of Northern Europe. Outfit is minimalist and modern, background is blurred in cool tones. Needs to perfectly capture the characteristics of a Scandinavian woman. solo, Centered composition\n",
+      "text": "{{PROMPT}}",
       "clip": [
         "53:40",
         0
@@ -86,9 +86,9 @@
   },
   "53:27": {
     "inputs": {
-      "width": 1024,
-      "height": 1024,
-      "batch_size": 1
+      "width": "{{WIDTH}}",
+      "height": "{{HEIGHT}}",
+      "batch_size": "{{BATCH_SIZE}}"
     },
     "class_type": "EmptySD3LatentImage",
     "_meta": {
@@ -97,12 +97,12 @@
   },
   "53:31": {
     "inputs": {
-      "seed": 277251746703202,
-      "steps": 20,
-      "cfg": 1,
-      "sampler_name": "euler",
-      "scheduler": "simple",
-      "denoise": 1,
+      "seed": "{{SEED}}",
+      "steps": "{{STEPS}}",
+      "cfg": "{{CFG}}",
+      "sampler_name": "{{SAMPLER}}",
+      "scheduler": "{{SCHEDULER}}",
+      "denoise": "{{DENOISE}}",
       "model": [
         "53:38",
         0

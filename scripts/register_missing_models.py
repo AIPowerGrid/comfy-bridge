@@ -136,6 +136,24 @@ MODELS_TO_REGISTER = [
         'lora': False,
         'is_nsfw': False,
     },
+    {
+        'display_name': 'ltx2_i2v',
+        'file_name': 'ltxv-13b-0.9.7-dev-fp8.safetensors',
+        'model_type': MODEL_TYPE['VIDEO'],
+        'version': '2.0',
+        'ipfs_cid': '',
+        'download_url': '',
+        'size_bytes': 13_000_000_000,  # ~13GB
+        'quantization': 'fp8',
+        'format': 'safetensors',
+        'vram_mb': 24000,
+        'base_model': 'ltx_video_2',
+        'inpainting': False,
+        'img2img': True,  # Image-to-video
+        'controlnet': False,
+        'lora': False,
+        'is_nsfw': False,
+    },
 ]
 
 

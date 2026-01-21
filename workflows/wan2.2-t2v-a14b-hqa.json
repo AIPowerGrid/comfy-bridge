@@ -1,9 +1,9 @@
 {
   "90": {
     "inputs": {
-      "clip_name": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
-      "type": "wan",
-      "device": "default"
+      "clip_name": "{{CLIP_NAME}}",
+      "type": "{{CLIP_TYPE}}",
+      "device": "{{DEVICE}}"
     },
     "class_type": "CLIPLoader",
     "_meta": {
@@ -12,7 +12,7 @@
   },
   "91": {
     "inputs": {
-      "text": "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走，裸露，NSFW",
+      "text": "{{NEGATIVE_PROMPT}}",
       "clip": [
         "90",
         0
@@ -25,7 +25,7 @@
   },
   "92": {
     "inputs": {
-      "vae_name": "wan_2.1_vae.safetensors"
+      "vae_name": "{{VAE_NAME}}"
     },
     "class_type": "VAELoader",
     "_meta": {
@@ -34,7 +34,7 @@
   },
   "93": {
     "inputs": {
-      "shift": 8.000000000000002,
+      "shift": "{{SHIFT}}",
       "model": [
         "101",
         0
@@ -47,7 +47,7 @@
   },
   "94": {
     "inputs": {
-      "shift": 8,
+      "shift": "{{SHIFT}}",
       "model": [
         "102",
         0
@@ -60,15 +60,15 @@
   },
   "95": {
     "inputs": {
-      "add_noise": "disable",
-      "noise_seed": 0,
-      "steps": 20,
-      "cfg": 3.5,
-      "sampler_name": "euler",
-      "scheduler": "simple",
-      "start_at_step": 10,
-      "end_at_step": 10000,
-      "return_with_leftover_noise": "disable",
+      "add_noise": "{{ADD_NOISE}}",
+      "noise_seed": "{{SEED}}",
+      "steps": "{{STEPS}}",
+      "cfg": "{{CFG}}",
+      "sampler_name": "{{SAMPLER}}",
+      "scheduler": "{{SCHEDULER}}",
+      "start_at_step": "{{START_AT_STEP}}",
+      "end_at_step": "{{END_AT_STEP}}",
+      "return_with_leftover_noise": "{{RETURN_WITH_LEFTOVER_NOISE}}",
       "model": [
         "94",
         0
@@ -93,15 +93,15 @@
   },
   "96": {
     "inputs": {
-      "add_noise": "enable",
-      "noise_seed": 864031777124281,
-      "steps": 20,
-      "cfg": 3.5,
-      "sampler_name": "euler",
-      "scheduler": "simple",
-      "start_at_step": 0,
-      "end_at_step": 10,
-      "return_with_leftover_noise": "enable",
+      "add_noise": "{{ADD_NOISE}}",
+      "noise_seed": "{{SEED}}",
+      "steps": "{{STEPS}}",
+      "cfg": "{{CFG}}",
+      "sampler_name": "{{SAMPLER}}",
+      "scheduler": "{{SCHEDULER}}",
+      "start_at_step": "{{START_AT_STEP}}",
+      "end_at_step": "{{END_AT_STEP}}",
+      "return_with_leftover_noise": "{{RETURN_WITH_LEFTOVER_NOISE}}",
       "model": [
         "93",
         0
@@ -142,9 +142,9 @@
   },
   "98": {
     "inputs": {
-      "filename_prefix": "video/ComfyUI",
-      "format": "auto",
-      "codec": "auto",
+      "filename_prefix": "{{FILENAME_PREFIX}}",
+      "format": "{{VIDEO_FORMAT}}",
+      "codec": "{{VIDEO_CODEC}}",
       "video": [
         "100",
         0
@@ -157,7 +157,7 @@
   },
   "99": {
     "inputs": {
-      "text": "Beautiful young European woman with honey blonde hair gracefully turning her head back over shoulder, gentle smile, bright eyes looking at camera. Hair flowing in slow motion as she turns. Soft natural lighting, clean background, cinematic portrait.",
+      "text": "{{PROMPT}}",
       "clip": [
         "90",
         0
@@ -170,7 +170,7 @@
   },
   "100": {
     "inputs": {
-      "fps": 16,
+      "fps": "{{FPS}}",
       "images": [
         "97",
         0
@@ -183,8 +183,8 @@
   },
   "101": {
     "inputs": {
-      "unet_name": "wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors",
-      "weight_dtype": "default"
+      "unet_name": "{{UNET_NAME}}",
+      "weight_dtype": "{{WEIGHT_DTYPE}}"
     },
     "class_type": "UNETLoader",
     "_meta": {
@@ -193,8 +193,8 @@
   },
   "102": {
     "inputs": {
-      "unet_name": "wan2.2_t2v_low_noise_14B_fp8_scaled.safetensors",
-      "weight_dtype": "default"
+      "unet_name": "{{UNET_NAME_2}}",
+      "weight_dtype": "{{WEIGHT_DTYPE}}"
     },
     "class_type": "UNETLoader",
     "_meta": {
@@ -203,10 +203,10 @@
   },
   "104": {
     "inputs": {
-      "width": 640,
-      "height": 640,
-      "length": 81,
-      "batch_size": 1
+      "width": "{{WIDTH}}",
+      "height": "{{HEIGHT}}",
+      "length": "{{LENGTH}}",
+      "batch_size": "{{BATCH_SIZE}}"
     },
     "class_type": "EmptyHunyuanLatentVideo",
     "_meta": {

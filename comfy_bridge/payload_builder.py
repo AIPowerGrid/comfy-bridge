@@ -14,7 +14,8 @@ MAX_B64_SIZE_MB = 10  # Warn if base64 payload exceeds this size
 class PayloadBuilder:
     def build_payload(
         self, job: Dict[str, Any], media_bytes: bytes, 
-        media_type: str, filename: str
+        media_type: str, filename: str,
+        gen_metadata: list = None
     ) -> Dict[str, Any]:
         job_id = job.get("id")
         r2_upload_url = job.get("r2_upload")
@@ -22,21 +23,21 @@ class PayloadBuilder:
         # For videos with R2 upload, use special handling
         if media_type == "video" and r2_upload_url:
             return self._build_video_r2_payload(
-                job, media_bytes, filename, r2_upload_url
+                job, media_bytes, filename, r2_upload_url, gen_metadata
             )
         
         # For images with R2 upload, use special handling (similar to videos)
         if media_type == "image" and r2_upload_url:
             return self._build_image_r2_payload(
-                job, media_bytes, filename, r2_upload_url
+                job, media_bytes, filename, r2_upload_url, gen_metadata
             )
         
         # Standard payload for images or videos without R2
-        return self._build_standard_payload(job, media_bytes, media_type, filename)
+        return self._build_standard_payload(job, media_bytes, media_type, filename, gen_metadata)
     
     def _build_video_r2_payload(
         self, job: Dict[str, Any], media_bytes: bytes, 
-        filename: str, r2_upload_url: str
+        filename: str, r2_upload_url: str, gen_metadata: list = None
     ) -> Dict[str, Any]:
         job_id = job.get("id")
         original_filename = self._ensure_mp4_extension(filename, job_id)
@@ -61,6 +62,10 @@ class PayloadBuilder:
             "media_type": "video",
             "file_size": len(media_bytes)  # File size in bytes
         }
+        
+        # Include gen_metadata if provided (for censorship reporting, etc.)
+        if gen_metadata:
+            payload["gen_metadata"] = gen_metadata
         
         # Include wallet address if provided in the job (for payment attribution)
         # API now uses wallet_address instead of wallet
@@ -155,7 +160,7 @@ class PayloadBuilder:
     
     def _build_image_r2_payload(
         self, job: Dict[str, Any], media_bytes: bytes, 
-        filename: str, r2_upload_url: str
+        filename: str, r2_upload_url: str, gen_metadata: list = None
     ) -> Dict[str, Any]:
         """Build payload for images with R2 upload URL."""
         job_id = job.get("id")
@@ -174,6 +179,10 @@ class PayloadBuilder:
             "media_type": "image",
             "file_size": len(media_bytes)  # File size in bytes
         }
+        
+        # Include gen_metadata if provided (for censorship reporting, etc.)
+        if gen_metadata:
+            payload["gen_metadata"] = gen_metadata
         
         # Include wallet address if provided in the job (for payment attribution)
         # API now uses wallet_address instead of wallet
@@ -226,7 +235,7 @@ class PayloadBuilder:
     
     def _build_standard_payload(
         self, job: Dict[str, Any], media_bytes: bytes, 
-        media_type: str, filename: str
+        media_type: str, filename: str, gen_metadata: list = None
     ) -> Dict[str, Any]:
         job_id = job.get("id")
         b64 = encode_media(media_bytes, media_type)
@@ -239,6 +248,10 @@ class PayloadBuilder:
             "media_type": media_type,
             "file_size": len(media_bytes)  # File size in bytes
         }
+        
+        # Include gen_metadata if provided (for censorship reporting, etc.)
+        if gen_metadata:
+            payload["gen_metadata"] = gen_metadata
         
         # Include wallet address if provided in the job (for payment attribution)
         # API now uses wallet_address instead of wallet

@@ -1,6 +1,8 @@
 import json
 import os
 import copy
+import re
+import tempfile
 import httpx  # type: ignore  # httpx installed via requirements.txt in Docker
 import uuid
 import logging
@@ -171,6 +173,34 @@ def _force_video_processing(job: Dict[str, Any], model_type: str) -> None:
             )
 
 
+def _workflow_requires_image(workflow: Dict[str, Any]) -> bool:
+    """Check if workflow has essential nodes that require an input image for i2v processing.
+    
+    Returns True if the workflow contains LTXVImgToVideoInplace or similar i2v-specific nodes,
+    indicating it's designed for image-to-video and requires a source image.
+    """
+    # Handle simple format (direct node objects)
+    for node_id, node_data in workflow.items():
+        if isinstance(node_data, dict):
+            class_type = node_data.get("class_type", "")
+            # LTXVImgToVideoInplace indicates this is an i2v workflow
+            if class_type == "LTXVImgToVideoInplace":
+                return True
+            # Wan22ImageToVideoLatent also indicates i2v capability
+            if class_type == "Wan22ImageToVideoLatent":
+                return True
+    
+    # Handle native format (nodes array)
+    if isinstance(workflow, dict) and "nodes" in workflow:
+        for node in workflow.get("nodes", []):
+            if isinstance(node, dict):
+                class_type = node.get("type", "")
+                if class_type in ["LTXVImgToVideoInplace", "Wan22ImageToVideoLatent"]:
+                    return True
+    
+    return False
+
+
 async def validate_and_fix_model_filenames(
     workflow: Dict[str, Any], 
     available_models: Dict[str, Any],
@@ -253,9 +283,9 @@ async def validate_and_fix_model_filenames(
                         current_clip2 = widgets[1] if len(widgets) > 1 else "unknown"
                         current_clip2_lower = current_clip2.lower() if current_clip2 else ""
                         
-                        # For Flux models, clip_name2 must be T5XXL (not regular T5)
-                        # Check if workflow requires T5XXL specifically
-                        requires_t5xxl = model_type == "flux" and ("t5xxl" in current_clip2_lower or "xxl" in current_clip2_lower)
+                        # For Flux models, clip_name2 must ALWAYS be T5XXL (not regular CLIP)
+                        # This is required for proper text encoding - using clip_l for both causes black images
+                        requires_t5xxl = model_type == "flux"
                         
                         if not clip2_options:
                             # If workflow requires DualCLIPLoader but no compatible models are available, fail
@@ -385,9 +415,9 @@ async def validate_and_fix_model_filenames(
                     current_clip2 = inputs.get("clip_name2")
                     current_clip2_lower = current_clip2.lower() if current_clip2 else ""
                     
-                    # For Flux models, clip_name2 must be T5XXL (not regular T5)
-                    # Check if workflow requires T5XXL specifically
-                    requires_t5xxl = model_type == "flux" and ("t5xxl" in current_clip2_lower or "xxl" in current_clip2_lower)
+                    # For Flux models, clip_name2 must ALWAYS be T5XXL (not regular CLIP)
+                    # This is required for proper text encoding - using clip_l for both causes black images
+                    requires_t5xxl = model_type == "flux"
                     
                     if not clip2_options:
                         # If workflow requires DualCLIPLoader but no compatible models are available, fail
@@ -645,8 +675,8 @@ def map_wanvideo_scheduler(scheduler: Optional[str]) -> str:
 
 
 async def download_image(url: str, filename: str) -> str:
-    # Download the image to a temporary file
-    temp_dir = "/tmp/comfyui_inputs"
+    # Download the image to a temporary file (platform-independent path)
+    temp_dir = os.path.join(tempfile.gettempdir(), "comfyui_inputs")
     os.makedirs(temp_dir, exist_ok=True)
     temp_filepath = os.path.join(temp_dir, filename)
 
@@ -781,6 +811,110 @@ def _validate_workflow_model_names(workflow: Dict[str, Any], filename: str) -> N
                         logger.warning(f"Workflow {filename} node {node_id} has placeholder '{model_name}' - export from ComfyUI with actual model files")
 
 
+def _get_default_values() -> Dict[str, Any]:
+    """Get default values for workflow parameters when not provided in payload."""
+    return {
+        "SEED": None,  # Will be generated if None
+        "STEPS": 20,
+        "CFG": 3.5,
+        "SAMPLER": "euler",
+        "SCHEDULER": "simple",
+        "DENOISE": 1.0,
+        "WIDTH": 1024,
+        "HEIGHT": 1024,
+        "BATCH_SIZE": 1,
+        "LENGTH": 81,  # Video length
+        "PROMPT": "",
+        "NEGATIVE_PROMPT": "",
+        "FILENAME_PREFIX": "ComfyUI",
+        "FPS": 24,
+        "FRAME_RATE": 25,
+        "VIDEO_FORMAT": "auto",
+        "VIDEO_CODEC": "auto",
+        "BITRATE": 16.0,
+        "QUALITY": 90,
+        "LOOP": False,
+        "METHOD": "default",
+        "ADD_NOISE": "enable",
+        "RANDOMIZE": "randomize",
+        "START_AT_STEP": 0,
+        "END_AT_STEP": 10000,
+        "RETURN_WITH_LEFTOVER_NOISE": "disable",
+        "SHIFT": 8.0,
+        "MAX_SHIFT": 2.05,
+        "BASE_SHIFT": 0.95,
+        "STRETCH": True,
+        "TERMINAL": 0.1,
+        "GUIDANCE": 4.0,
+        # Model names - these should be handled by model validation
+        # Don't provide defaults - let model validation handle them
+        "WEIGHT_DTYPE": "default",
+        "CLIP_TYPE": "flux",  # Default for Flux workflows
+        "DEVICE": "default",
+        "LORA_STRENGTH": 1.0,
+    }
+
+
+def _replace_placeholders(obj: Any, payload: Dict[str, Any], defaults: Dict[str, Any]) -> Any:
+    """Recursively replace {{PLACEHOLDER}} strings in workflow with values from payload or defaults.
+    
+    Args:
+        obj: The workflow object (dict, list, or primitive)
+        payload: User-provided values from job payload
+        defaults: Default values to use when payload doesn't contain the parameter
+        
+    Returns:
+        Object with placeholders replaced
+    """
+    
+    if isinstance(obj, dict):
+        return {key: _replace_placeholders(value, payload, defaults) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [_replace_placeholders(item, payload, defaults) for item in obj]
+    elif isinstance(obj, str):
+        # Find all {{PLACEHOLDER}} patterns
+        pattern = r'\{\{(\w+)\}\}'
+        matches = re.findall(pattern, obj)
+        
+        if not matches:
+            return obj
+        
+            # If the entire string is a placeholder (e.g., "{{WIDTH}}"), replace it
+        if re.match(r'^\{\{(\w+)\}\}$', obj):
+            param_name = matches[0]
+            # Try payload first, then defaults
+            if param_name in payload and payload[param_name] is not None:
+                value = payload[param_name]
+                logger.debug(f"Replaced placeholder {param_name} with payload value: {value}")
+                return value
+            elif param_name in defaults:
+                value = defaults[param_name]
+                # Special handling: don't replace model name placeholders with empty defaults
+                # Let model validation handle them
+                if param_name.endswith("_NAME") and value == "":
+                    logger.debug(f"Keeping model name placeholder {param_name} for model validation")
+                    return obj
+                logger.debug(f"Replaced placeholder {param_name} with default value: {value}")
+                return value
+            else:
+                logger.debug(f"Placeholder {param_name} not found in payload or defaults, keeping placeholder for later processing")
+                return obj
+        else:
+            # Partial placeholder in string (e.g., "prefix_{{WIDTH}}_suffix")
+            result = obj
+            for param_name in matches:
+                if param_name in payload and payload[param_name] is not None:
+                    value = str(payload[param_name])
+                    result = result.replace(f"{{{{{param_name}}}}}", value)
+                elif param_name in defaults:
+                    value = str(defaults[param_name])
+                    result = result.replace(f"{{{{{param_name}}}}}", value)
+                # If not found, leave placeholder as-is
+            return result
+    else:
+        return obj
+
+
 async def process_workflow(
     workflow: Dict[str, Any], job: Dict[str, Any]
 ) -> Dict[str, Any]:
@@ -801,6 +935,52 @@ async def process_workflow(
 
     # Make a deep copy to avoid modifying the original
     processed_workflow = copy.deepcopy(workflow)
+    
+    # Map payload keys to placeholder names (payload uses snake_case, placeholders use UPPER_CASE)
+    payload_for_placeholders = {}
+    payload_for_placeholders["SEED"] = seed
+    payload_for_placeholders["STEPS"] = payload.get("steps")
+    payload_for_placeholders["CFG"] = payload.get("cfg_scale") or payload.get("cfgScale") or payload.get("cfg")
+    payload_for_placeholders["SAMPLER"] = map_sampler_name(payload.get("sampler_name") or payload.get("sampler"))
+    payload_for_placeholders["SCHEDULER"] = payload.get("scheduler")
+    payload_for_placeholders["DENOISE"] = payload.get("denoise")
+    payload_for_placeholders["WIDTH"] = payload.get("width")
+    payload_for_placeholders["HEIGHT"] = payload.get("height")
+    payload_for_placeholders["BATCH_SIZE"] = payload.get("batch_size")
+    payload_for_placeholders["LENGTH"] = payload.get("length") or payload.get("video_length")
+    payload_for_placeholders["PROMPT"] = payload.get("prompt")
+    payload_for_placeholders["NEGATIVE_PROMPT"] = payload.get("negative_prompt")
+    payload_for_placeholders["FILENAME_PREFIX"] = payload.get("filename_prefix")
+    payload_for_placeholders["FPS"] = payload.get("fps")
+    payload_for_placeholders["FRAME_RATE"] = payload.get("frame_rate")
+    payload_for_placeholders["VIDEO_FORMAT"] = payload.get("video_format")
+    payload_for_placeholders["VIDEO_CODEC"] = payload.get("video_codec")
+    payload_for_placeholders["BITRATE"] = payload.get("bitrate")
+    payload_for_placeholders["QUALITY"] = payload.get("quality")
+    payload_for_placeholders["LOOP"] = payload.get("loop")
+    payload_for_placeholders["METHOD"] = payload.get("method")
+    payload_for_placeholders["ADD_NOISE"] = payload.get("add_noise")
+    payload_for_placeholders["RANDOMIZE"] = payload.get("randomize")
+    payload_for_placeholders["START_AT_STEP"] = payload.get("start_at_step")
+    payload_for_placeholders["END_AT_STEP"] = payload.get("end_at_step")
+    payload_for_placeholders["RETURN_WITH_LEFTOVER_NOISE"] = payload.get("return_with_leftover_noise")
+    payload_for_placeholders["SHIFT"] = payload.get("shift")
+    payload_for_placeholders["MAX_SHIFT"] = payload.get("max_shift")
+    payload_for_placeholders["BASE_SHIFT"] = payload.get("base_shift")
+    payload_for_placeholders["STRETCH"] = payload.get("stretch")
+    payload_for_placeholders["TERMINAL"] = payload.get("terminal")
+    payload_for_placeholders["GUIDANCE"] = payload.get("guidance") or payload.get("cfg_scale") or payload.get("cfg")
+    
+    # Get defaults and merge with payload values
+    defaults = _get_default_values()
+    # Update defaults with payload values where provided
+    for key, value in payload_for_placeholders.items():
+        if value is not None:
+            defaults[key] = value
+    
+    # Replace all placeholders in the workflow with values from payload or defaults
+    logger.debug("Replacing workflow placeholders with payload values or defaults")
+    processed_workflow = _replace_placeholders(processed_workflow, payload_for_placeholders, defaults)
     model_type = detect_workflow_model_type(processed_workflow)
     if model_type == "unknown":
         model_name_lower = (job.get("model") or "").lower()
@@ -814,6 +994,19 @@ async def process_workflow(
             model_type = "sdxl"
     logger.debug(f"Processing workflow model type: {model_type}")
     _force_video_processing(job, model_type)
+
+    # Validate source image requirement for i2v workflows
+    # If the workflow requires an image (has LTXVImgToVideoInplace nodes) but no source_image is provided,
+    # log a warning. The workflow will still run but may fail or use placeholder images.
+    workflow_model_name = (job.get("model") or "").lower()
+    if _workflow_requires_image(processed_workflow):
+        if not job.get("source_image"):
+            logger.warning(
+                f"Image-to-video workflow detected for job {job.get('id', 'unknown')} "
+                f"but no source_image provided. Workflow may fail or use placeholder images."
+            )
+        else:
+            logger.info(f"Image-to-video workflow detected with source_image - proceeding with i2v generation")
 
     # Fix for FLUX models using CheckpointLoaderSimple: Remove negative prompt CLIPTextEncode nodes
     # FLUX models don't have CLIP text encoders in CheckpointLoaderSimple, so CLIPTextEncode nodes
@@ -1029,7 +1222,8 @@ async def process_workflow(
     job_params = job.get("params", {})
     payload_steps = job_params.get("steps") or payload.get("steps")
     payload_cfg = job_params.get("cfg_scale") or payload.get("cfg_scale") or payload.get("cfgScale")
-    payload_sampler = job_params.get("sampler_name") or payload.get("sampler_name") or payload.get("sampler")
+    payload_sampler_raw = job_params.get("sampler_name") or payload.get("sampler_name") or payload.get("sampler")
+    payload_sampler = map_sampler_name(payload_sampler_raw)  # Convert k_euler -> euler etc.
     payload_scheduler = job_params.get("scheduler") or payload.get("scheduler")
     payload_denoise = job_params.get("denoise") or payload.get("denoise")
     
@@ -1893,11 +2087,13 @@ def convert_native_workflow_to_simple(workflow: Dict[str, Any]) -> Dict[str, Any
 async def build_workflow(job: Dict[str, Any]) -> Dict[str, Any]:
     model_name = job.get("model", "")
     source_processing = job.get("source_processing", "txt2img")
+    source_image = job.get("source_image")
     
     logger.info(f"🔨 BUILD_WORKFLOW called for job:")
     logger.info(f"   Job ID: {job.get('id', 'unknown')}")
     logger.info(f"   Job model: '{model_name}'")
     logger.info(f"   Source processing: {source_processing}")
+    logger.info(f"   Source image: {'provided' if source_image else 'none'}")
 
     # Use the mapped workflow for all jobs (the mapper handles the logic)
     workflow_filename = get_workflow_file(model_name)

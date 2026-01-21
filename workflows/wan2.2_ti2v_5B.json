@@ -82,7 +82,7 @@
           "Node name for S&R": "CLIPTextEncode"
         },
         "widgets_values": [
-          "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走"
+          "{{NEGATIVE_PROMPT}}"
         ],
         "color": "#322",
         "bgcolor": "#533"
@@ -137,13 +137,13 @@
           "Node name for S&R": "KSampler"
         },
         "widgets_values": [
-          869177064731501,
-          "randomize",
-          30,
-          5,
-          "uni_pc",
-          "simple",
-          1
+          "{{SEED}}",
+          "{{RANDOMIZE}}",
+          "{{STEPS}}",
+          "{{CFG}}",
+          "{{SAMPLER}}",
+          "{{SCHEDULER}}",
+          "{{DENOISE}}"
         ]
       },
       {
@@ -170,11 +170,11 @@
         "outputs": [],
         "properties": {},
         "widgets_values": [
-          "ComfyUI",
-          24.000000000000004,
-          false,
-          90,
-          "default"
+          "{{FILENAME_PREFIX}}",
+          "{{FPS}}",
+          "{{LOOP}}",
+          "{{QUALITY}}",
+          "{{METHOD}}"
         ]
       },
       {
@@ -207,7 +207,7 @@
           "Node name for S&R": "VAELoader"
         },
         "widgets_values": [
-          "wan2.2_vae.safetensors"
+          "{{VAE_NAME}}"
         ],
         "color": "#223",
         "bgcolor": "#335"
@@ -242,9 +242,9 @@
           "Node name for S&R": "CLIPLoader"
         },
         "widgets_values": [
-          "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
-          "wan",
-          "default"
+          "{{CLIP_NAME}}",
+          "{{CLIP_TYPE}}",
+          "{{DEVICE}}"
         ],
         "color": "#223",
         "bgcolor": "#335"
@@ -316,8 +316,8 @@
           "Node name for S&R": "UNETLoader"
         },
         "widgets_values": [
-          "wan2.2_ti2v_5B_fp16.safetensors",
-          "default"
+          "{{UNET_NAME}}",
+          "{{WEIGHT_DTYPE}}"
         ],
         "color": "#223",
         "bgcolor": "#335"
@@ -454,10 +454,10 @@
           "Node name for S&R": "Wan22ImageToVideoLatent"
         },
         "widgets_values": [
-          1280,
-          704,
-          41,
-          1
+          "{{WIDTH}}",
+          "{{HEIGHT}}",
+          "{{LENGTH}}",
+          "{{BATCH_SIZE}}"
         ]
       },
       {
@@ -496,7 +496,7 @@
           "Node name for S&R": "CLIPTextEncode"
         },
         "widgets_values": [
-          "a cute anime girl with fennec ears and a fluffy tail walking in a beautiful field"
+          "{{PROMPT}}"
         ],
         "color": "#232",
         "bgcolor": "#353"
