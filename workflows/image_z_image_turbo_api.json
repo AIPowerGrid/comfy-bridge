@@ -1,4 +1,25 @@
 {
+  "_bridge": {
+    "version": 1,
+    "name": "Z-Image-Turbo",
+    "media_type": "image",
+    "supports_negative": false,
+    "nodes": {
+      "prompt": "58",
+      "negative_prompt": null,
+      "sampler": "57:3",
+      "latent": "57:13",
+      "output": "9"
+    },
+    "fields": {
+      "prompt": "value",
+      "seed": "seed",
+      "width": "width",
+      "height": "height",
+      "steps": "steps",
+      "cfg": "cfg"
+    }
+  },
   "9": {
     "inputs": {
       "filename_prefix": "z-image",
@@ -14,25 +35,11 @@
   },
   "58": {
     "inputs": {
-      "value": "wtf"
+      "value": "PROMPT_PLACEHOLDER"
     },
     "class_type": "PrimitiveStringMultiline",
     "_meta": {
       "title": "Prompt"
-    }
-  },
-  "61": {
-    "inputs": {
-      "string_a": "Pixel art style,",
-      "string_b": [
-        "58",
-        0
-      ],
-      "delimiter": ""
-    },
-    "class_type": "StringConcatenate",
-    "_meta": {
-      "title": "Concatenate"
     }
   },
   "57:30": {

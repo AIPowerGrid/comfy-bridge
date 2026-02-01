@@ -25,6 +25,59 @@ import requests
 import PIL.Image
 from dotenv import load_dotenv
 import aiohttp
+import re
+
+# =============================================================================
+# CSAM SAFETY FILTER - Text-based prompt filtering
+# Blocks obvious CSAM-related keywords before generation
+# Note: This is a fast gate, not the security boundary. Core should do CLIP check.
+# =============================================================================
+
+CSAM_KEYWORDS = re.compile(
+    r"\b(loli|lolita|shota|shotacon|pedo|pedophile|child\s*porn|"
+    r"cp\b|preteen|"
+    r"underage\s*(girl|boy|sex|nude|naked)|"
+    r"minor\s*(sex|nude|naked|porn)|"
+    r"kid\s*(sex|nude|naked|porn)|"
+    r"toddler\s*(sex|nude|naked)|"
+    r"infant\s*(sex|nude|naked)|"
+    r"baby\s*(sex|nude|naked))\b",
+    re.IGNORECASE
+)
+
+# Matches ages 0-17 with "years old" pattern
+CSAM_AGE_PATTERN = re.compile(
+    r"\b(0?[0-9]|1[0-7])(?![0-9])\s*years?\s*old\b",
+    re.IGNORECASE
+)
+
+def check_prompt_safety(prompt: str) -> tuple:
+    """
+    Check prompt for CSAM-related content.
+    
+    Returns:
+        tuple: (is_safe: bool, reason: str)
+    """
+    if not prompt:
+        return True, ""
+    
+    # Normalize: remove prompt weights like (word:1.5)
+    normalized = re.sub(r"\((.*?):\d+\.?\d*\)", r"\1", prompt)
+    normalized = normalized.lower()
+    
+    # Check for explicit CSAM keywords
+    match = CSAM_KEYWORDS.search(normalized)
+    if match:
+        return False, f"CSAM keyword detected: {match.group()}"
+    
+    # Check for minor age references
+    age_match = CSAM_AGE_PATTERN.search(normalized)
+    if age_match:
+        return False, f"Minor age reference detected: {age_match.group()}"
+    
+    return True, ""
+
+# =============================================================================
 
 # Set up logging
 logging.basicConfig(
@@ -49,6 +102,11 @@ class DummyJobPopResponse:
         self.kudos = kwargs.get("kudos", 0)
         self.r2_upload = kwargs.get("r2_upload")  # R2 presigned upload URL
         
+        # Video/i2v related fields
+        self.source_image = kwargs.get("source_image")  # Base64 encoded source image for i2v
+        self.source_processing = kwargs.get("source_processing", "txt2img")  # txt2img, img2img, img2video
+        self.media_type = kwargs.get("media_type", "image")  # image or video
+        
         # Create a payload object
         class Payload:
             def __init__(self, payload_data):
@@ -61,6 +119,9 @@ class DummyJobPopResponse:
                 self.seed = payload_data.get("seed", 0)
                 self.sampler = payload_data.get("sampler_name", "euler_ancestral")
                 self.use_nsfw_censor = payload_data.get("use_nsfw_censor", False)
+                # Video parameters
+                self.length = payload_data.get("length", 121)  # Number of frames
+                self.fps = payload_data.get("fps", 25)
         
         self.payload = Payload(kwargs.get("payload", {}))
 
@@ -131,7 +192,7 @@ class ComfyUIBridge:
             self._load_workflow_template()
     
     def _load_workflow_template(self):
-        """Load the workflow template from the specified file."""
+        """Load workflow template from file. API format only."""
         if not self.workflow_file:
             logger.warning("No workflow file specified")
             return
@@ -143,137 +204,40 @@ class ComfyUIBridge:
             
         try:
             with open(workflow_path, 'r') as f:
-                raw_data = json.load(f)
-                logger.info(f"Loaded workflow file from {workflow_path}")
-                
-                # Check if this is a full workflow export with "nodes" object
-                if isinstance(raw_data, dict) and "nodes" in raw_data and isinstance(raw_data["nodes"], dict):
-                    logger.info("Detected full ComfyUI workflow export format with 'nodes' object")
-                    self.workflow_template = raw_data["nodes"]
-                # Check if this is a ComfyUI web interface export format with "nodes" array
-                elif isinstance(raw_data, dict) and "nodes" in raw_data and isinstance(raw_data["nodes"], list):
-                    logger.info("Detected ComfyUI web interface export format with 'nodes' array")
-                    # Convert from array format to API format
-                    nodes_dict = {}
-                    for node in raw_data["nodes"]:
-                        node_id = str(node.get("id", ""))
-                        if not node_id:
-                            continue
-                            
-                        # Create node structure expected by API
-                        api_node = {
-                            "class_type": node.get("type", ""),
-                            "inputs": {}
-                        }
-                        
-                        # Convert inputs
-                        if "inputs" in node and isinstance(node["inputs"], list):
-                            for input_item in node["inputs"]:
-                                input_name = input_item.get("name", "")
-                                if input_name and "link" in input_item:
-                                    # Find the source node and output for this link
-                                    link_id = input_item["link"]
-                                    for link in raw_data.get("links", []):
-                                        if link[0] == link_id:  # link ID matches
-                                            source_node_id = str(link[1])  # source node ID
-                                            source_slot = link[2]  # source slot index
-                                            api_node["inputs"][input_name] = [source_node_id, source_slot]
-                                            break
-                        
-                        # Process special node types
-                        if node.get("type") == "CLIPTextEncode":
-                            # Get prompt from widgets_values
-                            if "widgets_values" in node and len(node["widgets_values"]) > 0:
-                                text = node["widgets_values"][0]
-                                api_node["inputs"]["text"] = text
-                                
-                                # Check for placeholders
-                                if not text or text.strip() == "":
-                                    # This is likely the negative prompt node
-                                    api_node["inputs"]["text"] = "NEGATIVE_PROMPT_PLACEHOLDER"
-                                    logger.info(f"Set empty text to NEGATIVE_PROMPT_PLACEHOLDER for node {node_id}")
-                                elif text.strip() == "a flower" or text.strip() == "photo of a flower" or text.strip() == "photo of a beautiful flower":  # Common default values
-                                    # This is likely the positive prompt node 
-                                    api_node["inputs"]["text"] = "POSITIVE_PROMPT_PLACEHOLDER"
-                                    logger.info(f"Set default prompt to POSITIVE_PROMPT_PLACEHOLDER for node {node_id}")
-                                # Keep placeholders if they are already set
-                                elif "POSITIVE_PROMPT_PLACEHOLDER" in text:
-                                    logger.info(f"Found existing POSITIVE_PROMPT_PLACEHOLDER in node {node_id}")
-                                elif "NEGATIVE_PROMPT_PLACEHOLDER" in text:
-                                    logger.info(f"Found existing NEGATIVE_PROMPT_PLACEHOLDER in node {node_id}")
-                        
-                        elif node.get("type") == "KSampler":
-                            # Get sampling parameters from widgets_values
-                            if "widgets_values" in node and len(node["widgets_values"]) >= 6:
-                                api_node["inputs"]["seed"] = node["widgets_values"][0]
-                                api_node["inputs"]["steps"] = node["widgets_values"][1]
-                                api_node["inputs"]["cfg"] = node["widgets_values"][2]
-                                api_node["inputs"]["sampler_name"] = node["widgets_values"][3]
-                                api_node["inputs"]["scheduler"] = node["widgets_values"][4]
-                                api_node["inputs"]["denoise"] = node["widgets_values"][5]
-                        
-                        elif node.get("type") == "EmptyLatentImage":
-                            # Get dimensions from widgets_values
-                            if "widgets_values" in node and len(node["widgets_values"]) >= 3:
-                                api_node["inputs"]["width"] = node["widgets_values"][0]
-                                api_node["inputs"]["height"] = node["widgets_values"][1]
-                                api_node["inputs"]["batch_size"] = node["widgets_values"][2]
-                        
-                        elif node.get("type") == "SaveImage":
-                            # Get filename prefix
-                            if "widgets_values" in node and len(node["widgets_values"]) >= 1:
-                                api_node["inputs"]["filename_prefix"] = node["widgets_values"][0]
-                        
-                        elif node.get("type") == "CheckpointLoaderSimple":
-                            # Get checkpoint name
-                            if "widgets_values" in node and len(node["widgets_values"]) >= 1:
-                                api_node["inputs"]["ckpt_name"] = node["widgets_values"][0]
-                            
-                        # Add the node to our dictionary
-                        nodes_dict[node_id] = api_node
-                    
-                    self.workflow_template = nodes_dict
-                    logger.info(f"Converted {len(nodes_dict)} nodes from web interface format to API format")
-                else:
-                    # Assume it's already in the right format (just nodes)
-                    self.workflow_template = raw_data
-                
-                logger.info(f"Workflow contains {len(self.workflow_template) if isinstance(self.workflow_template, dict) else 0} nodes")
-                
-                # Try to extract model from workflow
-                model_name = None
-                if isinstance(self.workflow_template, dict):
-                    for node in self.workflow_template.values():
-                        if isinstance(node, dict):
-                            checkpoint_name = None
-                            if node.get("class_type") == "CheckpointLoaderSimple" and "inputs" in node and "ckpt_name" in node["inputs"]:
-                                checkpoint_name = node["inputs"]["ckpt_name"]
-                            
-                            if checkpoint_name:
-                                if "sdxl" in checkpoint_name.lower():
-                                    if "turbo" in checkpoint_name.lower() or "lightning" in checkpoint_name.lower():
-                                        model_name = "sdxl_turbo"
-                                    else:
-                                        model_name = "sdxl"
-                                elif "v1-5" in checkpoint_name.lower():
-                                    model_name = "stable_diffusion_1.5"
-                                elif "v2-1" in checkpoint_name.lower():
-                                    model_name = "stable_diffusion_2.1"
-                                elif "turbo" in checkpoint_name.lower() or "lightning" in checkpoint_name.lower():
-                                    model_name = "turbovision_xl"
-                
-                if model_name and model_name not in self.models:
-                    self.models.append(model_name)
-                    logger.info(f"Added model {model_name} based on workflow checkpoint")
-        except Exception as e:
-            logger.error(f"Error loading workflow template: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
-            self.workflow_template = None
+                self.workflow_template = json.load(f)
             
-    def _load_workflow_mappings(self):
-        """Legacy method for backward compatibility."""
-        return {}
+            # Validate it's API format (dict with node IDs as keys)
+            if not isinstance(self.workflow_template, dict):
+                logger.error("Workflow must be a JSON object (API format)")
+                self.workflow_template = None
+                return
+            
+            # Check for web UI format (has "nodes" array) and reject it
+            if "nodes" in self.workflow_template and isinstance(self.workflow_template["nodes"], list):
+                logger.error("Web UI format detected - export as API format instead!")
+                logger.error("In ComfyUI: Enable Dev Mode → Save (API Format)")
+                self.workflow_template = None
+                return
+            
+            # Count actual nodes (exclude _bridge metadata)
+            node_count = sum(1 for k in self.workflow_template if not k.startswith("_"))
+            logger.info(f"Loaded workflow: {workflow_path} ({node_count} nodes)")
+            
+            # Check for _bridge metadata
+            if "_bridge" in self.workflow_template:
+                meta = self.workflow_template["_bridge"]
+                logger.info(f"  _bridge metadata found: {meta.get('name', 'unnamed')}")
+                logger.info(f"  media_type: {meta.get('media_type', 'image')}")
+                logger.info(f"  supports_negative: {meta.get('supports_negative', True)}")
+            else:
+                logger.warning("  No _bridge metadata - will use legacy node detection")
+                
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON in workflow file: {e}")
+            self.workflow_template = None
+        except Exception as e:
+            logger.error(f"Error loading workflow: {e}")
+            self.workflow_template = None
         
     async def initialize_models(self):
         """Initialize available models."""
@@ -562,22 +526,23 @@ class ComfyUIBridge:
             logger.error(f"Error popping jobs: {e}")
             return None
 
-    async def _upload_to_r2(self, r2_upload_url: str, image_data: bytes) -> bool:
-        """Upload image directly to R2 using presigned URL.
+    async def _upload_to_r2(self, r2_upload_url: str, media_data: bytes, content_type: str = "image/png") -> bool:
+        """Upload media directly to R2 using presigned URL.
         
         Args:
             r2_upload_url: Presigned R2 upload URL
-            image_data: Image data to upload
+            media_data: Media data to upload (image or video)
+            content_type: MIME type of the media (default: image/png)
             
         Returns:
             True if upload succeeded, False otherwise
         """
         try:
-            logger.info(f"Uploading to R2, image size: {len(image_data)} bytes")
+            logger.info(f"Uploading to R2, media size: {len(media_data)} bytes, type: {content_type}")
             async with self.session.put(
                 r2_upload_url,
-                data=image_data,
-                headers={'Content-Type': 'image/png'}
+                data=media_data,
+                headers={'Content-Type': content_type}
             ) as response:
                 if response.status in [200, 204]:
                     logger.info("R2 upload successful")
@@ -589,9 +554,15 @@ class ComfyUIBridge:
             logger.error(f"Exception during R2 upload: {str(e)}")
             return False
     
-    async def _submit_result(self, job_id: str, image_data: bytes):
-        """Submit a completed job result to the AI Power Grid."""
-        logger.info(f"Preparing to submit result for job {job_id}, image size: {len(image_data)} bytes")
+    async def _submit_result(self, job_id: str, media_data: bytes, media_type: str = "image"):
+        """Submit a completed job result to the AI Power Grid.
+        
+        Args:
+            job_id: The job ID
+            media_data: The generated media (image or video) as bytes
+            media_type: Either "image" or "video"
+        """
+        logger.info(f"Preparing to submit {media_type} result for job {job_id}, size: {len(media_data)} bytes")
         
         # Get seed and ensure it's an integer
         seed = self.active_jobs.get(job_id, {}).get('seed', 0)
@@ -601,19 +572,25 @@ class ComfyUIBridge:
             except (ValueError, TypeError):
                 seed = 0
         
+        # Determine content type for R2 upload
+        if media_type == "video":
+            content_type = "video/mp4"  # Most common video format
+        else:
+            content_type = "image/png"
+        
         # Check if this job requires R2 upload
         r2_upload_url = self.active_jobs.get(job_id, {}).get('r2_upload')
         
         if r2_upload_url:
             # R2 flow: Upload to R2 first
-            logger.info("Using R2 upload flow")
-            upload_success = await self._upload_to_r2(r2_upload_url, image_data)
+            logger.info(f"Using R2 upload flow for {media_type}")
+            upload_success = await self._upload_to_r2(r2_upload_url, media_data, content_type=content_type)
             
             if not upload_success:
                 logger.error("R2 upload failed, job submission aborted")
                 return False
             
-            # Submit completion with R2 marker (no base64 image)
+            # Submit completion with R2 marker (no base64 data)
             payload = {
                 "id": job_id,
                 "generation": "R2",  # Special marker indicating R2 upload
@@ -622,17 +599,21 @@ class ComfyUIBridge:
             }
         else:
             # Legacy flow: Base64 encode and submit
-            logger.info("Using legacy base64 flow")
-            image_base64 = base64.b64encode(image_data).decode()
-            logger.info(f"Base64 encoded image size: {len(image_base64)} characters")
+            logger.info(f"Using legacy base64 flow for {media_type}")
+            media_base64 = base64.b64encode(media_data).decode()
+            logger.info(f"Base64 encoded {media_type} size: {len(media_base64)} characters")
             
             payload = {
                 "id": job_id,
-                "generation": image_base64,
+                "generation": media_base64,
                 "state": "ok",
                 "seed": seed,
                 "r2": False
             }
+        
+        # Add media_type for video jobs
+        if media_type == "video":
+            payload["media_type"] = "video"
         
         url = f"{self.base_url}/v2/generate/submit"
         logger.info(f"Submitting to API URL: {url}")
@@ -643,7 +624,7 @@ class ComfyUIBridge:
                 response_text = await response.text()
                 
                 if response_status == 200:
-                    logger.info(f"Successfully submitted result for job {job_id}")
+                    logger.info(f"Successfully submitted {media_type} result for job {job_id}")
                     return True
                 else:
                     logger.error(f"Failed to submit result: {response_status} - {response_text}")
@@ -739,32 +720,55 @@ class ComfyUIBridge:
             job: Job information from the AI Power Grid
         """
         job_id = job.id
+        source_processing = job.source_processing or "txt2img"
+        expected_media_type = job.media_type or "image"
+        
         logger.info(f"Processing job {job_id} with model {job.model}")
+        logger.info(f"  source_processing: {source_processing}, media_type: {expected_media_type}")
+        
+        # === SAFETY CHECK: Block CSAM-related prompts before generation ===
+        prompt_text = job.payload.prompt or ""
+        is_safe, safety_reason = check_prompt_safety(prompt_text)
+        if not is_safe:
+            logger.warning(f"🚫 Job {job_id} BLOCKED: {safety_reason}")
+            logger.warning(f"   Prompt was: {prompt_text[:100]}...")
+            await self._submit_failure(job_id, f"Content policy violation: {safety_reason}")
+            return
+        # === END SAFETY CHECK ===
         
         try:
             # Store job information in active_jobs dictionary
             # Generate a random seed if none is provided
             seed = 0
-            if job.payload.seed:
+            if hasattr(job.payload, 'seed') and job.payload.seed is not None:
                 try:
                     seed = int(job.payload.seed)
+                    logger.info(f"Using provided seed: {seed}")
                 except (ValueError, TypeError):
                     # If seed conversion fails, use a random seed
                     import random
                     seed = random.randint(1, 2**32-1)
                     logger.info(f"Invalid seed provided, generated random seed: {seed}")
-                logger.info(f"Using provided seed: {seed}")
             else:
                 # Generate a random seed
                 import random
                 seed = random.randint(1, 2**32-1)
                 logger.info(f"No seed provided, generated random seed: {seed}")
             
+            # Handle source image for img2img/img2video jobs
+            source_image_filename = None
+            if job.source_image and source_processing in ["img2img", "img2video", "img2vid"]:
+                logger.info(f"Job has source_image for {source_processing}, uploading to ComfyUI...")
+                source_image_filename = await self._save_source_image(job.source_image, job_id)
+                logger.info(f"Source image saved as: {source_image_filename}")
+            
             self.active_jobs[job_id] = {
                 'seed': seed,
                 'model': job.model,
                 'kudos': job.kudos or 0,
-                'r2_upload': job.r2_upload  # Store R2 upload URL if present
+                'r2_upload': job.r2_upload,  # Store R2 upload URL if present
+                'source_image_filename': source_image_filename,
+                'media_type': expected_media_type,
             }
             
             # Convert AI Power Grid job to ComfyUI workflow
@@ -773,14 +777,15 @@ class ComfyUIBridge:
             # Submit workflow to ComfyUI
             prompt_id = await self._submit_workflow(workflow)
             
-            # Wait for the image generation to complete
+            # Wait for the generation to complete
             result = await self._wait_for_generation(prompt_id)
             
-            # Get the generated image
-            image_data = await self._get_generated_image(result)
+            # Get the generated media (image or video)
+            media_data, media_type, filename = await self._get_generated_media(result)
+            logger.info(f"Generated {media_type}: {filename} ({len(media_data)} bytes)")
             
             # Submit the result back to the AI Power Grid
-            await self._submit_result(job_id, image_data)
+            await self._submit_result(job_id, media_data, media_type=media_type)
             
             # Track stats
             self.jobs_completed += 1
@@ -794,6 +799,8 @@ class ComfyUIBridge:
             
         except Exception as e:
             logger.error(f"Error processing job {job_id}: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             # Inform the Power Grid about the failure
             await self._submit_failure(job_id, str(e))
             
@@ -806,14 +813,152 @@ class ComfyUIBridge:
         # If we have a loaded workflow template, use it
         if self.workflow_template:
             logger.info(f"Using loaded workflow template for job with model {job.model}")
-            return self._update_workflow_with_job_params(self.workflow_template, job)
+            
+            # Check if workflow has _bridge metadata (new clean format)
+            if "_bridge" in self.workflow_template:
+                logger.info("Using new _bridge metadata format")
+                return self._update_workflow_with_metadata(self.workflow_template, job)
+            else:
+                logger.info("Using legacy workflow detection")
+                return self._update_workflow_legacy(self.workflow_template, job)
         
         # Otherwise fall back to default workflow
         logger.warning(f"No workflow template loaded, falling back to default workflow for {job.model}")
         return self._create_default_workflow(job)
     
-    def _update_workflow_with_job_params(self, workflow: Dict[str, Any], job: DummyJobPopResponse) -> Dict[str, Any]:
-        """Update a workflow template with job-specific parameters."""
+    def _update_workflow_with_metadata(self, workflow: Dict[str, Any], job: DummyJobPopResponse) -> Dict[str, Any]:
+        """
+        Update workflow using _bridge metadata. Clean, declarative, no node hunting.
+        
+        The _bridge section tells us exactly which nodes to update:
+        {
+            "_bridge": {
+                "version": 1,
+                "nodes": {"prompt": "58", "sampler": "3", "latent": "5", "output": "9"},
+                "fields": {"prompt": "value", "seed": "seed", ...},
+                "supports_negative": false,
+                "media_type": "image"
+            }
+        }
+        """
+        import random
+        
+        # Deep copy to avoid modifying template
+        w = json.loads(json.dumps(workflow))
+        
+        # Extract and remove metadata (don't send to ComfyUI)
+        meta = w.pop("_bridge", None)
+        if not meta:
+            logger.error("_update_workflow_with_metadata called but no _bridge found!")
+            return self._update_workflow_legacy(w, job)
+        
+        nodes = meta.get("nodes", {})
+        fields = meta.get("fields", {})
+        
+        # === PROMPT ===
+        prompt_node_id = nodes.get("prompt")
+        prompt_field = fields.get("prompt", "text")
+        if prompt_node_id and prompt_node_id in w:
+            # Handle ### delimiter for positive/negative split
+            prompt_text = job.payload.prompt or ""
+            if "###" in prompt_text:
+                prompt_text = prompt_text.split("###")[0].strip()
+            w[prompt_node_id]["inputs"][prompt_field] = prompt_text
+            logger.info(f"Set prompt in node {prompt_node_id}: {prompt_text[:50]}...")
+        
+        # === NEGATIVE PROMPT ===
+        if meta.get("supports_negative", True):
+            neg_node_id = nodes.get("negative_prompt")
+            neg_field = fields.get("negative_prompt", "text")
+            if neg_node_id and neg_node_id in w:
+                neg_text = job.payload.negative_prompt or ""
+                # Also check for ### delimiter
+                if "###" in (job.payload.prompt or ""):
+                    parts = job.payload.prompt.split("###", 1)
+                    if len(parts) > 1 and not neg_text:
+                        neg_text = parts[1].strip()
+                w[neg_node_id]["inputs"][neg_field] = neg_text
+                logger.info(f"Set negative prompt in node {neg_node_id}")
+        
+        # === SEED ===
+        sampler_node_id = nodes.get("sampler")
+        seed_field = fields.get("seed", "seed")
+        if sampler_node_id and sampler_node_id in w:
+            if hasattr(job.payload, 'seed') and job.payload.seed is not None:
+                try:
+                    seed = int(job.payload.seed)
+                except (ValueError, TypeError):
+                    seed = random.randint(1, 2**32-1)
+            else:
+                seed = random.randint(1, 2**32-1)
+            w[sampler_node_id]["inputs"][seed_field] = seed
+            logger.info(f"Set seed in node {sampler_node_id}: {seed}")
+            
+            # Store seed in active_jobs
+            self.active_jobs[job.id] = self.active_jobs.get(job.id, {})
+            self.active_jobs[job.id]['seed'] = seed
+        
+        # === SAMPLER PARAMS (steps, cfg, sampler) ===
+        # Grid sends params, we use them
+        if sampler_node_id and sampler_node_id in w:
+            sampler_inputs = w[sampler_node_id]["inputs"]
+            
+            # Steps
+            if hasattr(job.payload, 'steps') and job.payload.steps:
+                sampler_inputs["steps"] = job.payload.steps
+                logger.info(f"Set steps: {job.payload.steps}")
+            
+            # CFG Scale
+            if hasattr(job.payload, 'cfg_scale') and job.payload.cfg_scale:
+                sampler_inputs["cfg"] = job.payload.cfg_scale
+                logger.info(f"Set cfg: {job.payload.cfg_scale}")
+            
+            # Sampler name
+            if hasattr(job.payload, 'sampler') and job.payload.sampler:
+                mapped_sampler = self._map_sampler(job.payload.sampler)
+                sampler_inputs["sampler_name"] = mapped_sampler
+                logger.info(f"Set sampler: {mapped_sampler}")
+        
+        # === DIMENSIONS ===
+        latent_node_id = nodes.get("latent")
+        if latent_node_id and latent_node_id in w:
+            width_field = fields.get("width", "width")
+            height_field = fields.get("height", "height")
+            if job.payload.width:
+                w[latent_node_id]["inputs"][width_field] = job.payload.width
+            if job.payload.height:
+                w[latent_node_id]["inputs"][height_field] = job.payload.height
+            logger.info(f"Set dimensions in node {latent_node_id}: {job.payload.width}x{job.payload.height}")
+        
+        # === OUTPUT FILENAME ===
+        output_node_id = nodes.get("output")
+        if output_node_id and output_node_id in w:
+            w[output_node_id]["inputs"]["filename_prefix"] = f"aipg_{job.id}"
+            logger.info(f"Set output filename prefix: aipg_{job.id}")
+        
+        # === SOURCE IMAGE (img2img) ===
+        source_image_node_id = nodes.get("source_image")
+        if source_image_node_id and source_image_node_id in w:
+            source_filename = self.active_jobs.get(job.id, {}).get('source_image_filename')
+            if source_filename:
+                w[source_image_node_id]["inputs"]["image"] = source_filename
+                logger.info(f"Set source image: {source_filename}")
+        
+        # === VIDEO PARAMS ===
+        video_latent_node_id = nodes.get("video_latent")
+        if video_latent_node_id and video_latent_node_id in w:
+            if hasattr(job.payload, 'length') and job.payload.length:
+                w[video_latent_node_id]["inputs"]["length"] = job.payload.length
+                logger.info(f"Set video length: {job.payload.length} frames")
+        
+        logger.info(f"Workflow updated via _bridge metadata ({len(w)} nodes)")
+        return w
+    
+    def _update_workflow_legacy(self, workflow: Dict[str, Any], job: DummyJobPopResponse) -> Dict[str, Any]:
+        """
+        LEGACY: Update workflow by scanning nodes and guessing which is which.
+        Use _update_workflow_with_metadata() for new workflows with _bridge section.
+        """
         # Make a deep copy to avoid modifying the template
         updated_workflow = json.loads(json.dumps(workflow))
         
@@ -843,7 +988,7 @@ class ComfyUIBridge:
                 logger.info(f"Found KSampler node: {node_id}")
                 
                 # Update seed in KSampler node if job has seed
-                if job.payload.seed:
+                if hasattr(job.payload, 'seed') and job.payload.seed is not None:
                     try:
                         seed = int(job.payload.seed)
                         node["inputs"]["seed"] = seed
@@ -1005,6 +1150,48 @@ class ComfyUIBridge:
             elif node.get("class_type") == "SaveImage":
                 node["inputs"]["filename_prefix"] = f"horde_{job.id}"
                 logger.info(f"Set SaveImage filename prefix to horde_{job.id}")
+            
+            # Update SaveVideo node to set filename with job ID
+            elif node.get("class_type") in ["SaveVideo", "VHS_VideoCombine"]:
+                if "filename_prefix" in node.get("inputs", {}):
+                    node["inputs"]["filename_prefix"] = f"video/horde_{job.id}"
+                    logger.info(f"Set {node.get('class_type')} filename prefix to video/horde_{job.id}")
+            
+            # Handle LoadImage nodes for img2img/img2video source images
+            elif node.get("class_type") == "LoadImage":
+                # Check if we have a source image for this job
+                source_image_filename = self.active_jobs.get(job.id, {}).get('source_image_filename')
+                if source_image_filename:
+                    node["inputs"]["image"] = source_image_filename
+                    logger.info(f"Set LoadImage node {node_id} to use source image: {source_image_filename}")
+            
+            # Handle LTXVScheduler nodes - update steps if provided
+            elif node.get("class_type") == "LTXVScheduler":
+                if job.payload.steps and job.payload.steps != 30:  # Only if non-default
+                    node["inputs"]["steps"] = job.payload.steps
+                    logger.info(f"Set LTXVScheduler steps to {job.payload.steps}")
+            
+            # Handle EmptyLTXVLatentVideo - update frames if provided
+            elif node.get("class_type") == "EmptyLTXVLatentVideo":
+                if hasattr(job.payload, 'length') and job.payload.length:
+                    node["inputs"]["length"] = job.payload.length
+                    logger.info(f"Set EmptyLTXVLatentVideo length to {job.payload.length} frames")
+                if job.payload.width:
+                    node["inputs"]["width"] = job.payload.width
+                if job.payload.height:
+                    node["inputs"]["height"] = job.payload.height
+            
+            # Handle RandomNoise nodes - set seed
+            elif node.get("class_type") == "RandomNoise":
+                if "noise_seed" in node.get("inputs", {}):
+                    # Use the job seed if available, or generate a new one
+                    job_seed = self.active_jobs.get(job.id, {}).get('seed')
+                    if job_seed is None:
+                        import random
+                        job_seed = random.randint(1, 2**32-1)
+                        logger.info(f"Generated random seed for RandomNoise: {job_seed}")
+                    node["inputs"]["noise_seed"] = job_seed
+                    logger.info(f"Set RandomNoise seed to {job_seed}")
                 
         # Log what we're keeping from local workflow
         if ksampler_node:
@@ -1108,8 +1295,9 @@ class ComfyUIBridge:
         # Ensure seed is an integer
         try:
             # If seed is provided, use it; otherwise generate a random seed between 1 and 2^32-1
-            if job.payload.seed:
+            if hasattr(job.payload, 'seed') and job.payload.seed is not None:
                 seed = int(job.payload.seed)
+                logger.info(f"Using provided seed: {seed}")
             else:
                 # Generate a random seed (not 0)
                 import random
@@ -1325,35 +1513,140 @@ class ComfyUIBridge:
                 logger.error(f"Request error while waiting for generation: {e}")
                 await asyncio.sleep(2.0)
     
-    async def _get_generated_image(self, result: Dict[str, Any]) -> bytes:
-        """Extract the generated image from the ComfyUI result."""
-        # Find the node ID of the SaveImage node (or equivalent output node)
-        save_node_id = None
-        logger.info(f"Looking for image in result outputs: {list(result.get('outputs', {}).keys())}")
+    async def _get_generated_media(self, result: Dict[str, Any]) -> tuple:
+        """Extract the generated image or video from the ComfyUI result.
         
+        Returns:
+            tuple: (media_data: bytes, media_type: str, filename: str)
+                   media_type is either "image" or "video"
+        """
+        logger.info(f"Looking for media in result outputs: {list(result.get('outputs', {}).keys())}")
+        
+        # First check for video output (SaveVideo, VHS_VideoCombine, etc.)
+        for node_id, node_output in result.get("outputs", {}).items():
+            if "gifs" in node_output:
+                # VHS_VideoCombine and similar nodes output to "gifs" (can be mp4, webm, gif)
+                video_info = node_output["gifs"][0]
+                video_filename = video_info.get("filename")
+                subfolder = video_info.get("subfolder", "")
+                
+                logger.info(f"Found video output in node {node_id}: {video_filename}")
+                
+                # Download the video
+                if subfolder:
+                    video_url = f"/view?filename={video_filename}&subfolder={subfolder}&type=output"
+                else:
+                    video_url = f"/view?filename={video_filename}&type=output"
+                
+                logger.info(f"Downloading video from {self.comfy_url}{video_url}")
+                response = await self.comfy_client.get(video_url)
+                response.raise_for_status()
+                
+                logger.info(f"Downloaded video size: {len(response.content)} bytes")
+                return response.content, "video", video_filename
+            
+            if "videos" in node_output:
+                # SaveVideo nodes output to "videos"
+                video_info = node_output["videos"][0]
+                video_filename = video_info.get("filename")
+                subfolder = video_info.get("subfolder", "")
+                
+                logger.info(f"Found video output in node {node_id}: {video_filename}")
+                
+                # Download the video
+                if subfolder:
+                    video_url = f"/view?filename={video_filename}&subfolder={subfolder}&type=output"
+                else:
+                    video_url = f"/view?filename={video_filename}&type=output"
+                
+                logger.info(f"Downloading video from {self.comfy_url}{video_url}")
+                response = await self.comfy_client.get(video_url)
+                response.raise_for_status()
+                
+                logger.info(f"Downloaded video size: {len(response.content)} bytes")
+                return response.content, "video", video_filename
+        
+        # Fall back to image output
         for node_id, node_output in result.get("outputs", {}).items():
             if "images" in node_output:
-                save_node_id = node_id
                 logger.info(f"Found image output in node {node_id}")
-                break
+                
+                # Get the first image
+                image_filename = node_output["images"][0]["filename"]
+                subfolder = node_output["images"][0].get("subfolder", "")
+                logger.info(f"Generated image: {image_filename}")
+                
+                # Download the image
+                if subfolder:
+                    image_url = f"/view?filename={image_filename}&subfolder={subfolder}&type=output"
+                else:
+                    image_url = f"/view?filename={image_filename}"
+                
+                logger.info(f"Downloading image from {self.comfy_url}{image_url}")
+                response = await self.comfy_client.get(image_url)
+                response.raise_for_status()
+                
+                logger.info(f"Downloaded image size: {len(response.content)} bytes")
+                return response.content, "image", image_filename
         
-        if not save_node_id:
-            logger.error("No image output found in ComfyUI result")
-            raise ValueError("No image output found in ComfyUI result")
+        logger.error("No media output found in ComfyUI result")
+        raise ValueError("No media output found in ComfyUI result")
+    
+    async def _get_generated_image(self, result: Dict[str, Any]) -> bytes:
+        """Extract the generated image from the ComfyUI result (legacy compatibility)."""
+        media_data, media_type, filename = await self._get_generated_media(result)
+        return media_data
+    
+    async def _save_source_image(self, source_image_base64: str, job_id: str) -> str:
+        """Save a base64 encoded source image to ComfyUI's input folder.
         
-        # Get the first image
-        image_filename = result["outputs"][save_node_id]["images"][0]["filename"]
-        logger.info(f"Generated image: {image_filename}")
+        Returns:
+            str: The filename of the saved image
+        """
+        import uuid
         
-        # Download the image
-        image_url = f"/view?filename={image_filename}"
-        logger.info(f"Downloading image from {self.comfy_url}{image_url}")
+        # Decode the base64 image
+        try:
+            image_data = base64.b64decode(source_image_base64)
+        except Exception as e:
+            logger.error(f"Failed to decode source image: {e}")
+            raise
         
-        response = await self.comfy_client.get(image_url)
-        response.raise_for_status()
+        # Generate a unique filename
+        filename = f"input_{job_id}_{uuid.uuid4().hex[:8]}.png"
         
-        logger.info(f"Downloaded image size: {len(response.content)} bytes")
-        return response.content
+        # Get the ComfyUI input folder path
+        # We'll upload via the API
+        try:
+            # Use ComfyUI's upload endpoint
+            files = {
+                'image': (filename, image_data, 'image/png')
+            }
+            
+            # httpx doesn't support files in the same way as requests, use a workaround
+            from io import BytesIO
+            upload_url = f"{self.comfy_url}/upload/image"
+            
+            # Use requests for multipart upload (httpx async multipart is more complex)
+            import requests as sync_requests
+            response = sync_requests.post(
+                upload_url,
+                files={'image': (filename, BytesIO(image_data), 'image/png')},
+                data={'overwrite': 'true'}
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                saved_filename = result.get('name', filename)
+                logger.info(f"Uploaded source image to ComfyUI: {saved_filename}")
+                return saved_filename
+            else:
+                logger.error(f"Failed to upload source image: {response.status_code} {response.text}")
+                raise RuntimeError(f"Failed to upload source image: {response.status_code}")
+                
+        except Exception as e:
+            logger.error(f"Error uploading source image to ComfyUI: {e}")
+            raise
 
 async def main():
     """Main entry point for the bridge."""

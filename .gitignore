@@ -30,4 +30,17 @@ bridge_log.txt
 
 # OS specific
 .DS_Store
-Thumbs.db 
+Thumbs.db
+
+# Generated images/videos
+*.webp
+*.png
+*.jpg
+*.mp4
+
+# Failed/experimental projects (keep in separate repos)
+comfy-worker-v2/
+image-worker/
+
+# One-off scripts
+transfer_*.sh
