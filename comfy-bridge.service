@@ -1,0 +1,28 @@
+[Unit]
+Description=ComfyUI Bridge for AI Power Grid
+After=comfyui.service
+Wants=comfyui.service
+Requires=network.target
+
+[Service]
+Type=simple
+User=aipg
+Group=aipg
+WorkingDirectory=/home/aipg/ComfyUI/comfy-bridge
+Environment=PATH=/home/aipg/ComfyUI/venv/bin
+ExecStartPre=/bin/sleep 45
+ExecStart=/home/aipg/ComfyUI/venv/bin/python -m comfy_bridge.cli
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/aipg/ComfyUI/comfy-bridge
+
+[Install]
+WantedBy=multi-user.target
