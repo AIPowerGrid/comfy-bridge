@@ -2,8 +2,8 @@ import pytest
 import respx
 import httpx
 import os
-from comfy_bridge.api_client import APIClient
-from comfy_bridge.config import Settings
+from bridge.api_client import APIClient
+from bridge.config import Settings
 
 from dotenv import load_dotenv
 

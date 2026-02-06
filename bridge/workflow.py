@@ -138,24 +138,17 @@ async def process_workflow(
 
     # Make a deep copy to avoid modifying the original
     processed_workflow = json.loads(json.dumps(workflow))
-    
-    # Try to use _bridge metadata first (clean explicit mappings)
-    if apply_bridge_metadata(processed_workflow, job):
-        print("[_bridge] Workflow updated via metadata, skipping heuristic detection")
-        return processed_workflow
 
-    # Handle source image for img2img workflows
+    # Handle source image for img2img workflows (do BEFORE _bridge so we have filename when using _bridge)
     source_image_filename = None
     if (
         job.get("source_image")
         and job.get("source_processing") == "img2img"
     ):
-        # Generate unique filename
         image_ext = "png"  # Default, could be improved to detect from URL
         source_image_filename = (
-            f"horde_input_{job.get('id', 'unknown')}_{uuid.uuid4().hex[:8]}.{image_ext}"
+            f"grid_input_{job.get('id', 'unknown')}_{uuid.uuid4().hex[:8]}.{image_ext}"
         )
-
         try:
             await download_image(job["source_image"], source_image_filename)
             print(f"Downloaded source image: {source_image_filename}")
@@ -164,6 +157,25 @@ async def process_workflow(
             source_image_filename = None
     else:
         print(f"Skipping image download - this is a text-to-image job")
+
+    # Try to use _bridge metadata first (clean explicit mappings)
+    if apply_bridge_metadata(processed_workflow, job):
+        print("[_bridge] Workflow updated via metadata, skipping heuristic detection")
+        # For img2img with _bridge: set source image on the node specified in _bridge.nodes.source_image (e.g. LoadImage 81)
+        bridge = processed_workflow.get("_bridge")
+        if (
+            bridge
+            and source_image_filename
+            and job.get("source_processing") == "img2img"
+        ):
+            source_node_id = bridge.get("nodes", {}).get("source_image")
+            if source_node_id and source_node_id in processed_workflow:
+                node = processed_workflow[source_node_id]
+                if isinstance(node, dict) and "inputs" in node:
+                    node["inputs"]["image"] = source_image_filename
+                    print(f"[_bridge] Set source image on node {source_node_id}: {source_image_filename}")
+        processed_workflow.pop("_bridge", None)
+        return processed_workflow
 
     # Update LoadImageOutput nodes for img2img jobs
     if job.get("source_processing") == "img2img" and source_image_filename:
@@ -470,8 +482,8 @@ async def build_workflow(job: Dict[str, Any]) -> Dict[str, Any]:
     model_name = job.get("model", "")
     source_processing = job.get("source_processing", "txt2img")
 
-    # Use the mapped workflow for all jobs (the mapper handles the logic)
-    workflow_filename = get_workflow_file(model_name)
+    # Use the mapped workflow (txt2img vs img2img) so img2img gets LoadImage workflow
+    workflow_filename = get_workflow_file(model_name, source_processing)
     
     # Validate that we have a proper workflow mapping
     if not workflow_filename:

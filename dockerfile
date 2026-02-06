@@ -22,4 +22,4 @@ RUN groupadd --gid 1000 comfyui_bridge_worker && \
 
 USER comfyui_bridge_worker
 
-ENTRYPOINT ["python", "-m", "comfy_bridge.cli"]
+ENTRYPOINT ["python", "-m", "bridge.cli"]

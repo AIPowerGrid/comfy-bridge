@@ -67,7 +67,8 @@ class ModelMapper:
         "wan2.2_t2v": "wan2_2_t2v_14b.json",
         "wan2.2": "wan2_2_t2v_14b.json",
         "wan2.2-t2v-a14b": "wan2_2_t2v_14b.json",
-        # Flux.2 Klein models
+        # Flux.2 Klein (Grid name: FLUX.2 Klein 4B FP8)
+        "FLUX.2 Klein 4B FP8": "flux2_klein_4b_api.json",
         "flux_2": "flux2_klein_4b_api.json",
         "flux2-klein-4b": "flux2_klein_4b_api.json",
         "flux.2-klein-4b": "flux2_klein_4b_api.json",
@@ -75,10 +76,21 @@ class ModelMapper:
         "flux2-klein": "flux2_klein_4b_api.json",
     }
 
+    # img2img workflow files (when source_processing == "img2img")
+    DEFAULT_IMG2IMG_WORKFLOW_MAP = {
+        "FLUX.2 Klein 4B FP8": "flux2_klein_4b_image_edit.json",
+        "flux_2": "flux2_klein_4b_image_edit.json",
+        "flux2-klein-4b": "flux2_klein_4b_image_edit.json",
+        "flux.2-klein-4b": "flux2_klein_4b_image_edit.json",
+        "Flux.2-Klein-4B": "flux2_klein_4b_image_edit.json",
+        "flux2-klein": "flux2_klein_4b_image_edit.json",
+    }
+
     def __init__(self):
         self.available_models: List[str] = []
-        # Maps Grid model name -> workflow filename
+        # Maps Grid model name -> workflow filename (txt2img)
         self.workflow_map: Dict[str, str] = {}
+        self.img2img_workflow_map: Dict[str, str] = {}
         # Maps model file name (e.g., some_model.safetensors) -> Grid model name (key in reference)
         self.reference_file_to_grid_name: Dict[str, str] = {}
 
@@ -103,6 +115,7 @@ class ModelMapper:
     def _build_workflow_map(self):
         """Build mapping from Grid models to ComfyUI workflows"""
         self.workflow_map = self.DEFAULT_WORKFLOW_MAP.copy()
+        self.img2img_workflow_map = self.DEFAULT_IMG2IMG_WORKFLOW_MAP.copy()
 
     def _load_local_reference(self) -> Dict[str, str]:
         """Load Grid model reference and return mapping path → Grid model name.
@@ -269,6 +282,7 @@ class ModelMapper:
         """
         # Start with defaults so we always have fallback mappings
         self.workflow_map = self.DEFAULT_WORKFLOW_MAP.copy()
+        self.img2img_workflow_map = self.DEFAULT_IMG2IMG_WORKFLOW_MAP.copy()
         env_workflows = self._iter_env_workflow_files()
         for abs_path in env_workflows:
             filename = os.path.basename(abs_path)
@@ -289,8 +303,24 @@ class ModelMapper:
                             f"Info: model file '{model_file}' from '{filename}' not found in reference; not advertising"
                         )
 
-    def get_workflow_file(self, horde_model_name: str) -> str:
-        """Get the workflow file for a Grid model"""
+    def get_workflow_file(
+        self, horde_model_name: str, source_processing: str = "txt2img"
+    ) -> str:
+        """Get the workflow file for a Grid model. Use img2img workflow when source_processing is img2img."""
+        if source_processing == "img2img":
+            img2img_w = (
+                self.img2img_workflow_map.get(horde_model_name)
+                or next(
+                    (
+                        v
+                        for k, v in self.img2img_workflow_map.items()
+                        if horde_model_name.lower() in k.lower()
+                    ),
+                    None,
+                )
+            )
+            if img2img_w:
+                return img2img_w
         return (
             self.workflow_map.get(horde_model_name)
             or next(
@@ -319,5 +349,7 @@ def get_horde_models() -> List[str]:
     return model_mapper.get_available_horde_models()
 
 
-def get_workflow_file(horde_model_name: str) -> str:
-    return model_mapper.get_workflow_file(horde_model_name)
+def get_workflow_file(
+    horde_model_name: str, source_processing: str = "txt2img"
+) -> str:
+    return model_mapper.get_workflow_file(horde_model_name, source_processing)

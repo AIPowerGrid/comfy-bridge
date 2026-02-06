@@ -1,4 +1,4 @@
-from comfy_bridge.utils import generate_seed, encode_image
+from bridge.utils import generate_seed, encode_image
 from PIL import Image
 import io
 import base64

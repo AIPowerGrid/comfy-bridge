@@ -79,7 +79,7 @@ Start your ComfyUI web server, then:
 
 ```bash
 # Via CLI module
-python -m comfy_bridge.cli
+python -m bridge.cli
 ```
 
 Or directly (legacy):

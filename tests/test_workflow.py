@@ -1,5 +1,5 @@
 import pytest
-from comfy_bridge.workflow import build_workflow
+from bridge.workflow import build_workflow
 
 
 def test_build_workflow_contains_nodes():

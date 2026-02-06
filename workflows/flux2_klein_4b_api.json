@@ -1,18 +1,19 @@
 {
   "_bridge": {
     "version": 1,
-    "name": "Flux2-Klein-4B-Distilled",
+    "name": "Flux2-Klein-4B",
     "media_type": "image",
     "supports_negative": true,
     "nodes": {
       "prompt": "76",
-      "negative_prompt": "75:67",
-      "seed": "75:73",
-      "steps": "75:62",
-      "cfg": "75:63",
-      "width": "75:68",
-      "height": "75:69",
-      "latent": "75:66",
+      "negative_prompt": "92:87",
+      "seed": "92:73",
+      "steps": "92:62",
+      "cfg": "92:63",
+      "sampler": "92:61",
+      "width": "92:68",
+      "height": "92:69",
+      "latent": "92:66",
       "output": "9"
     },
     "fields": {
@@ -21,224 +22,127 @@
       "seed": "noise_seed",
       "steps": "steps",
       "cfg": "cfg",
+      "sampler": "sampler_name",
       "width": "value",
       "height": "value"
     }
   },
   "9": {
     "inputs": {
-      "filename_prefix": "Flux2-Klein",
-      "images": [
-        "75:65",
-        0
-      ]
+      "filename_prefix": "Flux2-Klein-4b",
+      "images": ["92:65", 0]
     },
     "class_type": "SaveImage",
-    "_meta": {
-      "title": "Save Image"
-    }
+    "_meta": { "title": "Save Image" }
   },
-  "76": {
-    "inputs": {
-      "value": "an ugly bitch"
-    },
-    "class_type": "PrimitiveStringMultiline",
-    "_meta": {
-      "title": "Prompt"
-    }
-  },
-  "75:61": {
-    "inputs": {
-      "sampler_name": "euler"
-    },
+  "92:61": {
+    "inputs": { "sampler_name": "euler" },
     "class_type": "KSamplerSelect",
-    "_meta": {
-      "title": "KSamplerSelect"
-    }
+    "_meta": { "title": "KSamplerSelect" }
   },
-  "75:62": {
+  "92:62": {
     "inputs": {
       "steps": 20,
-      "width": [
-        "75:68",
-        0
-      ],
-      "height": [
-        "75:69",
-        0
-      ]
+      "width": ["92:68", 0],
+      "height": ["92:69", 0]
     },
     "class_type": "Flux2Scheduler",
-    "_meta": {
-      "title": "Flux2Scheduler"
-    }
+    "_meta": { "title": "Flux2Scheduler" }
   },
-  "75:63": {
+  "92:63": {
     "inputs": {
       "cfg": 5,
-      "model": [
-        "75:70",
-        0
-      ],
-      "positive": [
-        "75:74",
-        0
-      ],
-      "negative": [
-        "75:67",
-        0
-      ]
+      "model": ["92:70", 0],
+      "positive": ["92:74", 0],
+      "negative": ["92:87", 0]
     },
     "class_type": "CFGGuider",
-    "_meta": {
-      "title": "CFGGuider"
-    }
+    "_meta": { "title": "CFGGuider" }
   },
-  "75:64": {
+  "92:64": {
     "inputs": {
-      "noise": [
-        "75:73",
-        0
-      ],
-      "guider": [
-        "75:63",
-        0
-      ],
-      "sampler": [
-        "75:61",
-        0
-      ],
-      "sigmas": [
-        "75:62",
-        0
-      ],
-      "latent_image": [
-        "75:66",
-        0
-      ]
+      "noise": ["92:73", 0],
+      "guider": ["92:63", 0],
+      "sampler": ["92:61", 0],
+      "sigmas": ["92:62", 0],
+      "latent_image": ["92:66", 0]
     },
     "class_type": "SamplerCustomAdvanced",
-    "_meta": {
-      "title": "SamplerCustomAdvanced"
-    }
+    "_meta": { "title": "SamplerCustomAdvanced" }
   },
-  "75:65": {
+  "92:65": {
     "inputs": {
-      "samples": [
-        "75:64",
-        0
-      ],
-      "vae": [
-        "75:72",
-        0
-      ]
+      "samples": ["92:64", 0],
+      "vae": ["92:72", 0]
     },
     "class_type": "VAEDecode",
-    "_meta": {
-      "title": "VAE Decode"
-    }
+    "_meta": { "title": "VAE Decode" }
   },
-  "75:66": {
+  "92:66": {
     "inputs": {
-      "width": [
-        "75:68",
-        0
-      ],
-      "height": [
-        "75:69",
-        0
-      ],
+      "width": ["92:68", 0],
+      "height": ["92:69", 0],
       "batch_size": 1
     },
     "class_type": "EmptyFlux2LatentImage",
-    "_meta": {
-      "title": "Empty Flux 2 Latent"
-    }
+    "_meta": { "title": "Empty Flux 2 Latent" }
   },
-  "75:67": {
-    "inputs": {
-      "text": "",
-      "clip": [
-        "75:71",
-        0
-      ]
-    },
-    "class_type": "CLIPTextEncode",
-    "_meta": {
-      "title": "CLIP Text Encode (Negative Prompt)"
-    }
-  },
-  "75:68": {
-    "inputs": {
-      "value": 1024
-    },
+  "92:68": {
+    "inputs": { "value": 1024 },
     "class_type": "PrimitiveInt",
-    "_meta": {
-      "title": "Width"
-    }
+    "_meta": { "title": "Width" }
   },
-  "75:69": {
-    "inputs": {
-      "value": 1024
-    },
+  "92:69": {
+    "inputs": { "value": 1024 },
     "class_type": "PrimitiveInt",
-    "_meta": {
-      "title": "Height"
-    }
+    "_meta": { "title": "Height" }
   },
-  "75:73": {
-    "inputs": {
-      "noise_seed": 204350918156993
-    },
-    "class_type": "RandomNoise",
-    "_meta": {
-      "title": "RandomNoise"
-    }
-  },
-  "75:70": {
+  "92:70": {
     "inputs": {
       "unet_name": "flux-2-klein-4b.safetensors",
       "weight_dtype": "default"
     },
     "class_type": "UNETLoader",
-    "_meta": {
-      "title": "Load Diffusion Model"
-    }
+    "_meta": { "title": "Load Diffusion Model" }
   },
-  "75:71": {
+  "92:71": {
     "inputs": {
       "clip_name": "qwen_3_4b.safetensors",
       "type": "flux2",
       "device": "default"
     },
     "class_type": "CLIPLoader",
-    "_meta": {
-      "title": "Load CLIP"
-    }
+    "_meta": { "title": "Load CLIP" }
   },
-  "75:72": {
-    "inputs": {
-      "vae_name": "flux2-vae.safetensors"
-    },
+  "92:72": {
+    "inputs": { "vae_name": "flux2-vae.safetensors" },
     "class_type": "VAELoader",
-    "_meta": {
-      "title": "Load VAE"
-    }
+    "_meta": { "title": "Load VAE" }
   },
-  "75:74": {
+  "92:73": {
+    "inputs": { "noise_seed": 265337237770076 },
+    "class_type": "RandomNoise",
+    "_meta": { "title": "RandomNoise" }
+  },
+  "92:74": {
     "inputs": {
-      "text": [
-        "76",
-        0
-      ],
-      "clip": [
-        "75:71",
-        0
-      ]
+      "text": ["76", 0],
+      "clip": ["92:71", 0]
     },
     "class_type": "CLIPTextEncode",
-    "_meta": {
-      "title": "CLIP Text Encode (Positive Prompt)"
-    }
+    "_meta": { "title": "CLIP Text Encode (Positive Prompt)" }
+  },
+  "92:87": {
+    "inputs": {
+      "text": "",
+      "clip": ["92:71", 0]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": { "title": "CLIP Text Encode (Negative Prompt)" }
+  },
+  "76": {
+    "inputs": { "value": "a serene mountain landscape at golden hour" },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": { "title": "Prompt" }
   }
 }

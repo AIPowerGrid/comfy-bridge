@@ -18,4 +18,4 @@ dependencies = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["comfy_bridge*"]
+include = ["bridge*"]

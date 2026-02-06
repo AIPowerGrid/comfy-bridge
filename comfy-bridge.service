@@ -11,7 +11,7 @@ Group=aipg
 WorkingDirectory=/home/aipg/ComfyUI/comfy-bridge
 Environment=PATH=/home/aipg/ComfyUI/venv/bin
 ExecStartPre=/bin/sleep 45
-ExecStart=/home/aipg/ComfyUI/venv/bin/python -m comfy_bridge.cli
+ExecStart=/home/aipg/ComfyUI/venv/bin/python -m bridge.cli
 Restart=always
 RestartSec=10
 StandardOutput=journal
