@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title_suffix %} — Settings{% endblock %}
+{% block nav_settings %}active{% endblock %}
+
+{% block content %}
+<div x-data="settingsForm()">
+  <h1>Settings</h1>
+
+  <form @submit.prevent="save()" class="settings-form">
+    <div class="card">
+      <h2>Grid API</h2>
+      <label>
+        API Key
+        <input type="password" x-model="form.GRID_API_KEY" placeholder="Your AI Power Grid API key">
+      </label>
+      <label>
+        Worker Name
+        <input type="text" x-model="form.GRID_WORKER_NAME" placeholder="ComfyUI-Bridge-Worker">
+      </label>
+    </div>
+
+    <div class="card">
+      <h2>ComfyUI</h2>
+      <label>
+        ComfyUI URL
+        <input type="text" x-model="form.COMFYUI_URL" placeholder="http://127.0.0.1:8188">
+      </label>
+    </div>
+
+    <div class="card">
+      <h2>Worker</h2>
+      <label>
+        Models <span class="hint">(comma-separated)</span>
+        <input type="text" x-model="form.GRID_MODEL" placeholder="e.g. FLUX.2 Klein 4B FP8">
+      </label>
+      <label>
+        Workflow Files <span class="hint">(comma-separated)</span>
+        <input type="text" x-model="form.WORKFLOW_FILE" placeholder="e.g. flux2_klein_4b_api.json">
+      </label>
+      <label>
+        Threads
+        <input type="number" x-model="form.GRID_THREADS" min="1" max="16">
+      </label>
+      <label>
+        Batch Size
+        <input type="number" x-model="form.GRID_BATCH_SIZE" min="1" max="16">
+      </label>
+      <label>
+        Max Pixels
+        <input type="number" x-model="form.GRID_MAX_PIXELS">
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" :checked="form.GRID_NSFW === 'true'" @change="form.GRID_NSFW = $event.target.checked ? 'true' : 'false'">
+        Allow NSFW
+      </label>
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" :disabled="saving">
+        <span x-show="!saving">Save Settings</span>
+        <span x-show="saving">Saving...</span>
+      </button>
+      <span x-show="saved" class="save-ok" x-transition>Saved. Restart bridge to apply changes.</span>
+    </div>
+  </form>
+</div>
+
+<script>
+function settingsForm() {
+  return {
+    saving: false,
+    saved: false,
+    form: {
+      GRID_API_KEY: '{{ settings.GRID_API_KEY }}',
+      GRID_WORKER_NAME: '{{ settings.GRID_WORKER_NAME }}',
+      COMFYUI_URL: '{{ settings.COMFYUI_URL }}',
+      GRID_MODEL: '{{ settings.GRID_MODEL }}',
+      WORKFLOW_FILE: '{{ settings.WORKFLOW_FILE }}',
+      GRID_NSFW: '{{ settings.GRID_NSFW }}',
+      GRID_THREADS: '{{ settings.GRID_THREADS }}',
+      GRID_MAX_PIXELS: '{{ settings.GRID_MAX_PIXELS }}',
+      GRID_BATCH_SIZE: '{{ settings.GRID_BATCH_SIZE }}',
+    },
+    async save() {
+      this.saving = true;
+      this.saved = false;
+      try {
+        const r = await fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(this.form),
+        });
+        if (r.ok) this.saved = true;
+      } finally {
+        this.saving = false;
+      }
+    }
+  }
+}
+</script>
+{% endblock %}

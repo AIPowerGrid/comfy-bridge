@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title_suffix %} — Dashboard{% endblock %}
+{% block nav_dashboard %}active{% endblock %}
+
+{% block content %}
+<div x-data="dashboard()" x-init="poll()">
+  <h1>Dashboard</h1>
+
+  {% if not has_api_key %}
+  <div class="card warning">
+    <h2>Setup Required</h2>
+    <p>No API key configured. <a href="/settings">Go to Settings</a> to configure your worker.</p>
+  </div>
+  {% endif %}
+
+  <div class="status-grid">
+    <div class="card">
+      <h3>Worker</h3>
+      <div class="status-indicator" :class="status.worker_running ? 'online' : 'offline'">
+        <span x-text="status.worker_running ? 'Running' : 'Stopped'"></span>
+      </div>
+      <template x-if="status.worker_error">
+        <p class="error" x-text="status.worker_error"></p>
+      </template>
+    </div>
+
+    <div class="card">
+      <h3>Worker Name</h3>
+      <p x-text="status.config?.worker_name || '—'"></p>
+    </div>
+
+    <div class="card">
+      <h3>ComfyUI</h3>
+      <p x-text="status.config?.comfyui_url || '—'"></p>
+    </div>
+
+    <div class="card">
+      <h3>Models</h3>
+      <template x-if="status.config?.models?.length">
+        <ul>
+          <template x-for="m in status.config.models" :key="m">
+            <li x-text="m"></li>
+          </template>
+        </ul>
+      </template>
+      <template x-if="!status.config?.models?.length">
+        <p>None configured</p>
+      </template>
+    </div>
+  </div>
+</div>
+
+<script>
+function dashboard() {
+  return {
+    status: {
+      worker_running: {{ 'true' if worker_running else 'false' }},
+      worker_error: {{ ('\"' + worker_error + '\"') if worker_error else 'null' }},
+      config: null,
+    },
+    async poll() {
+      const update = async () => {
+        try {
+          const r = await fetch('/api/status');
+          this.status = await r.json();
+        } catch (e) { /* ignore */ }
+      };
+      await update();
+      setInterval(update, 5000);
+    }
+  }
+}
+</script>
+{% endblock %}

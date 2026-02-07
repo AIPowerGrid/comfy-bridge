@@ -1,34 +1,31 @@
-import asyncio
 import logging
 import sys
-from .config import Settings
-from .bridge import ComfyUIBridge
 
 logger = logging.getLogger(__name__)
 
 
-async def main():
-    Settings.validate()
-
-    bridge = ComfyUIBridge()
-    try:
-        await bridge.run()
-    except asyncio.CancelledError:
-        logger.info("Bridge run cancelled, shutting down...")
-    finally:
-        await bridge.cleanup()
-        logger.info("Bridge cleanup complete.")
-
-
-if __name__ == "__main__":
+def main():
+    """Entry point for `comfy-bridge` console script and `python -m bridge.cli`."""
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
     )
+
+    import uvicorn
+    from .web.app import app  # noqa: F401 — triggers route registration
+
+    host = "0.0.0.0"
+    port = 7860
+
+    logger.info(f"Starting Comfy Bridge on http://{host}:{port}")
     try:
-        asyncio.run(main())
+        uvicorn.run(app, host=host, port=port, log_level="info")
     except KeyboardInterrupt:
         logger.info("Received keyboard interrupt, exiting gracefully.")
         sys.exit(0)
     except Exception as e:
         logger.error(f"Fatal error: {e}")
         sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

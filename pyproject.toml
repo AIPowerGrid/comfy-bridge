@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "comfy-bridge"
-version = "0.1.0"
+version = "0.2.0"
 description = "ComfyUI Bridge for AI Power Grid"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -12,10 +12,24 @@ dependencies = [
   "httpx",
   "aiohttp",
   "python-dotenv",
-  "pytest",
-  "pytest-asyncio"
+  "fastapi>=0.100.0",
+  "uvicorn[standard]>=0.20.0",
+  "jinja2>=3.1.0",
 ]
+
+[project.optional-dependencies]
+test = [
+  "pytest",
+  "pytest-asyncio",
+  "respx",
+]
+
+[project.scripts]
+comfy-bridge = "bridge.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["bridge*"]
+
+[tool.setuptools.package-data]
+bridge = ["web/templates/**/*.html", "web/static/**/*"]

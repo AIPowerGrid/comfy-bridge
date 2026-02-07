@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Comfy Bridge{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  {% block head %}{% endblock %}
+</head>
+<body class="{% block body_class %}{% endblock %}">
+  {% block nav %}
+  <nav>
+    <div class="nav-brand">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+      Comfy Bridge
+    </div>
+    <div class="nav-links">
+      <a href="/" class="{% block nav_dashboard %}{% endblock %}">Dashboard</a>
+      <a href="/settings" class="{% block nav_settings %}{% endblock %}">Settings</a>
+    </div>
+  </nav>
+  {% endblock %}
+  <main class="{% block main_class %}{% endblock %}">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>
