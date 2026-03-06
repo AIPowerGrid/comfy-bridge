@@ -57,7 +57,9 @@ async def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Start ComfyUI bridge')
     parser.add_argument('--workflow', '-w', help='Workflow JSON file to use from workflows directory')
+    parser.add_argument('--workflow-video', help='Workflow for video/LTX jobs (overrides WORKFLOW_FILE_VIDEO in .env)')
     parser.add_argument('--grid-model', help='Model to advertise to the grid (overrides GRID_MODEL in .env)')
+    parser.add_argument('--worker-type', choices=('image', 'video'), help='Worker type for grid (default: image)')
     args = parser.parse_args()
     
     # Load environment variables from .env file
@@ -75,9 +77,11 @@ async def main():
     
     # Use command line argument for workflow file if provided, otherwise use environment variable
     workflow_file = args.workflow or os.environ.get("WORKFLOW_FILE")
+    workflow_file_video = args.workflow_video or os.environ.get("WORKFLOW_FILE_VIDEO")
     
     # Use command line argument for grid model if provided, otherwise use environment variable
     grid_model = args.grid_model or os.environ.get("GRID_MODEL")
+    worker_type = args.worker_type or os.environ.get("GRID_WORKER_TYPE", "image")
     
     if not api_key:
         print("Error: GRID_API_KEY environment variable is required")
@@ -113,7 +117,9 @@ async def main():
             max_pixels=max_pixels,
             workflow_dir=workflow_dir,
             workflow_file=workflow_file,
-            grid_model=grid_model
+            grid_model=grid_model,
+            workflow_file_video=workflow_file_video,
+            worker_type=worker_type
         )
         
         # Start the bridge

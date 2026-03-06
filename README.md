@@ -6,11 +6,11 @@ Connect your local ComfyUI installation to the AI Power Grid network and run it 
 
 ## 🚀 Overview
 
-- **Bridge**: Receives image-generation jobs from AI Power Grid.  
+- **Bridge**: Receives image- and video-generation jobs from AI Power Grid.  
 - **Worker**: Executes jobs via your local ComfyUI instance.  
-- **Return**: Uploads generated images back to the network.  
+- **Return**: Uploads generated images or videos back to the network.  
 
-This allows you to contribute GPU cycles to a decentralized AI rendering network while leveraging your local ComfyUI setup.
+This allows you to contribute GPU cycles to a decentralized AI rendering network while leveraging your local ComfyUI setup. **LTX-2** (Lightricks text-to-video) is supported for video jobs.
 
 ---
 
@@ -70,6 +70,22 @@ WORKFLOW_FILE=my_workflow.json               # ComfyUI JSON export template
 
 * **`GRID_MODEL`** supports one or more model keys (comma-separated). If unset, the bridge auto-detects from your ComfyUI checkpoints.
 * **`WORKFLOW_FILE`** points to a JSON workflow in your `workflows/` directory.
+* **`WORKFLOW_FILE_VIDEO`** (optional) workflow for video/LTX jobs; used when the job requests video or model is LTX-2.
+* **`GRID_WORKER_TYPE`** (optional) set to `video` to register as a video worker; default `image`.
+
+### LTX-2 / Video workers
+
+To run as an **LTX-2** (text-to-video) worker:
+
+1. **ComfyUI** with [ComfyUI-LTXVideo](https://github.com/Lightricks/ComfyUI-LTXVideo) (or equivalent) and LTX-2 checkpoints (e.g. `ltx-2-19b-distilled-fp8.safetensors`) in `models/checkpoints/`.
+2. **Video Helper Suite** (VHS) or a workflow that outputs video (SaveVideo / VHS_VideoCombine) if you use the bundled LTX bridge workflow.
+3. Set in `.env`:
+   - `GRID_MODEL=LTX-2` (or `ltx-2`, `ltx`, `ltxv`)
+   - `WORKFLOW_FILE=ltx2_bridge_api.json` for the bundled LTX workflow with `_bridge` metadata, or use `WORKFLOW_FILE_VIDEO=ltx2_bridge_api.json` with a separate image workflow in `WORKFLOW_FILE`.
+   - `GRID_WORKER_TYPE=video` to advertise as a video worker (if the grid expects this).
+4. Workflows must be **API format** (ComfyUI: Dev Mode → Save as API Format). The bridge uses `workflows/ltx2_bridge_api.json` as a ready-made LTX-2 T2V workflow with video output.
+
+Video jobs return MP4 (or the format produced by your workflow) and are submitted with `media_type: video`. Resource use for LTX-2 is higher than image models; consider `GRID_THREADS=1` and sufficient GPU memory.
 
 ---
 

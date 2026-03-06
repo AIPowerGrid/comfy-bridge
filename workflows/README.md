@@ -38,6 +38,7 @@ The repository includes several pre-made templates:
 - `sdxl_turbo_workflow.json` - For SDXL Turbo (optimized parameters)
 - `turbovision.json` - For TurboVision XL
 - `sdxl-lightning.json` - For SDXL Lightning
+- **`ltx2_bridge_api.json`** - LTX-2 text-to-video (Lightricks). Uses `_bridge` metadata; requires ComfyUI-LTXVideo and optionally VHS for video output. Set `GRID_MODEL=LTX-2` and `WORKFLOW_FILE=ltx2_bridge_api.json` (or `WORKFLOW_FILE_VIDEO=ltx2_bridge_api.json`).
 
 ## How to Get a Workflow File
 

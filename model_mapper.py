@@ -65,7 +65,13 @@ class ModelMapper:
         "juggernaut_xl": "juggernaut_xl.safetensors",
         "playground_v2": "playground_v2.safetensors",
         "dreamshaper_8": "dreamshaper_8.safetensors",
-        "stable_diffusion": "v1-5-pruned-emaonly.safetensors"
+        "stable_diffusion": "v1-5-pruned-emaonly.safetensors",
+        # LTX-2 (Lightricks text-to-video)
+        "LTX-2": "ltx-2-19b-distilled-fp8.safetensors",
+        "ltx-2": "ltx-2-19b-distilled-fp8.safetensors",
+        "ltx": "ltx-2-19b-distilled-fp8.safetensors",
+        "ltxv": "ltx-2-19b-distilled-fp8.safetensors",
+        "ltx2": "ltx-2-19b-distilled-fp8.safetensors",
     }
     
     def __init__(self):
@@ -121,6 +127,14 @@ class ModelMapper:
             elif "v2-1" in lower_filename or "v2.1" in lower_filename or "sd2.1" in lower_filename:
                 self.model_map["stable_diffusion_2.1"] = model_filename
             
+            # LTX-2 / Lightricks video checkpoints
+            elif "ltx-2" in lower_filename or "ltx_2" in lower_filename or ("ltx" in lower_filename and "19b" in lower_filename):
+                self.model_map["LTX-2"] = model_filename
+                self.model_map["ltx-2"] = model_filename
+                self.model_map["ltx"] = model_filename
+                self.model_map["ltxv"] = model_filename
+                self.model_map["ltx2"] = model_filename
+            
             # Map specific model names
             model_name_map = {
                 "juggernaut": "juggernaut_xl",
@@ -156,9 +170,19 @@ class ModelMapper:
             if horde_model_name.lower() in horde_name.lower() or horde_name.lower() in horde_model_name.lower():
                 return local_name
         
+        # Fallback to DEFAULT_MODEL_MAP when mapper not initialized or no match (e.g. LTX-2)
+        normalized = horde_model_name.strip().lower()
+        for grid_name, local_name in self.DEFAULT_MODEL_MAP.items():
+            if grid_name.lower() == normalized or normalized in grid_name.lower():
+                return local_name
+        
         # Fall back to the default model
-        print(f"Warning: No mapping found for model '{horde_model_name}', using default: {self.default_model}")
-        return self.default_model
+        if self.default_model:
+            print(f"Warning: No mapping found for model '{horde_model_name}', using default: {self.default_model}")
+            return self.default_model
+        fallback = self.DEFAULT_MODEL_MAP.get("stable_diffusion", "v1-5-pruned-emaonly.safetensors")
+        print(f"Warning: No mapping found for model '{horde_model_name}', using fallback: {fallback}")
+        return fallback
     
     def get_available_horde_models(self) -> List[str]:
         """Get a list of AI Power Grid model names that can be supported.
@@ -172,15 +196,19 @@ class ModelMapper:
         # Add default models if we have appropriate local models
         sdxl_keywords = ["xl", "sdxl"]
         sd15_keywords = ["1.5", "v1-5"]
+        ltx_keywords = ["ltx-2", "ltx_2", "ltx"]
         
         has_sdxl = any(any(kw in m.lower() for kw in sdxl_keywords) for m in self.available_models)
         has_sd15 = any(any(kw in m.lower() for kw in sd15_keywords) for m in self.available_models)
+        has_ltx = any(any(kw in m.lower() for kw in ltx_keywords) for m in self.available_models)
         
         standard_models = []
         if has_sdxl and "sdxl" not in result:
             standard_models.append("sdxl")
         if has_sd15 and "stable_diffusion_1.5" not in result:
             standard_models.append("stable_diffusion_1.5")
+        if has_ltx and "LTX-2" not in result:
+            standard_models.append("LTX-2")
             
         # Combine and remove duplicates
         result.extend(standard_models)
