@@ -59,6 +59,72 @@ class APIClient:
             )
             raise
 
+    async def update_progress(self, job_id: str, current_step: int, total_steps: int) -> bool:
+        """Report sampler progress upstream so clients can show a step counter.
+
+        Throttled by the bridge's WS loop — this call is not rate-limited itself,
+        but the bridge only invokes it every ~2 seconds.
+
+        Returns True on success, False on any failure. Failures are non-fatal:
+        a dropped progress update must never break a job.
+        """
+        try:
+            response = await self.client.post(
+                "/v2/generate/progress",
+                headers=self.headers,
+                json={
+                    "id": job_id,
+                    "current_step": current_step,
+                    "total_steps": total_steps,
+                },
+            )
+            response.raise_for_status()
+            return True
+        except httpx.HTTPStatusError as exc:
+            logger.debug(
+                f"Progress update for job {job_id} failed [{exc.response.status_code}]: "
+                f"{exc.response.text[:200]}"
+            )
+            return False
+        except Exception as e:
+            logger.debug(f"Progress update error for job {job_id}: {e}")
+            return False
+
+    async def send_preview(
+        self,
+        job_id: str,
+        image_bytes: bytes,
+        mime: str = "image/jpeg",
+        step: int = 0,
+    ) -> bool:
+        """Stream a preview frame for an active generation to the API.
+
+        Forwarded from ComfyUI's binary `b_preview` WebSocket frames so end users
+        can see images forming during generation (~6 previews over a 30-step run).
+
+        Raw bytes in the body — no base64, no JSON wrapper. Step number rides
+        in `X-Step`. Failures are eaten: a dropped preview must never break a job.
+        """
+        if not image_bytes:
+            return False
+        try:
+            response = await self.client.post(
+                f"/v2/generate/preview/{job_id}",
+                headers={**self.headers, "Content-Type": mime, "X-Step": str(step)},
+                content=image_bytes,
+            )
+            response.raise_for_status()
+            return True
+        except httpx.HTTPStatusError as exc:
+            logger.debug(
+                f"Preview upload for job {job_id} failed [{exc.response.status_code}]: "
+                f"{exc.response.text[:200]}"
+            )
+            return False
+        except Exception as e:
+            logger.debug(f"Preview upload error for job {job_id}: {e}")
+            return False
+
     async def submit_result(self, payload: Dict[str, Any]) -> None:
         """Submit a completed job result back to the AI Power Grid."""
         media_type = payload.get("media_type", "image")

@@ -39,4 +39,4 @@ bridge_log.txt
 
 # OS specific
 .DS_Store
-Thumbs.db 
+Thumbs.db .venv/
