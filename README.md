@@ -26,7 +26,7 @@ This allows you to contribute GPU cycles to a decentralized AI rendering network
 ## 🛠 Prerequisites
 
 1. **Python 3.9+**  
-2. **ComfyUI** running locally (default: `http://127.0.0.1:8000`).  
+2. **ComfyUI** running locally (default: `http://127.0.0.1:8188`).  
 3. **AI Power Grid** account + API key: https://aipowergrid.io/register  
 
 ---
@@ -35,7 +35,7 @@ This allows you to contribute GPU cycles to a decentralized AI rendering network
 
 ```bash
 # 1. Clone the repo
-git clone https://github.com/youruser/comfy-bridge.git
+git clone https://github.com/AIPowerGrid/comfy-bridge.git
 cd comfy-bridge
 
 # 2. Create & activate a virtual environment
@@ -55,11 +55,15 @@ pip install -e .
 
 Copy the example `.env` and adjust values:
 
+```bash
+cp .env.example .env
+```
+
 ```ini
 # .env
 GRID_API_KEY=your_powergrid_api_key          # required
 GRID_WORKER_NAME=MyComfyWorker.APIG_Wallet   # optional
-COMFYUI_URL=http://127.0.0.1:8000            # optional
+COMFYUI_URL=http://127.0.0.1:8188            # optional
 GRID_API_URL=https://api.aipowergrid.io/api  # optional
 GRID_NSFW=false                              # allow NSFW? true/false
 GRID_THREADS=2                               # concurrent jobs
@@ -119,7 +123,7 @@ The bridge will:
      docker run --rm \
        -v "$(pwd)/workflows:/app/workflows" \
        --env-file .env \
-       -e COMFYUI_URL=http://host.docker.internal:8000 \
+       -e COMFYUI_URL=http://host.docker.internal:8188 \
        comfy-bridge
      ```
 
