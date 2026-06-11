@@ -5,6 +5,24 @@ import time
 import httpx
 import os
 from typing import List, Dict, Any, Optional
+from urllib.parse import urlencode
+
+
+def _view_url(info: Dict[str, Any]) -> str:
+    """Build a ComfyUI /view URL from an output entry.
+
+    ComfyUI writes outputs (images AND videos) into per-prompt subfolders and
+    distinguishes output/temp via `type`. Dropping `subfolder` (or `type`)
+    makes /view 404 — which is why WAN videos from VHS_VideoCombine, that always
+    land in a subfolder, failed to download. urlencode also handles filenames
+    with spaces/special chars safely.
+    """
+    params = {"filename": info["filename"]}
+    if info.get("subfolder"):
+        params["subfolder"] = info["subfolder"]
+    if info.get("type"):
+        params["type"] = info["type"]
+    return f"/view?{urlencode(params)}"
 
 try:
     import websockets  # used for streaming preview frames from ComfyUI
@@ -101,7 +119,7 @@ class ComfyUIBridge:
                     for video_info in videos:
                         filename = video_info["filename"]
                         logger.info(f"Found video file: {filename}")
-                        video_resp = await self.comfy.get(f"/view?filename={filename}")
+                        video_resp = await self.comfy.get(_view_url(video_info))
                         video_resp.raise_for_status()
                         media_items.append((video_resp.content, "video", filename))
                     break
@@ -112,12 +130,7 @@ class ComfyUIBridge:
                     logger.info(f"Found {len(imgs)} images in batch")
                     for img_info in imgs:
                         filename = img_info["filename"]
-                        subfolder = img_info.get("subfolder", "")
-                        if subfolder:
-                            img_url = f"/view?filename={filename}&subfolder={subfolder}"
-                        else:
-                            img_url = f"/view?filename={filename}"
-                        img_resp = await self.comfy.get(img_url)
+                        img_resp = await self.comfy.get(_view_url(img_info))
                         img_resp.raise_for_status()
                         media_items.append((img_resp.content, "image", filename))
                     break
