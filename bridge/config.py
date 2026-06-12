@@ -10,7 +10,13 @@ class Settings:
     GRID_MODELS = [m.strip() for m in _GRID_MODELS_RAW.split(",") if m.strip()]
     GRID_WORKER_NAME = os.getenv("GRID_WORKER_NAME", "ComfyUI-Bridge-Worker")
     COMFYUI_URL = os.getenv("COMFYUI_URL", "http://127.0.0.1:8188")
-    GRID_API_URL = os.getenv("GRID_API_URL", "https://api.aipowergrid.io/api")
+    # Clean base (no /api) — the new prod nginx serves /v2 directly and the
+    # WS worker derives /v1/workers/ws from this. A legacy /api tail is
+    # tolerated and stripped where needed.
+    GRID_API_URL = os.getenv("GRID_API_URL", "https://api.aipowergrid.io")
+    # v2 WebSocket worker protocol (push dispatch + presigned R2 uploads).
+    # Off by default until the v2 API is the production default deployment.
+    GRID_WS = os.getenv("GRID_WS", "false").lower() == "true"
     NSFW = os.getenv("GRID_NSFW", "false").lower() == "true"
     THREADS = int(os.getenv("GRID_THREADS", "1"))
     MAX_PIXELS = int(os.getenv("GRID_MAX_PIXELS", "20971520"))

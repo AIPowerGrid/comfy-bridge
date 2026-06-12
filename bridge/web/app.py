@@ -32,7 +32,31 @@ def _is_configured() -> bool:
 
 
 async def _run_worker():
-    """Run the existing worker loop as a background task."""
+    """Run the worker loop as a background task.
+
+    GRID_WS=true uses the v2 WebSocket protocol (push dispatch + presigned R2
+    uploads); default remains the legacy poll loop until the v2 API is the
+    production default.
+    """
+    if Settings.GRID_WS:
+        from ..ws_worker import WSWorker
+
+        worker = WSWorker()
+        worker_state["bridge"] = worker
+        worker_state["running"] = True
+        worker_state["error"] = None
+        try:
+            await worker.run()
+        except asyncio.CancelledError:
+            logger.info("Worker task cancelled.")
+        except Exception as e:
+            logger.error(f"Worker error: {e}")
+            worker_state["error"] = str(e)
+        finally:
+            worker_state["running"] = False
+            await worker.comfy.aclose()
+        return
+
     bridge = ComfyUIBridge()
     worker_state["bridge"] = bridge
     worker_state["running"] = True
