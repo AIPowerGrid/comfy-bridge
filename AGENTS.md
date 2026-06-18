@@ -32,7 +32,7 @@ concrete detail in children. Delete stale notes instead of explaining history.
 
 ---
 
-# comfy-bridge — ComfyUI → AI Power Grid worker
+# grid-comfy-bridge — ComfyUI → AI Power Grid worker
 
 ## Purpose
 
@@ -40,7 +40,7 @@ Runs a local ComfyUI install as a grid GPU worker. Receives image/video jobs fro
 grid, renders them by templating a ComfyUI workflow graph and posting it to ComfyUI's
 `/prompt` API, streams progress/preview frames upstream, and returns the outputs.
 Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Entry point:
-`bridge.cli:main` (console script `comfy-bridge`).
+`bridge.cli:main` (console script `grid-comfy-bridge`).
 
 ## Ownership
 
