@@ -83,6 +83,7 @@ class WSWorker:
                 "name": Settings.GRID_WORKER_NAME,
                 "models": self.models,
                 "job_types": ["image", "video"],
+                "engines": ["comfyui"],   # which generation engine(s) this worker runs
                 "bridge_agent": BRIDGE_AGENT,
             }))
             ready = json.loads(await asyncio.wait_for(ws.recv(), timeout=30))
@@ -122,14 +123,24 @@ class WSWorker:
     async def _generate_and_upload(self, ws, msg, payload, upload_slots, n):
         job_id = msg["id"]
 
-        # Adapt the v2 payload to the shape build_workflow expects.
-        seeds = [random.randint(0, 2**32 - 1) for _ in range(n)]
-        payload.setdefault("batch_size", n)
-        payload["seeds"] = seeds
-        payload["seed"] = seeds[0]
-        bridge_job = {"id": job_id, "model": msg["model"], "payload": payload}
-
-        workflow = await build_workflow(bridge_job)
+        # Recipe-governed path: the grid resolved an approved recipe into a concrete,
+        # ready-to-run spec. For engine=comfyui that spec IS the ComfyUI graph — run it
+        # directly, no model_mapper. (Other engines run on their own worker type.)
+        recipe_spec = payload.get("recipe_spec")
+        recipe_engine = payload.get("recipe_engine")
+        if recipe_spec is not None:
+            if recipe_engine not in (None, "comfyui"):
+                raise RuntimeError(
+                    f"this worker runs engine=comfyui; job wants engine={recipe_engine}")
+            workflow = recipe_spec   # already concrete: inputs injected + seed baked in by the grid
+        else:
+            # Legacy fallback: build the graph from the model name via model_mapper.
+            seeds = [random.randint(0, 2**32 - 1) for _ in range(n)]
+            payload.setdefault("batch_size", n)
+            payload["seeds"] = seeds
+            payload["seed"] = seeds[0]
+            bridge_job = {"id": job_id, "model": msg["model"], "payload": payload}
+            workflow = await build_workflow(bridge_job)
         resp = await self.comfy.post("/prompt", json={"prompt": workflow})
         if resp.status_code != 200:
             raise RuntimeError(f"ComfyUI rejected workflow: {resp.text[:200]}")
