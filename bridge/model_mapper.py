@@ -5,6 +5,42 @@ from typing import Dict, List, Optional
 
 from .config import Settings
 
+# File extensions that denote a model weight in a ComfyUI loader combo-box.
+MODEL_EXTS = (".safetensors", ".ckpt", ".gguf", ".pt", ".pth", ".bin", ".sft")
+
+
+async def fetch_comfyui_model_files(comfy_url: str) -> set:
+    """Return the set of EVERY model-weight filename ComfyUI currently offers.
+
+    Walks the whole /object_info graph and collects any combo-box value that
+    looks like a model file, across all loader node types (checkpoints, unet,
+    clip, vae, gguf, loras, controlnets…). This is the ground truth for the
+    advertise-gate: a workflow is only servable if every weight it references
+    appears here.
+    """
+    files: set = set()
+    try:
+        async with httpx.AsyncClient(base_url=comfy_url, timeout=15) as client:
+            r = await client.get("/object_info")
+            r.raise_for_status()
+            data = r.json()
+    except Exception as e:
+        print(f"Warning: could not fetch ComfyUI object_info: {e}")
+        return files
+
+    for _node, spec in data.items():
+        if not isinstance(spec, dict):
+            continue
+        inp = spec.get("input", {}) or {}
+        for group in ("required", "optional"):
+            for _param, pdef in (inp.get(group, {}) or {}).items():
+                # combo inputs look like [[choice1, choice2, ...], {meta}]
+                if isinstance(pdef, list) and pdef and isinstance(pdef[0], list):
+                    for v in pdef[0]:
+                        if isinstance(v, str) and v.lower().endswith(MODEL_EXTS):
+                            files.add(v)
+    return files
+
 
 async def fetch_comfyui_models(comfy_url: str) -> List[str]:
     endpoints = ["/object_info", "/model_list"]
@@ -88,6 +124,8 @@ class ModelMapper:
 
     def __init__(self):
         self.available_models: List[str] = []
+        # Every model-weight filename ComfyUI currently has loaded (advertise-gate).
+        self.available_files: set = set()
         # Maps Grid model name -> workflow filename (txt2img)
         self.workflow_map: Dict[str, str] = {}
         self.img2img_workflow_map: Dict[str, str] = {}
@@ -97,6 +135,8 @@ class ModelMapper:
     async def initialize(self, comfy_url: str):
         # Get models available in Comfy (optional; currently informational)
         self.available_models = await fetch_comfyui_models(comfy_url)
+        # Ground truth for the advertise-gate: every weight file ComfyUI has.
+        self.available_files = await fetch_comfyui_model_files(comfy_url)
 
         # Load AI Power Grid local reference for model-file → Grid model name resolution
         self.reference_file_to_grid_name = self._load_local_reference()
@@ -334,8 +374,68 @@ class ModelMapper:
             or "Dreamshaper.json"  # Default workflow
         )
 
+    def resolve_workflow_strict(self, model_name: str) -> Optional[str]:
+        """Resolve a model's workflow file WITHOUT the Dreamshaper fallback.
+
+        Returns None when the model isn't actually mapped — so the advertise-gate
+        never green-lights a model that would silently fall back to a default
+        (the exact bug behind 'load workflow Dreamshaper.json for model LTX-2.3')."""
+        w = self.workflow_map.get(model_name)
+        if w:
+            return w
+        return next(
+            (v for k, v in self.workflow_map.items() if model_name.lower() in k.lower()),
+            None,
+        )
+
+    def _workflow_required_files(self, workflow_filename: str) -> Optional[set]:
+        """Model-weight filenames a workflow references. None if the file is missing."""
+        path = os.path.join(Settings.WORKFLOW_DIR, workflow_filename)
+        if not os.path.exists(path):
+            return None
+        try:
+            with open(path) as f:
+                wf = json.load(f)
+        except Exception:
+            return set()
+        files: set = set()
+        for _nid, node in wf.items():
+            if not isinstance(node, dict):
+                continue
+            for _k, v in (node.get("inputs") or {}).items():
+                if isinstance(v, str) and v.lower().endswith(MODEL_EXTS):
+                    files.add(v)
+        return files
+
+    def is_servable(self, model_name: str) -> tuple:
+        """(servable, reason). A model is servable only if it maps to a real
+        workflow whose every referenced weight is present in ComfyUI.
+
+        This is the advertise-only-what-you-can-serve gate: a worker must never
+        advertise a model it can't actually run (which strands jobs / 502s)."""
+        wf = self.resolve_workflow_strict(model_name)
+        if not wf:
+            return False, "no workflow mapped"
+        required = self._workflow_required_files(wf)
+        if required is None:
+            return False, f"workflow file missing ({wf})"
+        if not self.available_files:
+            return False, "ComfyUI reports no model weights loaded"
+        missing = required - self.available_files
+        if missing:
+            return False, f"ComfyUI missing weights {sorted(missing)} (workflow {wf})"
+        return True, "ok"
+
     def get_available_horde_models(self) -> List[str]:
-        return list(self.workflow_map.keys())
+        """Only the mapped models we can actually serve right now."""
+        servable = []
+        for m in self.workflow_map.keys():
+            ok, reason = self.is_servable(m)
+            if ok:
+                servable.append(m)
+            else:
+                print(f"Not advertising '{m}': {reason}")
+        return servable
 
 
 model_mapper = ModelMapper()
@@ -347,6 +447,10 @@ async def initialize_model_mapper(comfy_url: str):
 
 def get_horde_models() -> List[str]:
     return model_mapper.get_available_horde_models()
+
+
+def is_servable(model_name: str) -> tuple:
+    return model_mapper.is_servable(model_name)
 
 
 def get_workflow_file(

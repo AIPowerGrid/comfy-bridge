@@ -31,7 +31,7 @@ except ImportError:  # pragma: no cover
 
 from .bridge import _view_url
 from .config import Settings
-from .model_mapper import initialize_model_mapper, get_horde_models
+from .model_mapper import initialize_model_mapper, get_horde_models, is_servable
 from .workflow import build_workflow
 
 logger = logging.getLogger(__name__)
@@ -40,6 +40,7 @@ BRIDGE_AGENT = "comfy-bridge/ws:1"
 RECONNECT_DELAY_S = 5
 PROGRESS_INTERVAL = 2.0
 PREVIEW_INTERVAL = 1.5
+MAX_SEED = 2**53 - 1
 
 
 def grid_ws_url() -> str:
@@ -51,6 +52,31 @@ def grid_ws_url() -> str:
     return f"{url}/v1/workers/ws"
 
 
+def _coerce_seed(value):
+    if value is None or value == "":
+        return None
+    seed = int(value)
+    if seed < 0 or seed > MAX_SEED:
+        raise ValueError(f"seed must be between 0 and {MAX_SEED}")
+    return seed
+
+
+def resolve_output_seeds(payload: dict, n: int) -> list[int]:
+    """Preserve grid/client seeds; only randomize when the grid omitted them."""
+    count = max(int(n or 1), 1)
+    provided = payload.get("seeds")
+    if isinstance(provided, list) and len(provided) >= count:
+        seeds = [_coerce_seed(v) for v in provided[:count]]
+        if all(v is not None for v in seeds):
+            return [int(v) for v in seeds]
+
+    base = _coerce_seed(payload.get("seed"))
+    if base is not None:
+        return [(base + i) % (MAX_SEED + 1) for i in range(count)]
+
+    return [random.randint(0, MAX_SEED) for _ in range(count)]
+
+
 class WSWorker:
     def __init__(self):
         self.comfy = httpx.AsyncClient(base_url=Settings.COMFYUI_URL, timeout=300)
@@ -60,10 +86,25 @@ class WSWorker:
         if websockets is None:
             raise RuntimeError("websockets package required for GRID_WS mode")
         await initialize_model_mapper(Settings.COMFYUI_URL)
-        self.models = Settings.GRID_MODELS or get_horde_models()
+        # Advertise-only-what-you-can-serve gate. Applies to an explicit
+        # GRID_MODEL override too — a worker must never advertise a model whose
+        # workflow is missing or whose weights aren't loaded in ComfyUI (that's
+        # what made this box advertise LTX-2.3 and 502 every job).
+        candidates = Settings.GRID_MODELS or get_horde_models()
+        self.models = []
+        for m in candidates:
+            ok, reason = is_servable(m)
+            if ok:
+                self.models.append(m)
+            else:
+                logger.warning(f"Refusing to advertise '{m}': {reason}")
         if not self.models:
-            raise RuntimeError("No models to advertise (set GRID_MODEL or add workflows)")
-        logger.info(f"WS worker advertising models: {self.models}")
+            raise RuntimeError(
+                "No servable models — every candidate is missing its workflow or "
+                "ComfyUI weights. Install the model files (and a mapped workflow), "
+                "then restart. Candidates were: %s" % candidates
+            )
+        logger.info(f"WS worker advertising servable models: {self.models}")
 
         while True:
             try:
@@ -122,8 +163,10 @@ class WSWorker:
     async def _generate_and_upload(self, ws, msg, payload, upload_slots, n):
         job_id = msg["id"]
 
-        # Adapt the v2 payload to the shape build_workflow expects.
-        seeds = [random.randint(0, 2**32 - 1) for _ in range(n)]
+        # Adapt the v2 payload to the shape build_workflow expects. The grid is
+        # the seed authority; preserve provided seeds and randomize only as a
+        # defensive fallback for older cores.
+        seeds = resolve_output_seeds(payload, n)
         payload.setdefault("batch_size", n)
         payload["seeds"] = seeds
         payload["seed"] = seeds[0]
