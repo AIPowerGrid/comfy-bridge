@@ -55,7 +55,7 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Entry point:
 
 ## Local Contracts
 
-- **Inherit org engineering standards:** /Users/j/fix-axios-vuln/aipg-documentation/engineering-standards/
+- **Inherit org engineering standards:** aipg-documentation/engineering-standards/
   (core + git + the matching language file — Python).
 - **Two transports, one selected by `GRID_WS`:** the v2 WebSocket worker (`bridge/ws_worker.py`,
   push dispatch + presigned R2 PUT, the forward direction) and the legacy v2 poll loop
