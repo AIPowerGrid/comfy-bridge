@@ -23,6 +23,7 @@ test = [
   "pytest",
   "pytest-asyncio",
   "respx",
+  "Pillow",
 ]
 
 [project.scripts]
