@@ -3262,7 +3262,7 @@ body.darkmode .corpostyleitemheading
 	var websearch_in_progress = false;
 
 	var localsettings = {
-		my_api_key: "SRjE7PuHTW1SG4rd_AqYGg", //put here so it can be saved and loaded in persistent mode
+		my_api_key: "YOUR_API_KEY", //put here so it can be saved and loaded in persistent mode
 		saved_oai_key: "", //do not ever share this in save files!
 		saved_oai_addr: default_oai_base, //do not ever share this in save files!
 		saved_dalle_key: "",
@@ -6610,7 +6610,7 @@ body.darkmode .corpostyleitemheading
 		if (export_settings) {
 			new_save_storyobj.savedsettings = JSON.parse(JSON.stringify(localsettings));
 			//redact some values
-			new_save_storyobj.savedsettings.my_api_key = "SRjE7PuHTW1SG4rd_AqYGg";
+			new_save_storyobj.savedsettings.my_api_key = "YOUR_API_KEY";
 			new_save_storyobj.savedsettings.saved_oai_key = "";
 			new_save_storyobj.savedsettings.saved_dalle_key = "";
 			new_save_storyobj.savedsettings.saved_dalle_url = "";

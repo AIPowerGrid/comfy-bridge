@@ -28,4 +28,4 @@ jobs:
           pip install -e ".[test]" || pip install -e . pytest pytest-asyncio
 
       - name: Run test suite
-        run: pytest tests/ -v --tb=short --no-cov || pytest tests/ -v --tb=short
+        run: pytest tests/ -v --tb=short
