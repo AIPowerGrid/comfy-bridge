@@ -1,3 +1,4 @@
+import copy
 import json
 import os
 import httpx
@@ -6,6 +7,68 @@ from typing import Dict, Any
 from .utils import generate_seed
 from .model_mapper import get_workflow_file
 from .config import Settings
+
+
+def _set_graph_path(spec: Dict[str, Any], path: str, value: Any) -> None:
+    """Set a value at a dotted ComfyUI graph path like '81.inputs.image'.
+
+    Mirrors the core's recipes._set_path: the final field must already exist (a
+    recipe only fills declared slots, never invents structure)."""
+    parts = path.split(".")
+    cur: Any = spec
+    for p in parts[:-1]:
+        if not isinstance(cur, dict) or p not in cur:
+            raise RuntimeError(f"recipe slot '{path}' targets a missing path")
+        cur = cur[p]
+    if not isinstance(cur, dict) or parts[-1] not in cur:
+        raise RuntimeError(f"recipe slot '{path}' targets a missing field")
+    cur[parts[-1]] = value
+
+
+async def build_recipe_workflow(job: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Execute the core-resolved ComfyUI graph directly (dumb executor).
+
+    The grid already injected prompt / seed / negative / numeric knobs into
+    `recipe_spec`. Here we only: bind a supplied source image to the recipe's
+    declared image slot(s), apply batch size, and run the graph as-is — NO
+    model_mapper, NO `_bridge` heuristics. This is the path that makes "approve a
+    recipe → it runs" actually work end-to-end."""
+    workflow = copy.deepcopy(payload["recipe_spec"])
+    # The spec IS the executable graph; defensively drop any metadata blocks.
+    workflow.pop("_grid", None)
+    workflow.pop("_bridge", None)
+
+    job_id = job.get("id", "")
+
+    # Source image (img2img / edit / i2v start frame): download → upload to ComfyUI
+    # → point the recipe's declared image node(s) at the uploaded filename. The
+    # grid sends the upload URL + the graph path(s) to bind (recipe_image_inputs).
+    source_url = payload.get("source_image_url")
+    image_paths = payload.get("recipe_image_inputs")
+    if source_url and image_paths:
+        filename = f"src_{job_id}.png"
+        await download_image(source_url, filename)
+        for path in (image_paths if isinstance(image_paths, list) else [image_paths]):
+            _set_graph_path(workflow, path, filename)
+        print(f"[recipe] bound source image {filename} -> {image_paths}")
+
+    # Batch: honor n>1 by setting batch_size on any empty-latent node (best effort).
+    batch = int(payload.get("batch_size") or 1)
+    if batch > 1:
+        for node in workflow.values():
+            if isinstance(node, dict):
+                ct = str(node.get("class_type", ""))
+                if "EmptyLatent" in ct or "EmptySD3" in ct:
+                    node.setdefault("inputs", {})["batch_size"] = batch
+
+    if payload.get("recipe_lora_inject"):
+        # LoRA splicing on the recipe path is a follow-up; warn rather than silently drop.
+        print("[recipe] WARNING: recipe_lora_inject present but LoRA splicing not yet "
+              "implemented on the recipe path — running without LoRAs")
+
+    print(f"[recipe] executing {str(payload.get('recipe_root',''))[:12]} "
+          f"(engine={payload.get('recipe_engine')}) job {job_id}")
+    return workflow
 
 
 async def download_image(url: str, filename: str) -> str:
@@ -478,7 +541,15 @@ async def process_workflow(
 
 
 async def build_workflow(job: Dict[str, Any]) -> Dict[str, Any]:
-    """Build a workflow by loading the appropriate external workflow file"""
+    """Build a workflow for a job.
+
+    Preferred path: the grid resolved an approved recipe and shipped the concrete
+    ComfyUI graph in `payload.recipe_spec` — execute it directly. Legacy fallback:
+    no recipe → map the model name to a bundled workflow file (model_mapper)."""
+    payload = job.get("payload") or {}
+    if payload.get("recipe_engine") == "comfyui" and isinstance(payload.get("recipe_spec"), dict):
+        return await build_recipe_workflow(job, payload)
+
     model_name = job.get("model", "")
     source_processing = job.get("source_processing", "txt2img")
 
